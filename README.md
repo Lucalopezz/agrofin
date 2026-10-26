@@ -4,6 +4,8 @@ Sistema de gestão da produção de limão, pensado para uso diário no celular.
 
 O projeto está na fase de documentação. Veja [o contexto para começar](CONTEXT.md) e as [orientações para agentes](AGENTS.md).
 
+As skills públicas instaladas no projeto e suas fontes estão em [skills externas](docs/skills-externas.md).
+
 ## documentação
 
 - [histórias de usuário](docs/historias-de-usuario.md)

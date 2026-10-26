@@ -18,13 +18,25 @@ Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/re
 
 ## skills locais
 
-As skills em `.agents/skills/` foram adaptadas para este projeto a partir dos fluxos de estrutura, domínio e frontend encontrados no DevLog. Leia apenas as que correspondem ao trabalho atual.
+As três skills `agrofin-*` foram adaptadas para este projeto a partir dos fluxos de estrutura, domínio e frontend encontrados no DevLog. Leia apenas as que correspondem ao trabalho atual.
 
 | skill | quando usar |
 | --- | --- |
 | [agrofin-go-domain](.agents/skills/agrofin-go-domain/SKILL.md) | Regras de colheita, pagamentos, vendas, estoque ou API Go. |
 | [agrofin-react-mobile](.agents/skills/agrofin-react-mobile/SKILL.md) | Telas, formulários, dados remotos e interações React no celular. |
 | [agrofin-financial-data](.agents/skills/agrofin-financial-data/SKILL.md) | Persistência, relatórios, autenticação ou criptografia de dados financeiros. |
+
+## skills externas versionadas no repositório
+
+Estas skills foram instaladas de fontes públicas, com origem e revisão registradas em [skills externas](docs/skills-externas.md). Use somente as aplicáveis; as escolhas do projeto acima e a documentação vigente prevalecem sobre exemplos genéricos das skills.
+
+| skill | quando usar |
+| --- | --- |
+| [react-best-practices](.agents/skills/react-best-practices/SKILL.md) | Escrever ou revisar React; aplicar as regras de React pertinentes ao projeto, sem assumir Next.js. |
+| [web-design-guidelines](.agents/skills/web-design-guidelines/SKILL.md) | Revisar acessibilidade, usabilidade e apresentação das telas. |
+| [golang-context](.agents/skills/golang-context/SKILL.md) | Propagação de cancelamento e prazo entre handler, domínio e banco Go. |
+| [golang-naming](.agents/skills/golang-naming/SKILL.md) | Nomear pacotes, tipos, funções e erros Go. |
+| [security-best-practices](.agents/skills/security-best-practices/SKILL.md) | Revisão de segurança de Go e React ou implementação segura quando a tarefa pedir isso. |
 
 ## skills da vercel já disponíveis no ambiente
 
@@ -35,7 +47,8 @@ Estas skills vêm do plugin da Vercel e não foram copiadas para o repositório.
 - `vercel:vercel-storage` e `vercel:env-vars` para banco e configuração.
 - `vercel:deployments-cicd` para preview, produção e CI.
 - `vercel:verification` para verificar o fluxo completo após iniciar o app.
-- `vercel:react-best-practices` depois de alterações em vários componentes TSX.
+
+Para React, a versão oficial da Vercel instalada acima fica registrada no repositório. As skills do plugin continuam úteis para recursos específicos da plataforma e devem ser verificadas contra a documentação atual.
 
 Não configurar deploy só porque uma skill existe. O primeiro passo de implementação previsto é validar com um protótipo mínimo que React e Go funcionem no mesmo projeto Vercel.
 
@@ -45,3 +58,4 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 - Ao alterar uma regra de negócio, verifique o exemplo correspondente nos critérios de aceite e proteja o comportamento com o menor teste que capture o risco.
 - Explique decisões importantes de Go e seus trade-offs: este também é um projeto de estudo. Prefira comentários curtos junto à lógica não óbvia.
 - Preserve alterações já feitas pelo usuário. Atualize a documentação quando o comportamento implementado divergir do plano e distinga claramente proposta de funcionalidade entregue.
+- Ao criar commits, use Conventional Commits com mensagem em pt-BR, como `feat:`, `fix:` ou `refact:`.
