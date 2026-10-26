@@ -44,11 +44,37 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 ## sequência sugerida
 
-1. **Fundação:** protótipo do deploy unificado, banco, migrações, autenticação, layout mobile e proteção dos valores financeiros.
-2. **Rotina principal:** funcionários, tarifas, registro de caixas, consolidação semanal, diárias e pagamentos.
-3. **Resultado da produção:** vendas por classificação, descontos, recebimentos, despesas e painel por período.
-4. **Manejo:** cadastro e compra de insumos, estoque, pulverizações e calendário lunar.
-5. **Validação com o cliente:** observar o lançamento real de uma semana, medir toques e tempo, ajustar campos e linguagem.
+| etapa | entrega verificável |
+| --- | --- |
+| 1. base técnica | Protótipo com uma página React chamando uma rota Go sob `/api` no mesmo preview da Vercel; desenvolvimento local equivalente, banco, migrações e autenticação. |
+| 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
+| 3. vendas e despesas | Registrar venda por classificação, desconto e recebimento; registrar energia e demais despesas; mostrar painel com vendido, recebido, devido, pago e saldo de caixa separados. |
+| 4. insumos e calendário | Registrar produto, compra, estoque e pulverização; permitir cadastro rápido; mostrar calendário e mudança das fases da Lua. |
+| 5. uso real | Observar o registro de uma semana com o cliente, corrigir rótulos e passos difíceis e conferir resultados com os controles que ele já usa. |
+
+O primeiro fluxo completo é o **MVP de validação**: já resolve a rotina de maior frequência e permite descobrir cedo se o lançamento por funcionário e o fechamento semanal estão simples o bastante.
+
+## contrato inicial da api
+
+Manter rotas versionadas sob `/api/v1` e respostas JSON. Uma proposta mínima para o primeiro fluxo é:
+
+```text
+GET/POST       /api/v1/employees
+GET/POST       /api/v1/harvest-rates
+GET/POST       /api/v1/harvest-entries
+PATCH          /api/v1/harvest-entries/{id}
+GET            /api/v1/payroll-weeks/{week}/summary
+POST           /api/v1/employee-payments
+```
+
+O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
+
+## verificações que importam
+
+- Testes de domínio para tarifa por vigência, caixas normais e de moagem, diárias, pagamento parcial e saldo semanal.
+- Testes de integração para uma correção após pagamento, venda com desconto, recebimento parcial e compra que afeta despesa e estoque uma só vez.
+- Teste de segurança que inspeciona um banco de teste e confirma que valores monetários persistidos não aparecem em texto claro, além de teste de restauração com as chaves corretas.
+- Teste no celular de uma sequência real: registrar caixas para vários funcionários, fechar a semana e registrar uma pulverização com insumo novo.
 
 ## decisões técnicas antes do código de produção
 
