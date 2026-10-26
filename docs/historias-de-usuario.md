@@ -2,7 +2,7 @@
 
 ## colheita e pagamentos
 
-- **HU-01** — Como cliente, quero cadastrar funcionários e o valor pago por caixa normal e por caixa de moagem, para calcular o trabalho de cada um.
+- **HU-01** — Como cliente, quero cadastrar funcionários informando apenas o nome, para identificá-los na colheita e nos pagamentos. Os valores por caixa são configurados separadamente.
 - **HU-02** — Como cliente, quero registrar as caixas colhidas por funcionário, tipo e dia, para acompanhar a produção.
 - **HU-03** — Como cliente, quero ver o total semanal de caixas e o valor devido a cada funcionário, para conferir e registrar o pagamento.
 - **HU-04** — Como cliente, quero registrar uma diária quando esse formato de pagamento for usado, para incluir o custo na semana sem atribuir caixas fictícias.

@@ -2,7 +2,7 @@
 
 ## contexto e estado atual
 
-Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto e planejamento; ainda não há aplicações Go ou React implementadas. Trate a arquitetura dos documentos como proposta até que o código e o deploy sejam validados.
+Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto e uma API Go mínima com rota de saúde e listagem vazia de funcionários; o frontend React ainda não foi iniciado. Trate as demais partes da arquitetura dos documentos como proposta até que o código e o deploy sejam validados.
 
 Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/requisitos.md) e [critérios de aceite](docs/criterios-de-aceite.md) para entender o comportamento. Consulte o [modelo de dados](docs/modelo-de-dados.md), os [fluxos mobile](docs/fluxos-mobile.md) e o [plano de implementação](docs/plano-de-implementacao.md) conforme a tarefa. Não transforme uma decisão pendente em regra definitiva sem evidência ou resposta do usuário.
 
@@ -11,6 +11,7 @@ Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/re
 - Produto para gestão de produção de limão, usado principalmente em celular por uma pessoa que precisa de telas simples e poucos passos.
 - Monorepo planejado com `apps/api` em Go e `apps/web` em React + TypeScript. No Go, seguir convenções da linguagem, com entrada em `cmd` e código interno em `internal` quando fizer sentido. No React, organizar código de domínio por `src/features/<feature>`.
 - Separar a classificação usada para pagar a colheita (normal e moagem) da classificação de venda ao barracão (exportação, mercado e moagem).
+- O cadastro de funcionários recebe apenas nome; o identificador e o estado ativo/inativo são técnicos. Tarifas e pagamentos pertencem a fluxos separados. O pacote `internal/funcionarios` é dono desse cadastro e de suas rotas.
 - Ausência de lançamento em um dia não representa falta nem gera penalidade.
 - Valores financeiros exigem proteção contra vazamento isolado do banco. Não introduzir persistência em texto claro de tarifas, preços, pagamentos, recebimentos ou despesas. Consultar a skill de dados financeiros antes de alterar essa área.
 - Em textos de produto e documentação, usar **cliente** para o administrador da produção. Não registrar relação familiar ou dados pessoais do caso que motivou o projeto.
@@ -56,6 +57,12 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 
 - Antes de criar arquivos, identifique a aplicação e o domínio que os possuem. Código compartilhado precisa ter uso real em mais de um lugar.
 - Ao alterar uma regra de negócio, verifique o exemplo correspondente nos critérios de aceite e proteja o comportamento com o menor teste que capture o risco.
-- Explique decisões importantes de Go e seus trade-offs: este também é um projeto de estudo. Prefira comentários curtos junto à lógica não óbvia.
+- Explique decisões importantes de Go e seus trade-offs: este também é um projeto de estudo.
 - Preserve alterações já feitas pelo usuário. Atualize a documentação quando o comportamento implementado divergir do plano e distinga claramente proposta de funcionalidade entregue.
 - Ao criar commits, use Conventional Commits com mensagem em pt-BR, como `feat:`, `fix:` ou `refact:`.
+
+## comentários no código
+
+- Sempre adicione comentários próximos de toda lógica não óbvia e das escolhas cuja razão não seja evidente para outro desenvolvedor. Explique **por que** o código foi feito daquela forma, a regra ou invariante que protege e os trade-offs relevantes.
+- Aplique a regra em Go, React, testes e configurações quando houver comportamento que precise de contexto. Escreva comentários em português e mantenha-os atualizados quando o código mudar.
+- Não use comentários que apenas repitam a instrução visível na linha; eles devem acrescentar o contexto necessário para entender e manter o código.

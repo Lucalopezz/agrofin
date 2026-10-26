@@ -12,7 +12,7 @@ agrofin/
       cmd/api/                 # entrada local
       internal/
         colheita/
-        funcionarios/
+        funcionarios/          # cadastro simples e rotas da feature
         pagamentos/
         vendas/
         despesas/
@@ -40,7 +40,7 @@ agrofin/
   vercel.json                 # configuração após validar o protótipo
 ```
 
-No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
+No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. As rotas de uma funcionalidade pertencem ao pacote dessa funcionalidade, como `internal/funcionarios`; `cmd/api` compõe as rotas e inicia o servidor. `platform` recebe infraestrutura transversal apenas quando ela surgir. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
 
 ## sequência sugerida
 
@@ -60,6 +60,8 @@ Manter rotas versionadas sob `/api/v1` e respostas JSON. Uma proposta mínima pa
 
 ```text
 GET/POST       /api/v1/employees
+PATCH          /api/v1/employees/{id}       # renomear
+DELETE         /api/v1/employees/{id}       # desativar, sem apagar histórico
 GET/POST       /api/v1/harvest-rates
 GET/POST       /api/v1/harvest-entries
 PATCH          /api/v1/harvest-entries/{id}

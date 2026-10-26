@@ -7,7 +7,7 @@ Modelo conceitual para orientar a implementação. Nomes de tabelas e campos pod
 | entidade | dados principais | observação |
 | --- | --- | --- |
 | `user` | identificação, credenciais, estado | inicialmente, uma conta administradora |
-| `employee` | nome, estado, observações | desativação preserva histórico |
+| `employee` | identificador, nome, estado ativo/inativo | apenas nome é informado no cadastro; desativação preserva histórico |
 | `harvest_rate` | tipo de caixa, valor, início da vigência, funcionário opcional | definir se existe tarifa individual |
 | `harvest_entry` | data, funcionário, tipo, quantidade, tarifa aplicada, total | a tarifa e o total são fotografados no lançamento |
 | `daily_work` | data, funcionário, valor, observação | custo por diária, sem caixas fictícias |

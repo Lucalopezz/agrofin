@@ -4,7 +4,7 @@
 
 ### cadastro e colheita
 
-- **RF-01** Cadastrar, editar e desativar funcionários; preservar o histórico de registros de funcionários desativados.
+- **RF-01** Cadastrar e renomear funcionários informando apenas o nome. O sistema gera o identificador e controla o estado ativo/inativo; a exclusão na interface desativa o registro e preserva seu histórico.
 - **RF-02** Configurar valores por caixa normal e de moagem, com vigência por data. Alterações futuras não recalculam pagamentos anteriores.
 - **RF-03** Registrar colheita por data, funcionário, tipo de caixa e quantidade inteira positiva; permitir correção com histórico de alteração. O valor unitário aplicado deve ficar gravado no lançamento.
 - **RF-04** Consolidar colheita por semana e funcionário, mostrando quantidades, tarifa aplicada e total devido.

@@ -6,11 +6,12 @@ Criar um sistema de gestão da produção de limão para um cliente que registra
 
 ## estado do projeto
 
-Há documentação de produto, critérios de aceite, fluxos e plano técnico. Ainda não há código da aplicação. A estrutura Go/React e o deploy unificado são decisões de direção, sujeitas à validação do primeiro protótipo.
+Há documentação de produto, critérios de aceite, fluxos e plano técnico. A API Go foi iniciada em `apps/api` e oferece `GET /api/v1/health` e uma listagem vazia em `GET /api/v1/employees`. Ainda não há frontend React, persistência, cadastro de funcionários, regras de negócio implementadas ou deploy validado. A estrutura completa e o deploy unificado continuam sujeitos à validação.
 
 ## regras centrais já descritas
 
 - Colheita de funcionários: caixas **normais** e de **moagem**, com pagamento por caixa; diária é uma exceção.
+- O cadastro de funcionário pede somente o nome. O sistema gera um identificador e desativa o registro sem apagar o histórico quando necessário.
 - O valor devido é consolidado por semana e funcionário. Dia sem colheita registrada não gera falta ou desconto.
 - Venda ao barracão: caixas de **exportação**, **mercado** e **moagem**, com preços e possíveis descontos.
 - Distinguir valor vendido, valor efetivamente recebido, valor devido aos funcionários e valor pago. Saldo de caixa não é lucro.
