@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?Defina POSTGRES_DB no .env}
+      POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # O volume preserva os dados entre reinícios dos contêineres locais.
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    image: golang:1.27.3-alpine3.24
+    working_dir: /workspace/apps/api
+    command: ["go", "run", "./cmd/api"]
+    volumes:
+      # O código fica montado para desenvolvimento local, sem criar um artefato de produção agora.
+      - ./apps/api:/workspace/apps/api
+    environment:
+      # O nome db só resolve dentro da rede do Compose; sslmode=disable é exclusivo do ambiente local.
+      DATABASE_URL: "postgres://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}?sslmode=disable"
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    healthcheck:
+      # go run compila ao iniciar; a API só fica pronta quando a rota responder.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
