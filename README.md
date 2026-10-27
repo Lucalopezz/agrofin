@@ -1,12 +1,12 @@
-# agrofin
+# Agrofin
 
 Sistema de gestão da produção de limão, pensado para lançamentos rápidos no celular. O cliente, gerente da plantação, é o único usuário do sistema; funcionários são cadastrados apenas para relacionar colheitas e pagamentos.
 
-## estado atual
+## Estado atual
 
 O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health` e `GET /api/v1/employees` (ainda uma lista vazia). O PostgreSQL local e as migrações do modelo relacional estão prontos. Cadastro funcional, autenticação, criptografia dos valores financeiros, demais fluxos e frontend React ainda não foram implementados.
 
-## início rápido
+## Início rápido
 
 Para executar os serviços, instale Docker com Compose. Em uma nova cópia do repositório, crie o `.env` a partir do exemplo:
 
@@ -23,7 +23,13 @@ curl http://127.0.0.1:8080/api/v1/health
 
 O Compose sobe PostgreSQL, aplica as migrações pendentes e inicia a API nessa ordem. Por padrão, a API fica em `127.0.0.1:8080` e o banco em `127.0.0.1:5432`; as portas podem ser alteradas no `.env`. O arquivo `.env` não é versionado.
 
-## comandos úteis
+### Desenvolvimento da api
+
+No primeiro `up`, o Docker constrói a imagem de desenvolvimento com o Air. O serviço `api` observa os arquivos `.go`, `go.mod` e `go.sum` em `apps/api`: ao salvar uma alteração, o Air recompila e reinicia a API automaticamente. Confira o resultado em `docker compose logs -f api` ou na rota de saúde. O binário temporário fica no volume `api_tmp`, fora do checkout; `apps/api/tmp` também é ignorado pelo Git para quem executar o Air diretamente no host. O Air não executa as migrações SQL; use o comando `migrate` abaixo ao criar uma nova migração.
+
+Se alterar `Dockerfile.dev`, reconstrua a imagem com `docker compose up -d --build --wait`. Alterações no `compose.yaml` ou no `.env` exigem recriar os contêineres com `docker compose up -d --force-recreate --wait`.
+
+## Comandos úteis
 
 | ação | comando |
 | --- | --- |
@@ -35,7 +41,7 @@ O Compose sobe PostgreSQL, aplica as migrações pendentes e inicia a API nessa 
 
 Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go test ./...` dentro de `apps/api`, onde está o `go.mod`.
 
-## organização
+## Organização
 
 | caminho | responsabilidade |
 | --- | --- |
@@ -47,7 +53,7 @@ Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go t
 
 `apps/web` é a aplicação React planejada e ainda não existe. O deploy unificado com a API também não foi validado. Veja [o contexto do projeto](CONTEXT.md) e as [orientações para agentes](AGENTS.md) antes de implementar novos fluxos.
 
-## documentação
+## Documentação
 
 - [bibliotecas usadas](docs/bibliotecas.md)
 - [modelo de dados e relacionamentos](docs/modelo-de-dados.md)

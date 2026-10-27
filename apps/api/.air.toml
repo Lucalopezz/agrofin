@@ -1,0 +1,12 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Compila a entrada HTTP; o migrador continua sendo executado pelo serviço migrate.
+cmd = "go build -o ./tmp/api ./cmd/api"
+entrypoint = ["./tmp/api"]
+
+# Mudanças no código ou nas dependências recompilam a API; tmp não pode provocar outro build.
+include_ext = ["go", "mod", "sum"]
+exclude_dir = ["tmp"]
+delay = 300

@@ -1,0 +1,4 @@
+FROM golang:1.27.3-alpine3.24
+
+# A versão fixa deixa o ambiente reproduzível; instalar na imagem evita baixar o Air a cada início.
+RUN GOBIN=/usr/local/bin go install github.com/air-verse/air@v1.67.4

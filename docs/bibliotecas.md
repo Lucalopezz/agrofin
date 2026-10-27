@@ -19,3 +19,9 @@ Este documento descreve as bibliotecas usadas diretamente no código Go atual. A
 | [`github.com/jackc/pgx/v5`](https://pkg.go.dev/github.com/jackc/pgx/v5) | Conecta ao PostgreSQL. `stdlib` registra o driver `"pgx"` para o `database/sql` usado pelo migrador; `pgxpool` cria o pool usado na inicialização da API. |
 
 As demais entradas marcadas como `// indirect` no `go.mod` são dependências internas desses módulos. Não são chamadas diretamente pelo código do agrofin.
+
+## ferramenta de desenvolvimento
+
+| ferramenta | uso no projeto |
+| --- | --- |
+| [`github.com/air-verse/air`](https://github.com/air-verse/air) | Observa mudanças nos arquivos Go montados no contêiner `api`, recompila `cmd/api` e reinicia o processo. É instalado em versão fixa pelo `Dockerfile.dev`, sem entrar nas dependências da aplicação em `go.mod`. |
