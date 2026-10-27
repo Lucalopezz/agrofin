@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
 
 type healthResponse struct {
@@ -13,17 +17,32 @@ type healthResponse struct {
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	// Só inicia HTTP após confirmar o banco; o prazo limita a espera na inicialização.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool, err := postgres.Open(ctx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
 	// O main compõe as rotas; os handlers de negócio ficam nos pacotes das funcionalidades.
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/v1/health", health)
 
-	// As rotas de funcionários são registradas no mux pelo próprio pacote de funcionários.
-	// e chamados aqui na main, para passar o mux como argumento.
+	// O pacote de funcionários continua dono das próprias rotas; sua consulta ao
+	// banco será ligada quando o cadastro deixar de ser uma listagem vazia.
 	funcionarios.RegisterRoutes(mux)
 
 	log.Println("api em http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	return http.ListenAndServe(":8080", mux)
 }
 
 func health(w http.ResponseWriter, _ *http.Request) {
