@@ -16,6 +16,19 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate:
+    image: golang:1.27.3-alpine3.24
+    working_dir: /workspace/apps/api
+    command: ["go", "run", "./cmd/migrate", "up"]
+    volumes:
+      - ./apps/api:/workspace/apps/api
+      - go_modules:/go/pkg/mod
+    environment:
+      DATABASE_URL: "postgres://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}?sslmode=disable"
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     image: golang:1.27.3-alpine3.24
     working_dir: /workspace/apps/api
@@ -23,6 +36,7 @@ services:
     volumes:
       # O código fica montado para desenvolvimento local, sem criar um artefato de produção agora.
       - ./apps/api:/workspace/apps/api
+      - go_modules:/go/pkg/mod
     environment:
       # O nome db só resolve dentro da rede do Compose; sslmode=disable é exclusivo do ambiente local.
       DATABASE_URL: "postgres://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}?sslmode=disable"
@@ -38,6 +52,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        # O primeiro up só expõe a API após criar as tabelas.
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
+  go_modules:
