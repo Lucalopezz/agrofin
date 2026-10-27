@@ -4,7 +4,7 @@
 
 ### cadastro e colheita
 
-- **RF-01** Cadastrar e renomear funcionários informando apenas o nome. O sistema gera o identificador e controla o estado ativo/inativo; a exclusão na interface desativa o registro e preserva seu histórico.
+- **RF-01** Cadastrar e renomear funcionários informando apenas o nome, sem criar acesso ao sistema para eles. O sistema gera o identificador e controla o estado ativo/inativo; a exclusão na interface desativa o registro e preserva seu histórico. A equipe de uma semana é formada pelos funcionários com lançamentos naquele período, sem cadastro semanal ou desativação automática dos demais.
 - **RF-02** Configurar valores por caixa normal e de moagem, com vigência por data. Alterações futuras não recalculam pagamentos anteriores.
 - **RF-03** Registrar colheita por data, funcionário, tipo de caixa e quantidade inteira positiva; permitir correção com histórico de alteração. O valor unitário aplicado deve ficar gravado no lançamento.
 - **RF-04** Consolidar colheita por semana e funcionário, mostrando quantidades, tarifa aplicada e total devido.
@@ -33,7 +33,7 @@
 - **RNF-01 — mobile primeiro:** os fluxos de colheita, pagamento e pulverização devem funcionar integralmente em uma tela estreita, com campos e botões grandes e texto legível.
 - **RNF-02 — poucos passos:** permitir repetir um lançamento recente, usar valores padrão editáveis e concluir os lançamentos frequentes em uma única tela sempre que possível.
 - **RNF-03 — clareza:** mostrar prévia do total antes de salvar, confirmação após salvar, erros em linguagem direta e identificação explícita de valores pendentes, pagos, vendidos e recebidos.
-- **RNF-04 — acesso:** autenticar o cliente; começar com uma conta administradora e deixar a ampliação de perfis para decisão posterior. Funcionário cadastrado não precisa de login no primeiro escopo.
+- **RNF-04 — acesso:** autenticar somente o cliente, gerente da plantação. Há um único usuário do sistema. Funcionários cadastrados não possuem login nem acesso às telas.
 - **RNF-05 — segurança:** usar HTTPS, controle de acesso no servidor, validação de entradas, backups protegidos e exclusão de dados financeiros dos logs.
 - **RNF-06 — criptografia:** cifrar valores financeiros sensíveis na aplicação antes de persistir, com criptografia autenticada e chaves gerenciadas fora do banco; prever rotação e recuperação das chaves. Senhas devem usar hash próprio para senhas. A proteção cobre vazamento isolado do banco, não comprometimento simultâneo da aplicação e das chaves.
 - **RNF-07 — integridade:** operações de colheita, pagamentos, vendas e estoque devem ser transacionais; correções precisam deixar rastreabilidade.
@@ -47,7 +47,7 @@
 - Confirmar se a classificação da venda é informada diretamente pelo barracão e se uma venda pode reunir vários tipos de caixa.
 - Definir se o estoque admite unidades diferentes e conversões (por exemplo, litro e mililitro).
 - Definir a origem dos dados das fases da Lua e se basta exibir a fase ou também o horário exato da mudança.
-- Confirmar se haverá uso sem internet e se outras pessoas terão acesso ao sistema.
+- Confirmar se haverá uso sem internet.
 - Confirmar se os pagamentos e recebimentos parciais acontecem na prática; o desenho inicial os admite para evitar perda de informação.
 - Confirmar como lançar correções feitas após uma semana já paga ou uma venda já recebida.
 - Confirmar se compras de insumos podem ser feitas a prazo. O desenho inicial de saldo de caixa considera despesas registradas como já pagas.
@@ -55,5 +55,6 @@
 ## fora do primeiro escopo
 
 - Folha de pagamento formal, controle de ponto e penalização por ausência.
+- Acesso de funcionários ou de outros operadores ao sistema e gestão de múltiplos perfis.
 - Recomendação de produto, dose ou momento de aplicação de defensivos.
 - Integração automática com barracão, banco, medidor de energia ou notas fiscais.

@@ -1,0 +1,21 @@
+# bibliotecas usadas
+
+Este documento descreve as bibliotecas usadas diretamente no código Go atual. As versões das dependências externas ficam em [`apps/api/go.mod`](../apps/api/go.mod), e o `go.sum` registra os hashes usados pelo Go para verificar os módulos baixados. Ainda não há ORM: o esquema está em migrações SQL.
+
+## biblioteca padrão do go
+
+| pacote | uso no projeto |
+| --- | --- |
+| [`embed`](https://pkg.go.dev/embed) | Incorpora os arquivos `*.sql` ao executável de migração. `migrations.Files` expõe esses arquivos ao goose sem leitura do disco durante a execução. Uma nova migração exige recompilar; `go run` faz isso ao executar novamente. |
+| [`database/sql`](https://pkg.go.dev/database/sql) | Fornece `*sql.DB` ao migrador. `sql.Open` prepara o acesso e `PingContext` confirma a conexão. |
+| [`context`](https://pkg.go.dev/context) | Limita o tempo de conexão e de execução das migrações. |
+| [`net/http`](https://pkg.go.dev/net/http) e [`encoding/json`](https://pkg.go.dev/encoding/json) | Servem as rotas atuais da API e escrevem respostas JSON. |
+
+## dependências externas
+
+| módulo | uso no projeto |
+| --- | --- |
+| [`github.com/pressly/goose/v3`](https://github.com/pressly/goose) | Lê as migrações SQL, aplica as versões pendentes em ordem e registra o histórico na tabela `goose_db_version`. O comando `cmd/migrate` oferece `up`, `status` e `down`. |
+| [`github.com/jackc/pgx/v5`](https://pkg.go.dev/github.com/jackc/pgx/v5) | Conecta ao PostgreSQL. `stdlib` registra o driver `"pgx"` para o `database/sql` usado pelo migrador; `pgxpool` cria o pool usado na inicialização da API. |
+
+As demais entradas marcadas como `// indirect` no `go.mod` são dependências internas desses módulos. Não são chamadas diretamente pelo código do agrofin.

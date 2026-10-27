@@ -7,10 +7,12 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 ### HU-01 e HU-02 — funcionários e caixas
 
 - O cadastro pede apenas o nome. O sistema gera o identificador usado para relacionar colheitas e pagamentos, mesmo quando houver nomes iguais.
+- Só o cliente entra no sistema; cadastrar um funcionário não cria usuário, senha ou convite.
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
 - Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição registra quem alterou, quando alterou e os valores anteriores.
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
+- Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 
 ### HU-03, HU-04 e HU-05 — fechamento semanal
 

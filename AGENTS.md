@@ -2,7 +2,7 @@
 
 ## contexto e estado atual
 
-Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto e uma API Go mínima com rota de saúde e listagem vazia de funcionários; o frontend React ainda não foi iniciado. Trate as demais partes da arquitetura dos documentos como proposta até que o código e o deploy sejam validados.
+Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, API Go mínima com conexão ao PostgreSQL e migrações do esquema; a rota de funcionários ainda devolve uma listagem vazia e o frontend React não foi iniciado. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
 
 Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/requisitos.md) e [critérios de aceite](docs/criterios-de-aceite.md) para entender o comportamento. Consulte o [modelo de dados](docs/modelo-de-dados.md), os [fluxos mobile](docs/fluxos-mobile.md) e o [plano de implementação](docs/plano-de-implementacao.md) conforme a tarefa. Não transforme uma decisão pendente em regra definitiva sem evidência ou resposta do usuário.
 
@@ -12,6 +12,7 @@ Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/re
 - Monorepo planejado com `apps/api` em Go e `apps/web` em React + TypeScript. No Go, seguir convenções da linguagem, com entrada em `cmd` e código interno em `internal` quando fizer sentido. No React, organizar código de domínio por `src/features/<feature>`.
 - Separar a classificação usada para pagar a colheita (normal e moagem) da classificação de venda ao barracão (exportação, mercado e moagem).
 - O cadastro de funcionários recebe apenas nome; o identificador e o estado ativo/inativo são técnicos. Tarifas e pagamentos pertencem a fluxos separados. O pacote `internal/funcionarios` é dono desse cadastro e de suas rotas.
+- Só o cliente, gerente da plantação, usa o sistema. Funcionários não possuem login. A equipe de cada semana resulta dos lançamentos daquela semana; não criar cadastro semanal nem desativar automaticamente quem não trabalhou em uma semana.
 - Ausência de lançamento em um dia não representa falta nem gera penalidade.
 - Valores financeiros exigem proteção contra vazamento isolado do banco. Não introduzir persistência em texto claro de tarifas, preços, pagamentos, recebimentos ou despesas. Consultar a skill de dados financeiros antes de alterar essa área.
 - Em textos de produto e documentação, usar **cliente** para o administrador da produção. Não registrar relação familiar ou dados pessoais do caso que motivou o projeto.

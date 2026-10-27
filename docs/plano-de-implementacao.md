@@ -10,6 +10,7 @@ agrofin/
     api/
       go.mod
       cmd/api/                 # entrada local
+      cmd/migrate/             # aplicar e consultar migrações
       internal/
         colheita/
         funcionarios/          # cadastro simples e rotas da feature
@@ -41,6 +42,8 @@ agrofin/
 ```
 
 No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. As rotas de uma funcionalidade pertencem ao pacote dessa funcionalidade, como `internal/funcionarios`; `cmd/api` compõe as rotas e inicia o servidor. `platform` recebe infraestrutura transversal apenas quando ela surgir. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
+
+O PostgreSQL local, as migrações e a conexão inicial da API já estão implementados. A autenticação, a escrita dos fluxos de negócio, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ## sequência sugerida
 
