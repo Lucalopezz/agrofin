@@ -43,36 +43,42 @@ agrofin/
 
 No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. As rotas de uma funcionalidade pertencem ao pacote dessa funcionalidade, como `internal/funcionarios`; `cmd/api` compõe as rotas e inicia o servidor. `platform` recebe infraestrutura transversal apenas quando ela surgir. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
 
-O PostgreSQL local, as migrações e a conexão inicial da API já estão implementados. A autenticação, a escrita dos fluxos de negócio via HTTP, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API e o cadastro HTTP de funcionários em desenvolvimento local estão implementados. A autenticação, os demais fluxos de escrita, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ### organização interna do cadastro de funcionários
 
-O caminho interno de criação está implementado em `internal/funcionarios`, com todos os arquivos no mesmo pacote:
+O caminho de criação HTTP está implementado em `internal/funcionarios`, com todos os arquivos no mesmo pacote:
 
 | arquivo | responsabilidade implementada |
 | --- | --- |
 | `employee.go` | Define `Employee` e normaliza o nome, removendo espaços das extremidades e rejeitando resultado vazio. Preserva acentos, grafia e espaços internos. |
 | `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com conta e estado ativo inicial antes de chamar a persistência. |
 | `repository.go` | `Repository.Create` recebe um `Employee` validado, executa o `INSERT` parametrizado e devolve a entidade com o ID gerado pelo banco. |
-| `routes.go` | Mantém o GET provisório que retorna uma lista vazia. Ainda não chama o serviço. |
+| `handler.go` | Lê o JSON de cadastro, chama o serviço e converte resultados em status e JSON de resposta. |
+| `routes.go` | Registra o POST de cadastro e mantém o GET provisório que retorna uma lista vazia. |
 
-A composição do fluxo interno é:
+A composição no `cmd/api/main.go` é:
 
 ```go
 repo := funcionarios.NewRepository(pool)
 service := funcionarios.NewService(repo)
-employee, err := service.Create(ctx, accountID, name)
+handler := funcionarios.NewHandler(service, accountID)
+funcionarios.RegisterRoutes(mux, handler)
 ```
 
 O pool é aberto e fechado pela aplicação; o repositório apenas o utiliza. A interface privada `employeeCreator`, declarada junto do serviço que a consome, permite testar a validação sem PostgreSQL. Ela descreve a única operação necessária, sem criar um repositório genérico ou interfaces antecipadas para outros domínios. Cada funcionalidade pode ter seu próprio repositório usando o mesmo pool.
 
 O serviço recebe conta e nome, normaliza e valida o nome e monta `Employee{AccountID: accountID, Name: name, Active: true}`. Em seguida chama `repo.Create(ctx, employee)`. O repositório recebe a struct de domínio por valor, persiste conta, nome e estado e devolve a entidade com ID gerado pelo banco. Receber por valor evita alterar a struct do chamador implicitamente; o resultado persistido é explícito no retorno. O ID fica vazio somente antes da inserção. `AccountID` é um vínculo técnico do domínio, não um campo do formulário HTTP. Nomes iguais continuam permitidos. O repositório não repete a normalização nem escolhe o estado inicial; as restrições SQL continuam protegendo a integridade. Como os campos de `Employee` são exportados, a struct sozinha não comprova validação: o serviço é a entrada das operações de cadastro. A inserção atual é uma única instrução atômica, sem necessidade de transação explícita.
 
-`ctx context.Context` é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs. No futuro handler, ele virá de `r.Context()`, e não de um novo `context.Background()`. O nome e o `accountID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro.
+`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `accountID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco e validar a configuração, sem ser reaproveitado nas requisições.
 
-**Ainda pendente:** handler de criação, rota POST, composição no `main`, origem autenticada de `accountID`, listagem persistida, renomeação e desativação. O handler lerá o JSON e traduzirá resultados para HTTP; as regras continuarão no serviço e o SQL no repositório. `accountID` deve identificar uma conta existente e vir de uma origem confiável do servidor, sem ser aceito como campo do formulário de cadastro. A autenticação ainda não foi implementada.
+O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `account_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
 
-Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e conta e preservação de erros. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste verifica gravação real, vínculo com a conta, IDs distintos para nomes iguais, estado ativo inicial e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria sua própria conta e remove somente seus registros ao terminar.
+Como autenticação ainda não existe, o `main` só fornece uma conta ao handler quando recebe `APP_ENV=development` e `DEV_ACCOUNT_ID` válido e existente no banco. A conta nunca é aceita no corpo ou cabeçalho HTTP. Sem `DEV_ACCOUNT_ID`, a API inicia e o POST responde `503`; com conta inválida ou configuração fora do modo de desenvolvimento, a inicialização falha. Esse caminho temporário permite apenas o experimento local, não atende ao requisito de autenticação de produção e deverá ser substituído pela sessão autenticada. Veja os comandos no [README](../README.md#cadastro-local-de-funcionários).
+
+**Ainda pendente:** autenticação e origem autenticada de `accountID`, listagem persistida, renomeação e desativação. As regras permanecem no serviço e o SQL no repositório.
+
+Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e conta e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com a conta, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria sua própria conta e remove somente seus registros ao terminar.
 
 ## sequência sugerida
 

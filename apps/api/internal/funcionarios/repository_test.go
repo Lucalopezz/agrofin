@@ -2,7 +2,11 @@ package funcionarios
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRepositoryCreate(t *testing.T) {
+func TestCreateEmployeeIntegration(t *testing.T) {
 	// A integração exige um banco de teste com as migrações aplicadas.
 	// Não usamos DATABASE_URL para evitar gravar no banco de desenvolvimento.
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -40,17 +44,29 @@ func TestRepositoryCreate(t *testing.T) {
 	}()
 
 	service := NewService(NewRepository(pool))
-	first, err := service.Create(ctx, accountID, "  João D'Ávila  ")
-	// As próximas verificações dependem de uma criação bem-sucedida;
-	// require interrompe o teste se essa condição não for atendida.
-	require.NoError(t, err, "criar primeiro funcionário")
-	second, err := service.Create(ctx, accountID, "João D'Ávila")
-	require.NoError(t, err, "criar funcionário de mesmo nome")
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, accountID))
+	// Uma conexão HTTP real exercita rota, JSON, serviço e SQL juntos.
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 5 * time.Second
+	create := func(body string) employeeResponse {
+		t.Helper()
+		response, err := client.Post(server.URL+"/api/v1/employees", "application/json", strings.NewReader(body))
+		require.NoError(t, err)
+		defer response.Body.Close()
+		// Só lemos o funcionário quando a criação HTTP terminou com sucesso.
+		require.Equal(t, http.StatusCreated, response.StatusCode)
+		var employee employeeResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&employee))
+		return employee
+	}
+	first := create(`{"name":"  João D'Ávila  "}`)
+	second := create(`{"name":"João D'Ávila"}`)
 	assert.NotEmpty(t, first.ID)
 	assert.NotEmpty(t, second.ID)
 	assert.NotEqual(t, first.ID, second.ID)
-	assert.Equal(t, accountID, first.AccountID)
-	assert.Equal(t, accountID, second.AccountID)
 	assert.True(t, first.Active)
 	assert.True(t, second.Active)
 
@@ -66,6 +82,11 @@ func TestRepositoryCreate(t *testing.T) {
 	assert.Equal(t, first.Name, name)
 	assert.True(t, active)
 	assert.False(t, deactivated)
+
+	response, err := client.Post(server.URL+"/api/v1/employees", "application/json", strings.NewReader(`{"name":"   "}`))
+	require.NoError(t, err)
+	response.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
 
 	// O cancelamento deve chegar ao driver e continuar identificável mesmo
 	// depois de o repositório acrescentar contexto ao erro com %w.

@@ -1,6 +1,6 @@
 # modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. As tabelas existem, mas autenticação, criptografia de valores e gravação dos fluxos de negócio ainda não foram implementadas. Regras pendentes continuam identificadas abaixo.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. O cadastro de funcionários já permite inserção HTTP com conta configurada explicitamente no desenvolvimento local. Autenticação, criptografia de valores e gravação dos demais fluxos de negócio ainda não foram implementadas. Regras pendentes continuam identificadas abaixo.
 
 ## princípios do modelo
 
