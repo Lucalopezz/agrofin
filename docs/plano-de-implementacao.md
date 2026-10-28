@@ -43,7 +43,7 @@ agrofin/
 
 No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. As rotas de uma funcionalidade pertencem ao pacote dessa funcionalidade, como `internal/funcionarios`; `cmd/api` compõe as rotas e inicia o servidor. `platform` recebe infraestrutura transversal apenas quando ela surgir. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
 
-O PostgreSQL local, as migrações, a conexão inicial da API e o cadastro HTTP de funcionários em desenvolvimento local estão implementados. A autenticação, os demais fluxos de escrita, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API e as camadas de cadastro de funcionários estão implementados; o POST ainda depende da integração com o login para ficar disponível. A autenticação, os demais fluxos de escrita, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ### organização interna do cadastro de funcionários
 
@@ -62,7 +62,8 @@ A composição no `cmd/api/main.go` é:
 ```go
 repo := funcionarios.NewRepository(pool)
 service := funcionarios.NewService(repo)
-handler := funcionarios.NewHandler(service, accountID)
+// A integração com o login ainda fornecerá a conta do cliente.
+handler := funcionarios.NewHandler(service, "")
 funcionarios.RegisterRoutes(mux, handler)
 ```
 
@@ -70,11 +71,11 @@ O pool é aberto e fechado pela aplicação; o repositório apenas o utiliza. A 
 
 O serviço recebe conta e nome, normaliza e valida o nome e monta `Employee{AccountID: accountID, Name: name, Active: true}`. Em seguida chama `repo.Create(ctx, employee)`. O repositório recebe a struct de domínio por valor, persiste conta, nome e estado e devolve a entidade com ID gerado pelo banco. Receber por valor evita alterar a struct do chamador implicitamente; o resultado persistido é explícito no retorno. O ID fica vazio somente antes da inserção. `AccountID` é um vínculo técnico do domínio, não um campo do formulário HTTP. Nomes iguais continuam permitidos. O repositório não repete a normalização nem escolhe o estado inicial; as restrições SQL continuam protegendo a integridade. Como os campos de `Employee` são exportados, a struct sozinha não comprova validação: o serviço é a entrada das operações de cadastro. A inserção atual é uma única instrução atômica, sem necessidade de transação explícita.
 
-`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `accountID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco e validar a configuração, sem ser reaproveitado nas requisições.
+`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `accountID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco, sem ser reaproveitado nas requisições.
 
 O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `account_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
 
-Como autenticação ainda não existe, o `main` só fornece uma conta ao handler quando recebe `APP_ENV=development` e `DEV_ACCOUNT_ID` válido e existente no banco. A conta nunca é aceita no corpo ou cabeçalho HTTP. Sem `DEV_ACCOUNT_ID`, a API inicia e o POST responde `503`; com conta inválida ou configuração fora do modo de desenvolvimento, a inicialização falha. Esse caminho temporário permite apenas o experimento local, não atende ao requisito de autenticação de produção e deverá ser substituído pela sessão autenticada. Veja os comandos no [README](../README.md#cadastro-local-de-funcionários).
+O `main` monta o handler sem conta, e o POST responde `503` antes de chamar o serviço. O login deverá fornecer a conta do cliente autenticado por requisição. A conta nunca é aceita no corpo ou cabeçalho do cadastro. Não há mecanismo temporário de conta por variável de ambiente. Os testes fornecem uma conta diretamente para verificar o fluxo de cadastro independentemente da futura autenticação.
 
 **Ainda pendente:** autenticação e origem autenticada de `accountID`, listagem persistida, renomeação e desativação. As regras permanecem no serviço e o SQL no repositório.
 

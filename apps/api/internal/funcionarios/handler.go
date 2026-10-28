@@ -20,8 +20,8 @@ type Handler struct {
 	accountID string
 }
 
-// NewHandler recebe uma conta definida pelo servidor. Temporariamente ela vem
-// da configuração explícita de desenvolvimento, nunca do corpo ou cabeçalhos.
+// NewHandler recebe uma conta definida pelo servidor, nunca pelo corpo ou
+// cabeçalhos do cadastro. A integração com o login ainda está pendente.
 func NewHandler(service employeeService, accountID string) *Handler {
 	return &Handler{service: service, accountID: accountID}
 }
@@ -41,10 +41,10 @@ type errorResponse struct {
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	// Sem autenticação, só habilitamos a escrita quando a aplicação compõe
-	// explicitamente o handler com uma conta de desenvolvimento validada.
+	// A aplicação ainda não fornece a conta do cliente autenticado. Até o login
+	// ser integrado, interrompemos o cadastro antes de chamar o serviço.
 	if h.accountID == "" {
-		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "cadastro indisponível: conta de desenvolvimento não configurada"})
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "cadastro indisponível até a integração com o login"})
 		return
 	}
 

@@ -48,9 +48,6 @@ services:
     environment:
       # O nome db só resolve dentro da rede do Compose; sslmode=disable é exclusivo do ambiente local.
       DATABASE_URL: "postgres://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}?sslmode=disable"
-      # Sem conta explícita, o POST permanece indisponível. Isto não é autenticação.
-      APP_ENV: ${APP_ENV:-development}
-      DEV_ACCOUNT_ID: ${DEV_ACCOUNT_ID:-}
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
     healthcheck:

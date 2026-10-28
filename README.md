@@ -4,7 +4,7 @@ Sistema de gestão da produção de limão, pensado para lançamentos rápidos n
 
 ## Estado atual
 
-O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health`, `GET /api/v1/employees` (ainda uma lista vazia) e `POST /api/v1/employees` para cadastro local com conta configurada. O PostgreSQL local e as migrações do modelo relacional estão prontos. Autenticação, listagem persistida, renomeação, desativação, criptografia dos valores financeiros, demais fluxos e frontend React ainda não foram implementados.
+O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health`, `GET /api/v1/employees` (ainda uma lista vazia) e `POST /api/v1/employees`, que responde `503` até a integração com o login. O PostgreSQL local e as migrações do modelo relacional estão prontos. Autenticação, listagem persistida, renomeação, desativação, criptografia dos valores financeiros, demais fluxos e frontend React ainda não foram implementados.
 
 O cadastro separa HTTP no handler, validação e montagem da entidade no serviço e inserção no repositório PostgreSQL; veja a [organização do cadastro](docs/plano-de-implementacao.md#organização-interna-do-cadastro-de-funcionários).
 
@@ -31,37 +31,9 @@ No primeiro `up`, o Docker constrói a imagem de desenvolvimento com o Air. O se
 
 Se alterar `Dockerfile.dev`, reconstrua a imagem com `docker compose up -d --build --wait`. Alterações no `compose.yaml` ou no `.env` exigem recriar os contêineres com `docker compose up -d --force-recreate --wait`.
 
-### cadastro local de funcionários
+### cadastro de funcionários
 
-Enquanto não há autenticação, o POST fica desabilitado por padrão (`503`). Para experimentar localmente, abra o PostgreSQL:
-
-```bash
-docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-```
-
-Consulte as contas com `SELECT id, name FROM accounts;`. Se não houver uma conta local, crie uma no prompt SQL:
-
-```sql
-INSERT INTO accounts (name) VALUES ('desenvolvimento local') RETURNING id;
-```
-
-Saia com `\q` e acrescente ao `.env`, preservando as configurações existentes:
-
-```dotenv
-APP_ENV=development
-DEV_ACCOUNT_ID=uuid-da-conta-local
-```
-
-Substitua o exemplo pelo UUID real retornado pelo banco e recrie o serviço `api`:
-
-```bash
-docker compose up -d --force-recreate --wait api
-curl -i http://127.0.0.1:8080/api/v1/employees \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Ana"}'
-```
-
-O retorno de sucesso é `201` com `{"id":"uuid-gerado","name":"Ana","active":true}`. O banco gera o UUID. Apenas `name` é aceito na entrada; `account_id`, ID e estado não são campos do cadastro. `DEV_ACCOUNT_ID` é validado na inicialização e nunca vem do navegador. Essa configuração é exclusiva do desenvolvimento local, não autentica o cliente e não deve ser usada em produção. Fora de `APP_ENV=development`, informar `DEV_ACCOUNT_ID` impede a inicialização. A listagem GET ainda retorna `[]`, inclusive após um cadastro.
+A rota POST, o handler, o serviço e o repositório estão implementados e têm testes. O cadastro na API em execução permanece indisponível (`503`) até o login fornecer a conta do cliente. O corpo receberá somente `name`; a conta não será enviada no formulário. Não há configuração temporária de conta por variável de ambiente. A listagem GET ainda retorna `[]`.
 
 ## Comandos úteis
 

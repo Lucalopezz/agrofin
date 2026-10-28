@@ -30,7 +30,7 @@ func TestCreateEmployeeHandler(t *testing.T) {
 		expectedCalls int
 	}{
 		{name: "cadastro", body: `{"name":"Ana"}`, contentType: "application/json; charset=utf-8", expectedCode: 201, expectedCalls: 1},
-		{name: "sem conta configurada", body: `{"name":"Ana"}`, contentType: "application/json", unconfigured: true, expectedCode: 503},
+		{name: "sem conta do cliente", body: `{"name":"Ana"}`, contentType: "application/json", unconfigured: true, expectedCode: 503},
 		{name: "sem content type", body: `{"name":"Ana"}`, expectedCode: 415},
 		{name: "tipo não suportado", body: `{"name":"Ana"}`, contentType: "text/plain", expectedCode: 415},
 		{name: "json inválido", body: `{"name":`, contentType: "application/json", expectedCode: 400},
