@@ -6,7 +6,9 @@ Criar um sistema de gestão da produção de limão para um cliente que registra
 
 ## estado do projeto
 
-Há documentação de produto, critérios de aceite, fluxos e plano técnico. A API Go em `apps/api` oferece `GET /api/v1/health` e uma listagem vazia em `GET /api/v1/employees`. O PostgreSQL local, as migrações do esquema e a conexão inicial da API estão implementados. Ainda não há frontend React, autenticação, criptografia de valores, persistência dos fluxos de negócio, cadastro funcional de funcionários ou deploy validado. O deploy unificado continua sujeito à validação.
+Há documentação de produto, critérios de aceite, fluxos e plano técnico. A API Go em `apps/api` oferece `GET /api/v1/health` e uma listagem vazia em `GET /api/v1/employees`. O PostgreSQL local, as migrações do esquema e a conexão inicial da API estão implementados. Ainda não há frontend React, autenticação, criptografia de valores, fluxos de negócio completos, cadastro de funcionários via HTTP ou deploy validado. O deploy unificado continua sujeito à validação.
+
+O cadastro de funcionários tem uma implementação interna parcial: `Service.Create` valida e normaliza o nome, monta um `Employee` com a conta e o estado ativo inicial e entrega essa entidade a `Repository.Create`, que insere em `employees` e devolve o registro com ID gerado pelo banco. Esse caminho tem testes de serviço e integração PostgreSQL, mas ainda não está conectado ao HTTP. A rota POST, a origem autenticada de `account_id`, a listagem persistida, a renomeação e a desativação continuam pendentes; o cadastro ainda não está disponível pela API.
 
 ## regras centrais já descritas
 

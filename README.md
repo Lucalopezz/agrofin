@@ -6,6 +6,8 @@ Sistema de gestão da produção de limão, pensado para lançamentos rápidos n
 
 O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health` e `GET /api/v1/employees` (ainda uma lista vazia). O PostgreSQL local e as migrações do modelo relacional estão prontos. Cadastro funcional, autenticação, criptografia dos valores financeiros, demais fluxos e frontend React ainda não foram implementados.
 
+O fluxo interno de criação de funcionários já separa validação no serviço e inserção no repositório PostgreSQL. Ele ainda não está ligado a uma rota POST; veja a [organização do cadastro](docs/plano-de-implementacao.md#organização-interna-do-cadastro-de-funcionários).
+
 ## Início rápido
 
 Para executar os serviços, instale Docker com Compose. Em uma nova cópia do repositório, crie o `.env` a partir do exemplo:
@@ -47,7 +49,7 @@ Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go t
 | --- | --- |
 | `apps/api/cmd/api` | Inicia a API HTTP e a conexão com o banco. |
 | `apps/api/cmd/migrate` | Aplica, consulta e reverte migrações. |
-| `apps/api/internal/funcionarios` | Rotas e futuro cadastro de funcionários. |
+| `apps/api/internal/funcionarios` | Rotas atuais e criação interna via serviço e repositório, ainda sem POST. |
 | `apps/api/internal/platform/postgres` | Cria e verifica o pool PostgreSQL da API. |
 | `apps/api/migrations` | Migrações SQL incorporadas ao executável Go. |
 
