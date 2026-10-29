@@ -1,8 +1,8 @@
-# frontend do agrofin
+# Frontend do agrofin
 
 Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A página inicial está disponível; as telas de negócio ainda serão implementadas.
 
-## desenvolvimento
+## Desenvolvimento
 
 Siga as instruções do [README principal](../../README.md#como-executar) para iniciar a aplicação com Docker e acesse http://localhost:5173. O Vite atualiza a página ao salvar alterações e encaminha `/api` para a API Go. O indicador de conexão aparece somente em desenvolvimento.
 
@@ -14,7 +14,7 @@ docker compose exec web pnpm run build
 
 Execute os comandos na raiz do repositório. Após alterar dependências, rode `docker compose restart web` para sincronizá-las com o lockfile. Para trabalhar sem Docker, em `apps/web`, execute `pnpm install --frozen-lockfile` e `pnpm run dev`; o proxy usa a API em `localhost:8080` por padrão. `API_PROXY_TARGET` permite mudar o destino no servidor Vite.
 
-## organização
+## Organização
 
 - `src/app/`: composição e estilos globais.
 - `src/features/`: páginas e código de cada domínio; atualmente contém `inicio`.
@@ -23,6 +23,6 @@ Execute os comandos na raiz do repositório. Após alterar dependências, rode `
 
 Mantenha requisições, tipos e componentes específicos dentro da respectiva feature. Use `shared/` para o que for compartilhado entre domínios.
 
-## versões
+## Versões
 
 Para execução fora do Docker, use Node 24 e pnpm 12.15.0. As dependências estão em [package.json](package.json) e `pnpm-lock.yaml`.

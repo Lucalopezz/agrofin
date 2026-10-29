@@ -1,4 +1,4 @@
-# skills externas
+# Skills externas
 
 Estas skills foram baixadas de repositórios públicos para `.agents/skills/`, de modo que o projeto tenha uma versão conhecida das orientações usadas pelos agentes. Elas complementam as skills específicas do agrofin; não substituem seus requisitos ou as instruções do usuário.
 

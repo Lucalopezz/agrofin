@@ -1,6 +1,6 @@
-# plano de implementação
+# Plano de implementação
 
-## arquitetura proposta
+## Arquitetura proposta
 
 Um monorepo com `apps/web` (React + TypeScript) e `apps/api` (Go). A interface consome `/api` no mesmo domínio. Banco relacional para lançamentos, estoque e histórico; escolher o provedor ao iniciar a implementação. O deploy desejado é um único projeto Vercel com frontend e API publicados juntos por Vercel Services, que está em beta. Validar um protótipo mínimo de build e roteamento do serviço Go antes de implementar as regras de negócio. [Fonte: Vercel Services](https://vercel.com/docs/services) e [runtime Go](https://vercel.com/docs/functions/runtimes/go).
 
@@ -47,7 +47,7 @@ A base React em `apps/web` já está implementada com Vite, Tailwind e shadcn; o
 
 O PostgreSQL local, as migrações, a conexão inicial da API e as camadas de cadastro de funcionários estão implementados; o POST ainda depende da integração com o login para ficar disponível. A autenticação, os demais fluxos de escrita, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
-### organização interna do cadastro de funcionários
+### Organização interna do cadastro de funcionários
 
 O caminho de criação HTTP está implementado em `internal/funcionarios`, com todos os arquivos no mesmo pacote:
 
@@ -83,7 +83,7 @@ O `main` monta o handler sem conta, e o POST responde `503` antes de chamar o se
 
 Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e conta e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com a conta, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria sua própria conta e remove somente seus registros ao terminar.
 
-## sequência sugerida
+## Sequência sugerida
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -95,7 +95,7 @@ Os testes de serviço verificam normalização, bloqueio de nome vazio antes da 
 
 O primeiro fluxo completo é o **MVP de validação**: já resolve a rotina de maior frequência e permite descobrir cedo se o lançamento por funcionário e o fechamento semanal estão simples o bastante.
 
-## contrato inicial da api
+## Contrato inicial da api
 
 Manter rotas versionadas sob `/api/v1` e respostas JSON. Uma proposta mínima para o primeiro fluxo é:
 
@@ -112,14 +112,14 @@ POST           /api/v1/employee-payments
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
 
-## verificações que importam
+## Verificações que importam
 
 - Testes de domínio para tarifa por vigência, caixas normais e de moagem, diárias, pagamento parcial e saldo semanal.
 - Testes de integração para uma correção após pagamento, venda com desconto, recebimento parcial e compra que afeta despesa e estoque uma só vez.
 - Teste de segurança que inspeciona um banco de teste e confirma que valores monetários persistidos não aparecem em texto claro, além de teste de restauração com as chaves corretas.
 - Teste no celular de uma sequência real: registrar caixas para vários funcionários, fechar a semana e registrar uma pulverização com insumo novo.
 
-## decisões técnicas antes do código de produção
+## Decisões técnicas antes do código de produção
 
 - Definir modelo de criptografia por campo, serviço de chaves separado do banco e recuperação/rotação. Indicadores financeiros devem ser calculados no servidor a partir de dados autorizados; não persistir agregados sensíveis em texto aberto. [Referência: OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 - Validar o caminho de deploy de React estático e API Go em um projeto Vercel Services; a configuração final depende do protótipo e da documentação vigente, pois o recurso está em beta.

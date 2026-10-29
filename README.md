@@ -1,19 +1,19 @@
-# agrofin
+# Agrofin
 
 O agrofin é uma aplicação para ajudar o cliente a administrar a produção de limão pelo celular. A proposta é reunir registros de colheita por funcionário, pagamentos, vendas, despesas, insumos e pulverizações em uma interface simples e rápida de usar.
 
-## estado do projeto
+## Estado do projeto
 
 O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde funciona; a listagem de funcionários ainda retorna uma lista vazia e o cadastro responde `503` até a integração com o login. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
 
-## tecnologias
+## Tecnologias
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS e componentes shadcn.
 - **Backend:** Go, `net/http`, pgx e goose para migrações SQL.
 - **Banco:** PostgreSQL.
 - **Desenvolvimento:** Docker Compose, pnpm e Air para recarga da API.
 
-## estrutura
+## Estrutura
 
 ```text
 apps/
@@ -26,7 +26,7 @@ docs/                  requisitos, fluxos e decisões do projeto
 compose.yaml           serviços para desenvolvimento local
 ```
 
-## como executar
+## Como executar
 
 É necessário ter Git e Docker com Compose instalados.
 
@@ -59,7 +59,7 @@ compose.yaml           serviços para desenvolvimento local
 
 As portas podem ser alteradas no `.env`. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
 
-## comandos úteis
+## Comandos úteis
 
 | ação | comando |
 | --- | --- |
@@ -72,7 +72,7 @@ As portas podem ser alteradas no `.env`. Alterações no código atualizam o fro
 
 Para executar os testes Go, rode `go test ./...` em `apps/api`. O CI também verifica migrações, integração com PostgreSQL e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
 
-## documentação
+## Documentação
 
 - [Requisitos e decisões pendentes](docs/requisitos.md)
 - [Histórias de usuário](docs/historias-de-usuario.md) e [critérios de aceite](docs/criterios-de-aceite.md)
@@ -83,6 +83,6 @@ Para executar os testes Go, rode `go test ./...` em `apps/api`. O CI também ver
 
 Os documentos de produto descrevem também funcionalidades planejadas; consulte o estado do projeto acima para distinguir o que já existe.
 
-## versões
+## Versões
 
 O ambiente Docker usa Go 1.27.3 e PostgreSQL 17. Para desenvolvimento do frontend fora do Docker, use Node 24 e pnpm 12.15.0. As versões das dependências estão em [go.mod](apps/api/go.mod), [package.json](apps/web/package.json) e nos respectivos arquivos de lock.

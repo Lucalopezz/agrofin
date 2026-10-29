@@ -1,10 +1,10 @@
-# imagens do frontend
+# Imagens do frontend
 
 Conjunto de 10 imagens criado a partir do [contexto](../../../CONTEXT.md), dos [requisitos](../../../docs/requisitos.md) e dos [fluxos mobile](../../../docs/fluxos-mobile.md): uma logo, um ícone e oito fotografias sintéticas com aparência documental da produção de limão. Geração pela ferramenta integrada `image_gen`, sem CLI ou API externa configurada no projeto. Os [prompts completos](prompts-imagens.json) permitem revisar e gerar variações.
 
 As cenas representam atividades plausíveis do produto. São imagens geradas, sem retratar o cliente, seus funcionários ou sua propriedade. Os usos abaixo são sugestões visuais para as telas previstas na documentação; a disponibilidade de uma imagem não significa que o fluxo já foi implementado.
 
-## arquivos e usos
+## Arquivos e usos
 
 Os arquivos ficam em `apps/web/public/images/`. O Vite os publica em `/images/`, preservando os nomes. A marca acompanha os verdes do tema claro existente. A logo já aparece no cabeçalho, o ícone está aplicado à aba do navegador e à opção de adicionar à tela inicial, e o pomar aparece na página inicial.
 
@@ -23,7 +23,7 @@ Os arquivos ficam em `apps/web/public/images/`. O Vite os publica em `/images/`,
 
 As oito fotos são WebP de 1536 × 1024. Cada uma tem também uma versão de 768 × 512 com o sufixo `-768.webp`. As versões menores pesam aproximadamente 57–127 KiB; as maiores, 151–345 KiB. Os arquivos [favicon.ico](../public/favicon.ico) (16, 32 e 48 pixels) e [apple-touch-icon.png](../public/apple-touch-icon.png) (180 pixels) são derivados do mesmo ícone, sem representar novas imagens do conjunto.
 
-## uso no react
+## Uso no react
 
 ```tsx
 <img
@@ -42,42 +42,42 @@ O exemplo considera o contêiner atual, com largura máxima de 896 pixels e 40 p
 
 As fotos servem como apoio visual. Nomes, quantidades, valores financeiros, classificações de caixas e fases da Lua devem continuar em elementos de interface acessíveis e ligados aos dados do sistema. A imagem de pulverização mostra somente o equipamento e não representa recomendação de produto, dose ou data de aplicação.
 
-## prévias
+## Prévias
 
-### logo e ícone
+### Logo e ícone
 
 ![Logo agrofin com símbolo de limão verde e nome em minúsculas.](../public/images/marca/logo-agrofin.png)
 
 <img src="../public/images/marca/icone-agrofin.png" alt="Ícone com limão branco e folha clara sobre fundo verde." width="160" height="160" />
 
-### pomar
+### Pomar
 
 ![Fileiras de limoeiros com frutos verdes.](../public/images/fotos/pomar-de-limao-768.webp)
 
-### colheita
+### Colheita
 
 ![Caixas plásticas com limões verdes no pomar.](../public/images/fotos/caixas-da-colheita-768.webp)
 
-### equipe
+### Equipe
 
 ![Dois trabalhadores adultos durante a colheita de limão.](../public/images/fotos/equipe-na-colheita-768.webp)
 
-### barracão
+### Barracão
 
 ![Bancada de seleção e caixas de limão em um barracão.](../public/images/fotos/venda-ao-barracao-768.webp)
 
-### irrigação
+### Irrigação
 
 ![Microaspersor e mangueira de irrigação sob os limoeiros.](../public/images/fotos/irrigacao-do-pomar-768.webp)
 
-### insumos
+### Insumos
 
 ![Prateleira com recipientes fechados e sacos sobre um palete.](../public/images/fotos/estoque-de-insumos-768.webp)
 
-### pulverização
+### Pulverização
 
 ![Pulverizador costal fechado apoiado em uma bancada.](../public/images/fotos/equipamento-de-pulverizacao-768.webp)
 
-### planejamento
+### Planejamento
 
 ![Caderno, caneta e calculadora sobre uma mesa com limões verdes.](../public/images/fotos/planejamento-da-producao-768.webp)

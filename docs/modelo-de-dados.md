@@ -1,8 +1,8 @@
-# modelo de dados inicial
+# Modelo de dados inicial
 
 Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. O cadastro de funcionários tem handler, serviço e persistência implementados, mas o POST responde `503` até a integração com o login fornecer a conta do cliente. Autenticação, criptografia de valores e gravação dos demais fluxos de negócio ainda não foram implementadas. Regras pendentes continuam identificadas abaixo.
 
-## princípios do modelo
+## Princípios do modelo
 
 - Usar registros relacionais com chaves estrangeiras para preservar os vínculos entre conta, funcionário, lançamento, compra e estoque.
 - `account_id` delimita os dados da operação e participa das chaves estrangeiras entre registros de negócio. É uma fronteira técnica; o produto continua com um único gerente e funcionários sem acesso.
@@ -12,7 +12,7 @@ Este documento descreve o esquema relacional inicial implementado nas migraçõe
 - Guardar o valor monetário aplicado no momento do lançamento para que mudanças de tarifa ou preço não alterem o histórico.
 - Preferir saldos calculados a saldos editáveis. Isso é especialmente importante para pagamentos, recebimentos e estoque.
 
-## entidades migradas
+## Entidades migradas
 
 As 22 tabelas abaixo foram criadas pelas seis migrações. O diagrama mostra as chaves estrangeiras; as definições completas de colunas, índices e restrições estão nos arquivos SQL.
 
@@ -41,7 +41,7 @@ As 22 tabelas abaixo foram criadas pelas seis migrações. O diagrama mostra as 
 | `stock_movements` | `id`, `account_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
 | `audit_events` | `id`, `account_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
 
-## relações principais
+## Relações principais
 
 ```mermaid
 erDiagram
@@ -90,7 +90,7 @@ erDiagram
 
 As referências entre tabelas de negócio usam também `account_id`. Assim, uma colheita não pode apontar para um funcionário de outra conta. `users` tem no máximo um registro na instalação; `employees` não tem credencial. O diagrama mostra as relações estruturais, não exige que todo cabeçalho já tenha uma linha: essa validação fica com a gravação transacional da API.
 
-## regras e invariantes
+## Regras e invariantes
 
 - Colheita usa apenas `normal` e `moagem`; venda usa apenas `exportação`, `mercado` e `moagem`. São classificações de etapas distintas.
 - Um dia sem colheita não cria falta, penalidade ou desconto.
@@ -109,7 +109,7 @@ As referências entre tabelas de negócio usam também `account_id`. Assim, uma 
 - O banco impede sobreposição de vigências para a mesma combinação de tipo e escopo da tarifa. Tarifa geral e individual podem coexistir; a precedência entre elas continua pendente.
 - Validar pagamentos e descontos junto com o saldo correspondente dentro de transação; duas gravações concorrentes não podem ultrapassar o saldo devido ou o valor bruto.
 
-## proteção dos valores financeiros
+## Proteção dos valores financeiros
 
 O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. A criptografia na aplicação Go ainda precisa ser implementada antes de habilitar as escritas desses fluxos.
 
@@ -122,7 +122,7 @@ O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia nã
 
 Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro por conta autorizada e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. A implementação futura deve testar confidencialidade do banco de teste e restauração com a chave correta.
 
-## migrações e conexão
+## Migrações e conexão
 
 As migrações `00001` a `00006` criam as tabelas em ordem de dependência. O comando Go em `apps/api/cmd/migrate` usa [goose](https://github.com/pressly/goose) para registrar versões em `goose_db_version`. O `cmd/api` abre um pool [pgx](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool), lê `DATABASE_URL` e confirma a conexão antes de servir HTTP. A API não aplica migrações por conta própria.
 
@@ -130,9 +130,9 @@ No desenvolvimento local, `docker compose up -d --wait` inicia PostgreSQL, aplic
 
 Cada `request_key` em pagamentos, recebimentos e despesas é único por conta para impedir que uma repetição da mesma requisição crie outra saída ou entrada. Esse índice não substitui a validação do valor devido ou recebido na API. `period_end` é o limite exclusivo dos períodos de pagamento; o dia que inicia a semana ainda precisa ser definido.
 
-## decisões confirmadas e pontos em aberto
+## Decisões confirmadas e pontos em aberto
 
-### regras já estabelecidas
+### Regras já estabelecidas
 
 - Funcionário informa somente o nome; o sistema gera o ID e permite desativação preservando o histórico.
 - Só o cliente acessa o sistema. X e Z podem ter lançamentos na semana 1, Z e F na semana 2; X continua no histórico sem exigir cadastro por semana nem desativação automática.
@@ -141,7 +141,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por conta pa
 - Vendas, recebimentos, pagamentos de funcionários e despesas precisam ser apresentados como medidas diferentes.
 - Valores financeiros persistidos precisam ser protegidos contra vazamento isolado do banco.
 
-### recomendações deste modelo
+### Recomendações deste modelo
 
 - Usar PostgreSQL no desenvolvimento; o provedor de produção continua em aberto.
 - Usar `account_id` como fronteira técnica dos dados, sem representar acesso de funcionários ou vários gerentes.
@@ -149,7 +149,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por conta pa
 - Separar compra de insumo de pagamento da compra, mesmo que a primeira versão crie os dois juntos para compras à vista.
 - Calcular relatórios na API depois da descriptografia.
 
-### decisões que continuam pendentes
+### Decisões que continuam pendentes
 
 - Qual dia inicia a semana de pagamento.
 - Se tarifas variam por funcionário e como resolver a precedência entre tarifa geral e individual.
@@ -161,7 +161,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por conta pa
 - Como tratar crédito ou débito de funcionário quando uma semana já paga for corrigida.
 - Qual serviço de banco e qual mecanismo de gerenciamento/recuperação de chaves serão usados no deploy.
 
-## ordem sugerida para implementar
+## Ordem sugerida para implementar
 
 1. Banco, migrações e conexão inicial da API já entregues; implementar autenticação do único cliente e cadastro simples de funcionários.
 2. Implementar tarifas com vigência, lançamento de caixas e resumo semanal.

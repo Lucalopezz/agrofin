@@ -1,4 +1,4 @@
-# bibliotecas e ferramentas
+# Bibliotecas e ferramentas
 
 As principais dependências e seus usos no projeto são:
 
@@ -15,6 +15,6 @@ As principais dependências e seus usos no projeto são:
 
 O backend também usa a biblioteca padrão Go, incluindo `net/http` para HTTP e `encoding/json` para JSON. Não há ORM: o esquema é definido em SQL.
 
-## versões
+## Versões
 
 As versões do backend estão em [go.mod](../apps/api/go.mod), as do frontend em [package.json](../apps/web/package.json) e as ferramentas de desenvolvimento nos Dockerfiles e em [compose.yaml](../compose.yaml). Os arquivos `go.sum` e `pnpm-lock.yaml` registram as dependências para instalações reproduzíveis.

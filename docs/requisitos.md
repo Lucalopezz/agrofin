@@ -1,8 +1,8 @@
-# requisitos
+# Requisitos
 
-## escopo inicial
+## Escopo inicial
 
-### cadastro e colheita
+### Cadastro e colheita
 
 - **RF-01** Cadastrar e renomear funcionários informando apenas o nome, sem criar acesso ao sistema para eles. O sistema gera o identificador e controla o estado ativo/inativo; a exclusão na interface desativa o registro e preserva seu histórico. A equipe de uma semana é formada pelos funcionários com lançamentos naquele período, sem cadastro semanal ou desativação automática dos demais.
 - **RF-02** Configurar valores por caixa normal e de moagem, com vigência por data. Alterações futuras não recalculam pagamentos anteriores.
@@ -12,7 +12,7 @@
 - **RF-06** Registrar diária como lançamento excepcional, com funcionário, data e valor; sua contabilização é separada das caixas.
 - **RF-07** Não criar faltas, penalidades ou descontos automáticos quando não houver registro de colheita em um dia.
 
-### vendas e despesas
+### Vendas e despesas
 
 - **RF-08** Registrar venda ao barracão por data, com linhas de exportação, mercado e moagem; cada linha contém quantidade e preço unitário.
 - **RF-09** Registrar desconto da venda com valor e motivo; mostrar total bruto, desconto e total líquido. Um desconto não pode exceder o valor bruto da venda.
@@ -20,7 +20,7 @@
 - **RF-11** Registrar despesas por categoria, data de pagamento, valor e descrição; incluir energia de irrigação, fertilizantes, defensivos e outras despesas. Uma compra registrada como despesa não deve gerar outra saída de caixa quando o insumo for usado.
 - **RF-12** Exibir indicadores por período: caixas colhidas por tipo e funcionário, caixas vendidas por classificação, preço médio de venda por caixa, remuneração de funcionários, descontos, despesas, valor vendido, valor recebido e saldo de caixa. Não chamar o saldo de caixa de lucro.
 
-### insumos e pulverização
+### Insumos e pulverização
 
 - **RF-13** Cadastrar insumos com nome, categoria (fertilizante ou defensivo), unidade e observações.
 - **RF-14** Registrar compras de insumos com quantidade, unidade, custo e data; atualizar o estoque.
@@ -28,7 +28,7 @@
 - **RF-16** Dar baixa no estoque conforme o uso registrado. No cadastro rápido, permitir informar um saldo inicial ou marcar o estoque como pendente de conferência; não inventar uma compra para justificar o uso.
 - **RF-17** Mostrar calendário mensal com pulverizações, fase da Lua em cada dia e datas de transição entre fases, usando o fuso horário local.
 
-## requisitos não funcionais
+## Requisitos não funcionais
 
 - **RNF-01 — mobile primeiro:** os fluxos de colheita, pagamento e pulverização devem funcionar integralmente em uma tela estreita, com campos e botões grandes e texto legível.
 - **RNF-02 — poucos passos:** permitir repetir um lançamento recente, usar valores padrão editáveis e concluir os lançamentos frequentes em uma única tela sempre que possível.
@@ -40,7 +40,7 @@
 - **RNF-08 — desempenho:** telas de lançamento devem responder bem em conexão móvel comum; indicadores podem ser calculados no servidor por período.
 - **RNF-09 — recuperação:** manter backups restauráveis e testar periodicamente a restauração, inclusive das chaves necessárias para ler os valores cifrados.
 
-## regras e definições pendentes
+## Regras e definições pendentes
 
 - Definir se a semana de pagamento começa na segunda-feira ou em outro dia.
 - Confirmar se as tarifas por caixa variam por funcionário, por período ou por tipo de serviço.
@@ -52,7 +52,7 @@
 - Confirmar como lançar correções feitas após uma semana já paga ou uma venda já recebida.
 - Confirmar se compras de insumos podem ser feitas a prazo. O desenho inicial de saldo de caixa considera despesas registradas como já pagas.
 
-## fora do primeiro escopo
+## Fora do primeiro escopo
 
 - Folha de pagamento formal, controle de ponto e penalização por ausência.
 - Acesso de funcionários ou de outros operadores ao sistema e gestão de múltiplos perfis.

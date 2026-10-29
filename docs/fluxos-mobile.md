@@ -1,14 +1,14 @@
-# fluxos mobile
+# Fluxos mobile
 
 As telas abaixo descrevem o caminho mais curto para as tarefas frequentes. São hipóteses para testar com o cliente, não um desenho visual fechado.
 
-## início
+## Início
 
 - Mostrar três ações grandes: **registrar caixas**, **registrar pagamento** e **registrar pulverização**.
 - Mostrar um resumo curto da semana: caixas, valor devido aos funcionários e pagamentos pendentes.
 - Deixar **vendas**, **despesas**, **insumos**, **calendário** e **relatórios** em navegação clara, sempre acessível.
 
-## registrar caixas
+## Registrar caixas
 
 1. Abrir a ação direta da tela inicial.
 2. Confirmar ou trocar a data; selecionar funcionário.
@@ -18,7 +18,7 @@ As telas abaixo descrevem o caminho mais curto para as tarefas frequentes. São 
 
 Uma ação de **repetir lançamento** pode preencher funcionário e tipos do último registro, mas nunca deve salvar sem revisão. Se a tarifa usada for diferente da esperada, a tela mostra o valor unitário antes da confirmação.
 
-## fechar a semana e pagar
+## Fechar a semana e pagar
 
 1. Abrir **pagamentos** e escolher a semana, já sugerida como a atual ou a última com saldo.
 2. Ver cada funcionário com caixas por tipo, diárias, total devido, total pago e saldo.
@@ -27,7 +27,7 @@ Uma ação de **repetir lançamento** pode preencher funcionário e tipos do úl
 
 Correções de caixas ou diárias de uma semana quitada exigem destaque do novo saldo e um registro de ajuste, para que o histórico continue compreensível.
 
-## registrar venda
+## Registrar venda
 
 1. Informar data e barracão.
 2. Preencher quantidade e preço de exportação, mercado e moagem apenas para as classificações presentes.
@@ -35,7 +35,7 @@ Correções de caixas ou diárias de uma semana quitada exigem destaque do novo 
 4. Conferir bruto, desconto e líquido; salvar.
 5. Registrar recebimento na hora ou depois. A tela mostra quanto ainda falta receber.
 
-## registrar pulverização
+## Registrar pulverização
 
 1. Abrir a ação direta e confirmar a data.
 2. Escolher os insumos usados e suas quantidades; incluir observação opcional.
@@ -43,7 +43,7 @@ Correções de caixas ou diárias de uma semana quitada exigem destaque do novo 
 4. Conferir o registro e salvar. Se o estoque for desconhecido, mostrar aviso de conferência pendente sem perder o evento.
 5. Abrir o evento salvo no calendário, se desejado.
 
-## critérios de interface a observar em campo
+## Critérios de interface a observar em campo
 
 - O cliente entende os nomes usados para tipos de caixa, barracão e insumos sem explicação externa.
 - Ele consegue registrar caixas de vários funcionários em sequência sem redigitar a data.

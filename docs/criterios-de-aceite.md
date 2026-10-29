@@ -1,8 +1,8 @@
-# critérios de aceite
+# Critérios de aceite
 
 Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; não definem tarifas reais.
 
-## colheita, diárias e pagamentos
+## Colheita, diárias e pagamentos
 
 ### HU-01 e HU-02 — funcionários e caixas
 
@@ -22,7 +22,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Um dia sem lançamento não cria falta, desconto ou alerta de ausência.
 - O resumo deixa claro o intervalo de datas da semana e permite voltar ao detalhe que formou o total.
 
-## venda, despesas e painel
+## Venda, despesas e painel
 
 ### HU-06 e HU-07 — acerto com o barracão
 
@@ -39,7 +39,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - O **saldo de caixa do período** usa apenas recebimentos e saídas efetivamente pagas no período. Esse número não é apresentado como lucro contábil.
 - O preço médio de venda por caixa informa se considera valor bruto ou líquido após descontos; no primeiro escopo, usar o líquido vendido dividido pelas caixas vendidas.
 
-## insumos e calendário
+## Insumos e calendário
 
 ### HU-11 a HU-13 — estoque e pulverização
 
@@ -54,7 +54,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - O calendário mostra o mês, as pulverizações por dia, a fase da Lua e um destaque nos dias de mudança de fase.
 - Ao tocar em uma pulverização, abre o detalhe do evento. A data exibida usa o fuso horário configurado para a operação.
 
-## experiência e proteção
+## Experiência e proteção
 
 ### HU-15 — uso no celular
 
