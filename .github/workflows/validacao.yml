@@ -1,0 +1,93 @@
+name: validação
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validacao-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      - run: pnpm run build
+
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: agrofin
+          POSTGRES_USER: agrofin
+          POSTGRES_PASSWORD: agrofin-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agrofin -d agrofin"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      DATABASE_URL: postgres://agrofin:agrofin-ci@localhost:5432/agrofin?sslmode=disable
+      TEST_DATABASE_URL: postgres://agrofin:agrofin-ci@localhost:5432/agrofin?sslmode=disable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - run: go vet ./...
+      - run: go run ./cmd/migrate up
+      - run: go test ./...
+
+  compose:
+    name: docker compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Criar credenciais descartáveis para o PostgreSQL
+        run: |
+          printf '%s\n' \
+            'POSTGRES_DB=agrofin' \
+            'POSTGRES_USER=agrofin' \
+            'POSTGRES_PASSWORD=agrofin-ci' > .env
+      - name: Subir e aguardar os serviços
+        run: docker compose up --build --detach --wait --wait-timeout 300
+      - name: Verificar a API e o proxy do frontend
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/v1/health
+          curl --fail --silent --show-error http://127.0.0.1:5173/api/v1/health
+      - name: Mostrar logs em caso de falha
+        if: failure()
+        run: docker compose logs
+      - name: Derrubar os serviços
+        if: always()
+        run: docker compose down --volumes --remove-orphans

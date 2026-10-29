@@ -58,6 +58,10 @@ docker compose exec web pnpm run lint
 
 Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go test ./...` dentro de `apps/api`, onde está o `go.mod`.
 
+## validação automatizada
+
+O GitHub Actions executa a validação em pull requests, em atualizações da branch `main` e quando iniciada manualmente. O frontend instala as dependências pelo lockfile e roda lint e build. O backend roda `go vet`, aplica as migrações num PostgreSQL temporário e executa `go test ./...`, incluindo o teste de integração. Um terceiro job sobe a stack do Docker Compose e verifica a API e o proxy do frontend. As credenciais desse job existem apenas durante a execução.
+
 ## Organização
 
 | caminho | responsabilidade |
