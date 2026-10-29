@@ -5,6 +5,12 @@ Base React + TypeScript com Vite, Tailwind CSS e componentes shadcn. Gerenciador
 ## estrutura
 
 ```text
+public/
+  images/
+    marca/                  # logo transparente e ícone do agrofin
+    fotos/                  # oito fotos em WebP, nas larguras 1536 e 768
+  favicon.ico
+  apple-touch-icon.png
 src/
   app/
     app.tsx                 # composição da aplicação; futuras rotas ficam aqui
@@ -17,6 +23,8 @@ src/
     components/ui/button.tsx # componente shadcn
     lib/utils.ts             # composição de classes
 ```
+
+O [catálogo de imagens](docs/imagens.md) contém prévias, caminhos públicos, usos sugeridos e os prompts utilizados. A logo, o favicon e a foto do pomar já estão aplicados na interface inicial. As outras fotos estão disponíveis para as próximas telas; os fluxos de negócio continuam pendentes.
 
 Cada novo domínio pertence a `features/<domínio>`. Crie `components/`, `pages/`, `hooks/`, `api/` e arquivos de tipos dentro da feature conforme houver uso real. Requisições e tipos específicos não vão para `shared/`. Componentes globais e utilidades independentes do domínio ficam em `shared/`; não criar pastas ou abstrações vazias. Rotas e provedores globais serão compostos em `app/` quando necessários.
 

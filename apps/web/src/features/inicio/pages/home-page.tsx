@@ -8,6 +8,16 @@ export function HomePage() {
         <p className="text-sm font-medium text-primary">gestão da produção de limão</p>
         <h1 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">Mais simplicidade na rotina do campo.</h1>
         <p className="max-w-xl leading-relaxed text-muted-foreground">Um lugar para acompanhar a colheita, os pagamentos e os cuidados com a produção.</p>
+        {/* O srcSet evita baixar a foto maior quando a largura e a densidade da tela permitem usar a menor. */}
+        <img
+          src="/images/fotos/pomar-de-limao.webp"
+          srcSet="/images/fotos/pomar-de-limao-768.webp 768w, /images/fotos/pomar-de-limao.webp 1536w"
+          sizes="(min-width: 896px) 856px, calc(100vw - 40px)"
+          width={1536}
+          height={1024}
+          alt=""
+          className="aspect-[3/2] w-full rounded-2xl object-cover sm:aspect-[16/7]"
+        />
       </section>
       <section className="rounded-2xl border bg-card p-6 sm:p-8" aria-labelledby="inicio-titulo">
         <Leaf className="mb-4 text-primary" aria-hidden="true" size={28} />

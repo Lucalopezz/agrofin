@@ -1,0 +1,65 @@
+{
+  "ferramenta": "image_gen integrada",
+  "prompts": [
+    {
+      "slug": "logo-agrofin",
+      "folder": "marca",
+      "transparent": true,
+      "prompt": "Use case: logo-brand\nAsset type: production horizontal website logo for agrofin, a Portuguese mobile-first application managing a real lime orchard, harvest crates, weekly worker payments and farm supplies.\nPrimary request: create one clean, practical brand logo ready to put into a small website header. One compact symbol at left and the exact lowercase word \"agrofin\" at right.\nSubject: a simple solid green Persian/Tahiti lime silhouette with a single small citrus leaf. Recognizably a lime, not an apple, not a yellow lemon. Smooth economical flat shapes, balanced strong silhouette.\nStyle/medium: flat vector-like professional identity raster, restrained, crisp edges, plain humanist sans-serif wordmark, medium-bold, excellent small-size legibility. Match existing website greens #24633f for the symbol and #183326 for lettering, with optional small light-green #e3efce accent.\nComposition/framing: horizontal 3:1 canvas, single logo centered, tight clean safe margin around the complete artwork, generous clear separation between icon and lettering, no surrounding presentation.\nText (verbatim): \"agrofin\" — exactly these seven lowercase letters, no other text.\nConstraints: actual transparent alpha background. One final logo, no mockup, no grid, no multiple concepts, no texture, no shadows, no gradients, no 3D, no coins, no chart arrows, no slogan, no watermark. This must be a usable website asset."
+    },
+    {
+      "slug": "pomar-de-limao",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: wide welcome or sign-in banner photograph for agrofin, a mobile application for managing real lime production.\nPrimary request: a believable editorial photograph of an ordinary productive Brazilian Tahiti lime orchard. Modest mature citrus trees in clear planted rows, healthy dark green leaves, some normal-size green limes on branches, dry reddish soil and patches of short grass along a practical walking lane.\nStyle/medium: photorealistic documentary agricultural photography, natural lens perspective, restrained color grading, visible real leaf and soil textures.\nComposition/framing: landscape 3:2, eye-level view along orchard rows, useful calm areas in the foliage for future responsive cropping, do not bake any interface into the image.\nLighting/mood: gentle morning daylight, ordinary working farm, calm and credible.\nConstraints: no people, no text, no watermarks, no yellow lemons, no oranges, no giant fruit, no futuristic technology, no drones, no city, no exaggerated mountains, no impossible perfectly spherical trees, no fantasy, no over-saturated advertising look."
+    },
+    {
+      "slug": "caixas-da-colheita",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual image for harvest records in agrofin, a mobile-first Brazilian lime farming application.\nPrimary request: a realistic close documentary photograph of three ordinary ventilated plastic produce crates full of freshly harvested green Tahiti limes beside citrus trees on a small Brazilian orchard. Crates are identical practical harvest containers, two green and one dark green; fruit has natural variation in size and skin texture.\nComposition/framing: landscape 3:2, waist-height three-quarter view, all crate geometry plausible and stable on level reddish soil, subject clearly readable as a small card image, real citrus foliage in softly blurred background.\nLighting/mood: soft natural daylight, understated, practical.\nStyle/medium: photorealistic agricultural editorial photograph, organic surface imperfections, true material detail.\nConstraints: green limes not yellow lemons; no people, no labels, no text, no numbers, no branding, no watermark, no illustrated objects, no floating crates, no coins, no graphs, no fantasy."
+    },
+    {
+      "slug": "equipe-na-colheita",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual photograph for employee and harvest team records in agrofin, a real Brazilian lime-production management site.\nPrimary request: a modest candid documentary photo of two adult farm workers in an ordinary Tahiti lime orchard, wearing everyday long-sleeved work shirts, trousers, sturdy boots and wide-brimmed hats. One worker seen naturally from the back stands next to a waist-high crate of green limes on a small farm cart; the other, farther away, is calmly picking a lime from a shoulder-height branch.\nComposition/framing: landscape 3:2, medium-wide environmental framing, faces not identifiable, natural unposed body language, realistic proportions and hands with minimal visible finger detail. Productive orchard with short trees, reddish soil, practical equipment.\nStyle/medium: photorealistic documentary agriculture, honest wear in work clothes, natural fine texture and restrained greens.\nLighting/mood: soft morning daylight, respectful, ordinary working day.\nConstraints: adults only, no logos, no text, no uniforms with invented company marks, no close-up faces, no yellow lemons, no impossible fruit sizes, no exaggerated muscles, no luxury farm, no charts, no app screenshots, no fantasy, no watermark."
+    },
+    {
+      "slug": "venda-ao-barracao",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual image for sale-to-packing-house records in agrofin, an application for real lime growers.\nPrimary request: a believable small Brazilian citrus packing shed, open-sided practical roof, a simple stainless sorting bench with green Tahiti limes, and modest stacks of ventilated green plastic produce crates ready for delivery. Concrete floor, ordinary working farm equipment, clean but not luxurious or sterile. No people needed.\nComposition/framing: landscape 3:2, documentary three-quarter view of bench and crates, subjects at natural believable scale, enough environment to clearly distinguish the packing shed from the orchard. Do not imply any formal commercial quality classification using labels.\nStyle/medium: photorealistic editorial photo with natural material texture and restrained color.\nLighting/mood: daylight entering from the shed's open side, useful realistic work environment.\nConstraints: no oranges or yellow lemons, no readable text, no price tags, no money, no shipping brands, no watermarks, no gleaming sci-fi automated factory, no fantastical equipment, no chart overlays."
+    },
+    {
+      "slug": "irrigacao-do-pomar",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual image for irrigation energy and farm expense records in agrofin.\nPrimary request: a photorealistic close environmental documentary photograph of a real small low-flow micro-sprinkler attached to black irrigation tubing at ground level beneath Tahiti lime trees in an ordinary Brazilian orchard. A modest low spray of water wets reddish earth near the tree; the hose follows the tree row, citrus leaves and a few green limes visible softly in the background.\nComposition/framing: landscape 3:2, low camera height, sharp plausible sprinkler and hose in foreground with natural orchard depth behind.\nLighting/mood: gentle morning light, subtle natural droplets, understated documentary realism.\nConstraints: physically realistic small irrigation spray, no flood, no spectacular water fountains, no yellow lemons, no people, no electric wiring diagrams, no text, no numbers, no logos, no watermarks, no futuristic devices, no fantasy."
+    },
+    {
+      "slug": "estoque-de-insumos",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual photograph for farm supplies inventory in agrofin, a lime orchard management application.\nPrimary request: a real, orderly modest agricultural storage shelf in a ventilated farm utility room. A few opaque sealed plastic farm-supply containers with intact screw caps and plain label panels turned away from the camera, and two sealed plain fertilizer sacks neatly on a low dry pallet beside the shelf. Visibly ordinary robust plastic and kraft packaging, not beverage bottles. No products opened or being mixed.\nComposition/framing: landscape 3:2, medium environmental view, clearly visible sealed containers and organized shelf, naturally occurring muted green and neutral tones, real surfaces, simple background.\nStyle/medium: photorealistic agricultural documentary photography, credible scale and material textures.\nLighting/mood: soft indirect daylight, practical calm organization.\nConstraints: no identifiable chemical brands, no readable labels, no invented product names, no dosage or application instructions, no food, no domestic kitchen, no people, no loose powders, no spills, no laboratory glassware, no text, no watermarks, no fantasy."
+    },
+    {
+      "slug": "equipamento-de-pulverizacao",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual equipment photograph for the spraying event log in agrofin, a real lime orchard management application.\nPrimary request: one clean, ordinary agricultural backpack sprayer with an opaque cream-colored tank, dark-green base and closed cap, realistic black straps, attached black hose and metal spray wand safely resting alongside the equipment, standing stably on a utilitarian bench in an open ventilated farm shed. Dark citrus foliage of the lime orchard is softly visible beyond.\nComposition/framing: landscape 3:2, documentary three-quarter product-in-environment framing, entire sprayer and connected hose fit comfortably, real scale, no posed person.\nStyle/medium: photorealistic natural agricultural photograph, realistic polypropylene and rubber textures, restrained colors.\nLighting/mood: diffused daylight, ordinary equipment ready to be recorded, practical and calm.\nConstraints: no spraying, no droplets from the nozzle, no chemical mixing, no people, no chemical products, no text, no logos, no readable safety labels, no watermarks, no surreal shapes, no technological fantasy, no dose or treatment recommendations."
+    },
+    {
+      "slug": "planejamento-da-producao",
+      "folder": "fotos",
+      "transparent": false,
+      "prompt": "Use case: photorealistic-natural\nAsset type: contextual image for planning and production summaries in agrofin, a practical mobile site for a real lime orchard.\nPrimary request: an honest quiet editorial photograph of a modest farm office work surface: a plain closed green notebook, simple black ballpoint pen and compact basic calculator with its display dark and no visible numbers, beside two normal-size freshly harvested green Tahiti limes and one citrus leaf. Weathered but clean wooden table, orchard foliage softly out of focus beyond an open window. Everyday objects, minimal composition.\nComposition/framing: landscape 3:2, slightly elevated three-quarter view, three clearly separated practical object groups, notebook takes most of scene, no fabricated financial records.\nStyle/medium: photorealistic documentary still life, real paper edges, matte plastic, natural lime skin texture and subtle timber grain, restrained greens.\nLighting/mood: soft ordinary daylight, calm and grounded.\nConstraints: no cash, no coins, no graphs, no visible numbers, no readable text, no screens or app UI, no handwritten invented amounts, no brands, no watermark, no yellow lemons, no floating objects, no miniature worlds, no 3D illustration, no fantasy."
+    },
+    {
+      "slug": "icone-agrofin",
+      "folder": "marca",
+      "transparent": false,
+      "prompt": "Use case: logo-brand\nAsset type: square site icon / favicon master for agrofin.\nInput images: Image 1 is the approved agrofin horizontal logo, use it as the visual identity reference. Create a complementary icon asset.\nPrimary request: render just the same recognizable diagonal lime silhouette and single leaf from the reference logo as a very simple white and pale-leaf-green mark centered on a solid edge-to-edge dark green #24633f square.\nComposition/framing: 1:1 square. Single lime-and-leaf mark occupying about 72 percent of the canvas, comfortable safe margin on every side, entire leaf and fruit visible. Broad bold silhouette readable at 16 pixels.\nStyle/medium: flat, clean professional brand icon, sharp edges, no fine detail, no text, no wordmark, no border, no shadow, no lighting, no gradient, no badge presentation, no mockup.\nConstraints: preserve the reference symbol identity, lime not apple, ordinary leaf, no extra symbols, no charts, no money, no letters, no watermark. Square canvas and solid square green background, do not simulate rounded corners or a device."
+    }
+  ]
+}
