@@ -57,6 +57,7 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 ## trabalho no repositório
 
 - Antes de criar arquivos, identifique a aplicação e o domínio que os possuem. Código compartilhado precisa ter uso real em mais de um lugar.
+- Na API Go, organize arquivos por responsabilidade concreta dentro do pacote do domínio: `handler.go` coordena HTTP, `handler_request.go` trata entrada e validação do protocolo e `handler_response.go` define respostas e traduz erros para HTTP. Mantenha o service independente de HTTP; funções auxiliares sem estado do `Handler` são funções privadas do pacote. Só crie esses arquivos quando houver conteúdo real, sem camadas vazias ou pacote genérico `helpers`.
 - Ao alterar uma regra de negócio, verifique o exemplo correspondente nos critérios de aceite e proteja o comportamento com o menor teste que capture o risco.
 - Explique decisões importantes de Go e seus trade-offs: este também é um projeto de estudo.
 - Preserve alterações já feitas pelo usuário. Atualize a documentação quando o comportamento implementado divergir do plano e distinga claramente proposta de funcionalidade entregue.
