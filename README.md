@@ -1,88 +1,88 @@
-# Agrofin
+# agrofin
 
-Sistema de gestão da produção de limão, pensado para lançamentos rápidos no celular. O cliente, gerente da plantação, é o único usuário do sistema; funcionários são cadastrados apenas para relacionar colheitas e pagamentos.
+O agrofin é uma aplicação para ajudar o cliente a administrar a produção de limão pelo celular. A proposta é reunir registros de colheita por funcionário, pagamentos, vendas, despesas, insumos e pulverizações em uma interface simples e rápida de usar.
 
-## Estado atual
+## estado do projeto
 
-O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health`, `GET /api/v1/employees` (ainda uma lista vazia) e `POST /api/v1/employees`, que responde `503` até a integração com o login. O PostgreSQL local e as migrações do modelo relacional estão prontos. Autenticação, listagem persistida, renomeação, desativação, criptografia dos valores financeiros e demais fluxos ainda não foram implementados. A base React + TypeScript, com Tailwind, shadcn e atualização automática pelo Docker, está disponível.
+O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde funciona; a listagem de funcionários ainda retorna uma lista vazia e o cadastro responde `503` até a integração com o login. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
 
-O cadastro separa HTTP no handler, validação e montagem da entidade no serviço e inserção no repositório PostgreSQL; veja a [organização do cadastro](docs/plano-de-implementacao.md#organização-interna-do-cadastro-de-funcionários).
+## tecnologias
 
-## Início rápido
+- **Frontend:** React, TypeScript, Vite, Tailwind CSS e componentes shadcn.
+- **Backend:** Go, `net/http`, pgx e goose para migrações SQL.
+- **Banco:** PostgreSQL.
+- **Desenvolvimento:** Docker Compose, pnpm e Air para recarga da API.
 
-Para executar os serviços, instale Docker com Compose. Em uma nova cópia do repositório, crie o `.env` a partir do exemplo:
+## estrutura
 
-```bash
-cp .env.example .env
+```text
+apps/
+  api/                 API Go, testes e migrações SQL
+  web/                 aplicação React
+    src/app/           composição e estilos globais
+    src/features/      telas e código por domínio
+    src/shared/        componentes e utilidades compartilhados
+docs/                  requisitos, fluxos e decisões do projeto
+compose.yaml           serviços para desenvolvimento local
 ```
 
-Troque `POSTGRES_PASSWORD` no `.env` por uma senha hexadecimal longa antes de iniciar. Se o arquivo já existir, mantenha as credenciais atuais. Depois, rode:
+## como executar
 
-```bash
-docker compose up -d --wait
-curl http://127.0.0.1:8080/api/v1/health
-```
+É necessário ter Git e Docker com Compose instalados.
 
-O Compose sobe PostgreSQL, aplica as migrações pendentes, inicia a API e depois o frontend em http://localhost:5173. Por padrão, a API fica em `127.0.0.1:8080` e o banco em `127.0.0.1:5432`; as portas podem ser alteradas no `.env`. O arquivo `.env` não é versionado.
+1. Clone o repositório e entre na pasta:
 
-### Desenvolvimento da api
+   ```bash
+   git clone https://github.com/Lucalopezz/agrofin.git
+   cd agrofin
+   ```
 
-No primeiro `up`, o Docker constrói a imagem de desenvolvimento com o Air. O serviço `api` observa os arquivos `.go`, `go.mod` e `go.sum` em `apps/api`: ao salvar uma alteração, o Air recompila e reinicia a API automaticamente. Confira o resultado em `docker compose logs -f api` ou na rota de saúde. O binário temporário fica no volume `api_tmp`, fora do checkout; `apps/api/tmp` também é ignorado pelo Git para quem executar o Air diretamente no host. O Air não executa as migrações SQL; use o comando `migrate` abaixo ao criar uma nova migração.
+2. Crie a configuração local:
 
-Se alterar `Dockerfile.dev`, reconstrua a imagem com `docker compose up -d --build --wait`. Alterações no `compose.yaml` ou no `.env` exigem recriar os contêineres com `docker compose up -d --force-recreate --wait`.
+   ```bash
+   cp .env.example .env
+   ```
 
-### cadastro de funcionários
+   No `.env`, substitua `POSTGRES_PASSWORD` por uma senha hexadecimal longa. Se já tiver um `.env`, preserve as credenciais existentes.
 
-A rota POST, o handler, o serviço e o repositório estão implementados e têm testes. O cadastro na API em execução permanece indisponível (`503`) até o login fornecer a conta do cliente. O corpo receberá somente `name`; a conta não será enviada no formulário. Não há configuração temporária de conta por variável de ambiente. A listagem GET ainda retorna `[]`.
+3. Inicie os serviços:
 
-### desenvolvimento do frontend
+   ```bash
+   docker compose up -d --build --wait
+   ```
 
-Abra http://localhost:5173 depois de `docker compose up -d --build --wait`. Ao salvar arquivos em `apps/web/src`, o Vite atualiza o navegador automaticamente por HMR. A página inicial verifica `/api/v1/health` pelo proxy do Vite para o Go; essa verificação aparece apenas em desenvolvimento. `WEB_PORT` altera a porta local.
+   O Compose inicia o banco, aplica as migrações e sobe a API e o frontend. Acesse [localhost:5173](http://localhost:5173). A API está em `http://127.0.0.1:8080`; confira sua resposta com:
 
-As dependências do contêiner ficam em um volume separado. Ao alterar `package.json` e `pnpm-lock.yaml`, rode `docker compose restart web` para sincronizá-las com `pnpm install --frozen-lockfile`. Para build e lint dentro do Docker:
+   ```bash
+   curl http://127.0.0.1:8080/api/v1/health
+   ```
 
-```bash
-docker compose exec web pnpm run build
-docker compose exec web pnpm run lint
-```
+As portas podem ser alteradas no `.env`. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
 
-## Comandos úteis
+## comandos úteis
 
 | ação | comando |
 | --- | --- |
-| Ver o estado dos serviços | `docker compose ps` |
-| Acompanhar os logs da API | `docker compose logs -f api` |
-| Consultar as migrações aplicadas | `docker compose run --rm migrate go run ./cmd/migrate status` |
-| Aplicar uma migração adicionada depois da primeira subida | `docker compose run --rm migrate` |
-| Parar os serviços, mantendo os dados do banco | `docker compose down` |
+| Ver serviços | `docker compose ps` |
+| Acompanhar logs | `docker compose logs -f api web` |
+| Aplicar novas migrações | `docker compose run --rm migrate` |
+| Consultar migrações | `docker compose run --rm migrate go run ./cmd/migrate status` |
+| Verificar o frontend | `docker compose exec web pnpm run lint` e `docker compose exec web pnpm run build` |
+| Parar serviços, preservando o banco | `docker compose down` |
 
-Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go test ./...` dentro de `apps/api`, onde está o `go.mod`.
+Para executar os testes Go, rode `go test ./...` em `apps/api`. O CI também verifica migrações, integração com PostgreSQL e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
 
-## validação automatizada
+## documentação
 
-O GitHub Actions executa a validação em pull requests, em atualizações da branch `main` e quando iniciada manualmente. O frontend instala as dependências pelo lockfile e roda lint e build. O backend roda `go vet`, aplica as migrações num PostgreSQL temporário e executa `go test ./...`, incluindo o teste de integração. Um terceiro job sobe a stack do Docker Compose e verifica a API e o proxy do frontend. As credenciais desse job existem apenas durante a execução.
+- [Requisitos e decisões pendentes](docs/requisitos.md)
+- [Histórias de usuário](docs/historias-de-usuario.md) e [critérios de aceite](docs/criterios-de-aceite.md)
+- [Fluxos para celular](docs/fluxos-mobile.md)
+- [Modelo de dados](docs/modelo-de-dados.md) e [plano de implementação](docs/plano-de-implementacao.md)
+- [Frontend](apps/web/README.md) e [bibliotecas](docs/bibliotecas.md)
+- [Contexto atual](CONTEXT.md) e [orientações para agentes](AGENTS.md)
 
-## Organização
+Os documentos de produto descrevem também funcionalidades planejadas; consulte o estado do projeto acima para distinguir o que já existe.
 
-| caminho | responsabilidade |
-| --- | --- |
-| `apps/api/cmd/api` | Inicia a API HTTP e a conexão com o banco. |
-| `apps/api/cmd/migrate` | Aplica, consulta e reverte migrações. |
-| `apps/api/internal/funcionarios` | Rotas, handler de cadastro, serviço de domínio e repositório PostgreSQL. |
-| `apps/api/internal/platform/postgres` | Cria e verifica o pool PostgreSQL da API. |
-| `apps/api/migrations` | Migrações SQL incorporadas ao executável Go. |
+## versões
 
-`apps/web` contém a base React organizada por feature; veja a [estrutura do frontend](apps/web/README.md). O deploy unificado com a API também não foi validado. Veja [o contexto do projeto](CONTEXT.md) e as [orientações para agentes](AGENTS.md) antes de implementar novos fluxos.
-
-## Documentação
-
-- [bibliotecas usadas](docs/bibliotecas.md)
-- [modelo de dados e relacionamentos](docs/modelo-de-dados.md)
-- [requisitos](docs/requisitos.md)
-- [histórias de usuário](docs/historias-de-usuario.md)
-- [critérios de aceite](docs/criterios-de-aceite.md)
-- [fluxos mobile](docs/fluxos-mobile.md)
-- [plano de implementação](docs/plano-de-implementacao.md)
-- [skills externas e suas fontes](docs/skills-externas.md)
-
-Na documentação, **cliente** significa a pessoa que administra a produção.
+O ambiente Docker usa Go 1.27.3 e PostgreSQL 17. Para desenvolvimento do frontend fora do Docker, use Node 24 e pnpm 12.15.0. As versões das dependências estão em [go.mod](apps/api/go.mod), [package.json](apps/web/package.json) e nos respectivos arquivos de lock.

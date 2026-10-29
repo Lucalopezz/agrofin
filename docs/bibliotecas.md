@@ -1,33 +1,20 @@
-# bibliotecas usadas
+# bibliotecas e ferramentas
 
-Este documento descreve as bibliotecas usadas diretamente no código Go atual. As versões das dependências externas ficam em [`apps/api/go.mod`](../apps/api/go.mod), e o `go.sum` registra os hashes usados pelo Go para verificar os módulos baixados. Ainda não há ORM: o esquema está em migrações SQL.
+As principais dependências e seus usos no projeto são:
 
-## biblioteca padrão do go
-
-| pacote | uso no projeto |
+| tecnologia | uso |
 | --- | --- |
-| [`embed`](https://pkg.go.dev/embed) | Incorpora os arquivos `*.sql` ao executável de migração. `migrations.Files` expõe esses arquivos ao goose sem leitura do disco durante a execução. Uma nova migração exige recompilar; `go run` faz isso ao executar novamente. |
-| [`database/sql`](https://pkg.go.dev/database/sql) | Fornece `*sql.DB` ao migrador. `sql.Open` prepara o acesso e `PingContext` confirma a conexão. |
-| [`context`](https://pkg.go.dev/context) | Limita o tempo de conexão e de execução das migrações. |
-| [`testing`](https://pkg.go.dev/testing) | Define os testes e subtestes executados por `go test`. |
-| [`net/http`](https://pkg.go.dev/net/http) e [`encoding/json`](https://pkg.go.dev/encoding/json) | Servem as rotas atuais da API e escrevem respostas JSON. |
+| React e React DOM | Interface da aplicação. |
+| TypeScript e Vite | Desenvolvimento, verificação de tipos e build do frontend. |
+| Tailwind CSS e shadcn | Estilos e componentes de interface. |
+| Oxlint | Análise estática do frontend. |
+| pgx | Conexão da API Go com PostgreSQL. |
+| goose | Execução e histórico das migrações SQL. |
+| Testify | Verificações nos testes Go. |
+| Air | Recompilação e reinício da API durante o desenvolvimento. |
 
-## dependências externas
+O backend também usa a biblioteca padrão Go, incluindo `net/http` para HTTP e `encoding/json` para JSON. Não há ORM: o esquema é definido em SQL.
 
-| módulo | uso no projeto |
-| --- | --- |
-| [`github.com/pressly/goose/v3`](https://github.com/pressly/goose) | Lê as migrações SQL, aplica as versões pendentes em ordem e registra o histórico na tabela `goose_db_version`. O comando `cmd/migrate` oferece `up`, `status` e `down`. |
-| [`github.com/jackc/pgx/v5`](https://pkg.go.dev/github.com/jackc/pgx/v5) | Conecta ao PostgreSQL. `stdlib` registra o driver `"pgx"` para o `database/sql` usado pelo migrador; `pgxpool` cria o pool usado na inicialização da API. |
-| [`github.com/stretchr/testify`](https://github.com/stretchr/testify) | Usado apenas nos testes, junto de `testing`. `assert` registra uma falha e permite continuar; `require` interrompe o teste atual quando os próximos passos dependem da verificação. O substituto do repositório continua sendo uma função simples, sem `testify/mock`. |
+## versões
 
-As demais entradas marcadas como `// indirect` no `go.mod` são dependências internas desses módulos. Não são chamadas diretamente pelo código do agrofin.
-
-## ferramenta de desenvolvimento
-
-| ferramenta | uso no projeto |
-| --- | --- |
-| [`github.com/air-verse/air`](https://github.com/air-verse/air) | Observa mudanças nos arquivos Go montados no contêiner `api`, recompila `cmd/api` e reinicia o processo. É instalado em versão fixa pelo `Dockerfile.dev`, sem entrar nas dependências da aplicação em `go.mod`. |
-
-## frontend
-
-A base React em `apps/web` usa React e React DOM, TypeScript, Vite com plugin React, Tailwind CSS com plugin Vite e Oxlint para análise estática. Os componentes shadcn são copiados para `shared/components/ui`; o botão usa Radix Slot e class-variance-authority. `clsx` e `tailwind-merge` compõem classes; `lucide-react` fornece os ícones. Versões e integridade ficam em `apps/web/package.json` e `pnpm-lock.yaml`. Veja a [estrutura do frontend](../apps/web/README.md).
+As versões do backend estão em [go.mod](../apps/api/go.mod), as do frontend em [package.json](../apps/web/package.json) e as ferramentas de desenvolvimento nos Dockerfiles e em [compose.yaml](../compose.yaml). Os arquivos `go.sum` e `pnpm-lock.yaml` registram as dependências para instalações reproduzíveis.
