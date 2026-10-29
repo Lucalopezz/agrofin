@@ -27,3 +27,7 @@ As demais entradas marcadas como `// indirect` no `go.mod` são dependências in
 | ferramenta | uso no projeto |
 | --- | --- |
 | [`github.com/air-verse/air`](https://github.com/air-verse/air) | Observa mudanças nos arquivos Go montados no contêiner `api`, recompila `cmd/api` e reinicia o processo. É instalado em versão fixa pelo `Dockerfile.dev`, sem entrar nas dependências da aplicação em `go.mod`. |
+
+## frontend
+
+A base React em `apps/web` usa React e React DOM, TypeScript, Vite com plugin React, Tailwind CSS com plugin Vite e Oxlint para análise estática. Os componentes shadcn são copiados para `shared/components/ui`; o botão usa Radix Slot e class-variance-authority. `clsx` e `tailwind-merge` compõem classes; `lucide-react` fornece os ícones. Versões e integridade ficam em `apps/web/package.json` e `pnpm-lock.yaml`. Veja a [estrutura do frontend](../apps/web/README.md).

@@ -4,7 +4,7 @@ Sistema de gestão da produção de limão, pensado para lançamentos rápidos n
 
 ## Estado atual
 
-O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health`, `GET /api/v1/employees` (ainda uma lista vazia) e `POST /api/v1/employees`, que responde `503` até a integração com o login. O PostgreSQL local e as migrações do modelo relacional estão prontos. Autenticação, listagem persistida, renomeação, desativação, criptografia dos valores financeiros, demais fluxos e frontend React ainda não foram implementados.
+O projeto está em desenvolvimento. A API Go responde em `GET /api/v1/health`, `GET /api/v1/employees` (ainda uma lista vazia) e `POST /api/v1/employees`, que responde `503` até a integração com o login. O PostgreSQL local e as migrações do modelo relacional estão prontos. Autenticação, listagem persistida, renomeação, desativação, criptografia dos valores financeiros e demais fluxos ainda não foram implementados. A base React + TypeScript, com Tailwind, shadcn e atualização automática pelo Docker, está disponível.
 
 O cadastro separa HTTP no handler, validação e montagem da entidade no serviço e inserção no repositório PostgreSQL; veja a [organização do cadastro](docs/plano-de-implementacao.md#organização-interna-do-cadastro-de-funcionários).
 
@@ -23,7 +23,7 @@ docker compose up -d --wait
 curl http://127.0.0.1:8080/api/v1/health
 ```
 
-O Compose sobe PostgreSQL, aplica as migrações pendentes e inicia a API nessa ordem. Por padrão, a API fica em `127.0.0.1:8080` e o banco em `127.0.0.1:5432`; as portas podem ser alteradas no `.env`. O arquivo `.env` não é versionado.
+O Compose sobe PostgreSQL, aplica as migrações pendentes, inicia a API e depois o frontend em http://localhost:5173. Por padrão, a API fica em `127.0.0.1:8080` e o banco em `127.0.0.1:5432`; as portas podem ser alteradas no `.env`. O arquivo `.env` não é versionado.
 
 ### Desenvolvimento da api
 
@@ -34,6 +34,17 @@ Se alterar `Dockerfile.dev`, reconstrua a imagem com `docker compose up -d --bui
 ### cadastro de funcionários
 
 A rota POST, o handler, o serviço e o repositório estão implementados e têm testes. O cadastro na API em execução permanece indisponível (`503`) até o login fornecer a conta do cliente. O corpo receberá somente `name`; a conta não será enviada no formulário. Não há configuração temporária de conta por variável de ambiente. A listagem GET ainda retorna `[]`.
+
+### desenvolvimento do frontend
+
+Abra http://localhost:5173 depois de `docker compose up -d --build --wait`. Ao salvar arquivos em `apps/web/src`, o Vite atualiza o navegador automaticamente por HMR. A página inicial verifica `/api/v1/health` pelo proxy do Vite para o Go; essa verificação aparece apenas em desenvolvimento. `WEB_PORT` altera a porta local.
+
+As dependências do contêiner ficam em um volume separado. Ao alterar `package.json` e `pnpm-lock.yaml`, rode `docker compose restart web` para sincronizá-las com `pnpm install --frozen-lockfile`. Para build e lint dentro do Docker:
+
+```bash
+docker compose exec web pnpm run build
+docker compose exec web pnpm run lint
+```
 
 ## Comandos úteis
 
@@ -57,7 +68,7 @@ Para verificar o código Go fora dos contêineres, use Go 1.27.3 e execute `go t
 | `apps/api/internal/platform/postgres` | Cria e verifica o pool PostgreSQL da API. |
 | `apps/api/migrations` | Migrações SQL incorporadas ao executável Go. |
 
-`apps/web` é a aplicação React planejada e ainda não existe. O deploy unificado com a API também não foi validado. Veja [o contexto do projeto](CONTEXT.md) e as [orientações para agentes](AGENTS.md) antes de implementar novos fluxos.
+`apps/web` contém a base React organizada por feature; veja a [estrutura do frontend](apps/web/README.md). O deploy unificado com a API também não foi validado. Veja [o contexto do projeto](CONTEXT.md) e as [orientações para agentes](AGENTS.md) antes de implementar novos fluxos.
 
 ## Documentação
 
