@@ -73,12 +73,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
-      - name: Criar credenciais descartáveis para o PostgreSQL
+      - name: Criar configuração descartável do Compose
         run: |
           printf '%s\n' \
             'POSTGRES_DB=agrofin' \
             'POSTGRES_USER=agrofin' \
-            'POSTGRES_PASSWORD=agrofin-ci' > .env
+            'POSTGRES_PASSWORD=agrofin-ci' \
+            'PUBLIC_ORIGIN=http://localhost:5173' \
+            'SESSION_COOKIE_SECURE=false' > .env
       - name: Subir e aguardar os serviços
         run: docker compose up --build --detach --wait --wait-timeout 300
       - name: Verificar a API e o proxy do frontend
