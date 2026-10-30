@@ -1,11 +1,11 @@
 # Modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. O cadastro de funcionários tem handler, serviço e persistência implementados, mas o POST responde `503` até a integração com o login fornecer a conta do cliente. Autenticação, criptografia de valores e gravação dos demais fluxos de negócio ainda não foram implementadas. Regras pendentes continuam identificadas abaixo.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. O cadastro inicial do gerente e o hash Argon2id estão implementados. Login, sessões, cookies, criptografia de valores e gravação dos demais fluxos de negócio continuam pendentes.
 
 ## Princípios do modelo
 
-- Usar registros relacionais com chaves estrangeiras para preservar os vínculos entre conta, funcionário, lançamento, compra e estoque.
-- `account_id` delimita os dados da operação e participa das chaves estrangeiras entre registros de negócio. É uma fronteira técnica; o produto continua com um único gerente e funcionários sem acesso.
+- Usar registros relacionais com chaves estrangeiras para preservar os vínculos entre gerente, funcionário, lançamento, compra e estoque.
+- `user_id` identifica o gerente dono dos registros de negócio e participa das chaves estrangeiras compostas. Não há uma entidade `accounts` separada.
 - Gerar IDs UUID para registros. Usar `DATE` para datas da operação e `TIMESTAMPTZ` em UTC para horários técnicos; apresentar datas no fuso configurado para a operação, inicialmente `America/Sao_Paulo`.
 - Manter os registros de negócio simples: o cadastro de funcionário pede apenas o nome; o identificador e o estado ativo/inativo são técnicos.
 - Separar o único usuário que entra no sistema dos funcionários cadastrados. A equipe de cada semana é obtida pelos lançamentos do período, sem tabela de escala ou vínculo semanal; ausência de lançamento não altera o cadastro do funcionário.
@@ -14,50 +14,47 @@ Este documento descreve o esquema relacional inicial implementado nas migraçõe
 
 ## Entidades migradas
 
-As 22 tabelas abaixo foram criadas pelas seis migrações. O diagrama mostra as chaves estrangeiras; as definições completas de colunas, índices e restrições estão nos arquivos SQL.
+As 21 tabelas abaixo são criadas pelas seis migrações. O diagrama mostra as chaves estrangeiras; as definições completas de colunas, índices e restrições estão nos arquivos SQL.
 
 | tabela | campos e relações principais | responsabilidade |
 | --- | --- | --- |
-| `accounts` | `id`, `name`, `timezone`, `created_at` | Delimita os dados de uma operação. |
-| `users` | `id`, `account_id`, `login_name`, `password_hash`, `active` | Acesso do único gerente. Um índice único impede cadastrar um segundo usuário na instalação. Funcionários não entram nesta tabela. A autenticação ainda não foi implementada. |
-| `employees` | `id`, `account_id`, `name`, `active`, `deactivated_at` | Cadastro mínimo de funcionários, sem login. O estado ativo só controla a disponibilidade para novos lançamentos; desativar preserva o histórico e não acontece por ausência em uma semana. |
-| `harvest_rates` | `id`, `account_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas por tipo de caixa e vigência. Funcionário opcional permite representar uma tarifa geral ou uma tarifa individual. |
-| `harvests` | `id`, `account_id`, `employee_id`, `harvest_date`, `created_by` | Cabeçalho de um lançamento de colheita para uma pessoa e uma data. Não restringir a um único cabeçalho por dia; isso permite correções e mais de um lançamento sem sobrescrever dados. |
-| `harvest_items` | `id`, `account_id`, `harvest_id`, `box_type`, `quantity`, tarifa unitária aplicada cifrada | Uma linha por tipo de caixa (`normal` ou `moagem`). A quantidade é inteira e positiva. A tarifa aplicada fica fotografada na linha. O total pode ser calculado no Go a partir da quantidade e da tarifa. |
-| `daily_work` | `id`, `account_id`, `employee_id`, `work_date`, valor cifrado, observação | Registra uma diária separada da produção por caixas; não cria caixas fictícias. |
-| `employee_payments` | `id`, `account_id`, `employee_id`, `period_start`, `period_end`, `paid_at`, valor cifrado, `request_key` | Registra pagamentos parciais ou integrais ligados ao período do funcionário. O mesmo período pode ter vários pagamentos; `request_key` evita repetição da mesma requisição. |
-| `payroll_adjustments` | `id`, `account_id`, `employee_id`, período, tipo, valor cifrado, motivo | Ajustes explícitos quando uma correção afeta período já pago. A regra de carregar crédito ou débito para outro período ainda precisa ser definida. |
-| `sales` | `id`, `account_id`, `sold_at`, `buyer_name`, observação | Cabeçalho do acerto com o barracão. Um texto para o comprador basta enquanto houver apenas um; tabela de compradores pode ser criada se surgirem vários. |
-| `sale_items` | `id`, `account_id`, `sale_id`, `sale_type`, `quantity`, preço unitário cifrado | Linhas de exportação, mercado ou moagem. Não são deduzidas das caixas da colheita. |
-| `sale_discounts` | `id`, `account_id`, `sale_id`, motivo, valor cifrado | Descontos separados do preço original; o desconto total não pode exceder o valor bruto. |
-| `sale_receipts` | `id`, `account_id`, `sale_id`, `received_at`, valor cifrado | Recebimentos, inclusive parciais. |
-| `expenses` | `id`, `account_id`, `paid_at`, categoria, descrição, valor cifrado | Despesas gerais pagas, como energia de irrigação e outros custos. |
-| `input_products` | `id`, `account_id`, `name`, `category`, `default_unit`, `stock_control_state` | Cadastro de fertilizantes e defensivos. O controle fica `pending` enquanto o saldo inicial for desconhecido. |
-| `input_purchases` | `id`, `account_id`, `purchased_at`, fornecedor opcional, observação | Cabeçalho de uma compra de insumos. A data da compra fica separada da data em que foi paga. |
-| `purchase_items` | `id`, `account_id`, `purchase_id`, `product_id`, quantidade, unidade, custo unitário cifrado | Detalha o que entrou no estoque e o custo por produto. |
-| `input_purchase_payments` | `id`, `account_id`, `purchase_id`, `paid_at`, valor cifrado | Registra saídas de caixa de compras, permitindo pagamento imediato, parcial ou a prazo. Para compra imediata, cria-se um pagamento junto com a compra. |
-| `spray_applications` | `id`, `account_id`, `applied_at`, observações | Evento de pulverização que aparece no histórico e no calendário. |
-| `spraying_inputs` | `id`, `account_id`, `spray_application_id`, `product_id`, quantidade usada, unidade | Insumos usados em uma pulverização. Permite cadastrar e selecionar um novo produto sem perder o formulário atual. |
-| `stock_movements` | `id`, `account_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
-| `audit_events` | `id`, `account_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
+| `users` | `id`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. O cadastro grava a senha como hash Argon2id; login e sessões ainda não foram implementados. Um índice único impede cadastrar outro gerente na instalação. |
+| `employees` | `id`, `user_id`, `name`, `active`, `deactivated_at` | Cadastro mínimo de pessoas que trabalham na produção, sem login. O estado ativo só controla a disponibilidade para novos lançamentos; desativar preserva o histórico e não acontece por ausência em uma semana. |
+| `harvest_rates` | `id`, `user_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas por tipo de caixa e vigência. Funcionário opcional permite representar uma tarifa geral ou uma tarifa individual. |
+| `harvests` | `id`, `user_id`, `employee_id`, `harvest_date`, `created_by` | Cabeçalho de um lançamento de colheita para uma pessoa e uma data. Não restringir a um único cabeçalho por dia; isso permite correções e mais de um lançamento sem sobrescrever dados. |
+| `harvest_items` | `id`, `user_id`, `harvest_id`, `box_type`, `quantity`, tarifa unitária aplicada cifrada | Uma linha por tipo de caixa (`normal` ou `moagem`). A quantidade é inteira e positiva. A tarifa aplicada fica fotografada na linha. O total pode ser calculado no Go a partir da quantidade e da tarifa. |
+| `daily_work` | `id`, `user_id`, `employee_id`, `work_date`, valor cifrado, observação | Registra uma diária separada da produção por caixas; não cria caixas fictícias. |
+| `employee_payments` | `id`, `user_id`, `employee_id`, `period_start`, `period_end`, `paid_at`, valor cifrado, `request_key` | Registra pagamentos parciais ou integrais ligados ao período do funcionário. O mesmo período pode ter vários pagamentos; `request_key` evita repetição da mesma requisição. |
+| `payroll_adjustments` | `id`, `user_id`, `employee_id`, período, tipo, valor cifrado, motivo | Ajustes explícitos quando uma correção afeta período já pago. A regra de carregar crédito ou débito para outro período ainda precisa ser definida. |
+| `sales` | `id`, `user_id`, `sold_at`, `buyer_name`, observação | Cabeçalho do acerto com o barracão. Um texto para o comprador basta enquanto houver apenas um; tabela de compradores pode ser criada se surgirem vários. |
+| `sale_items` | `id`, `user_id`, `sale_id`, `sale_type`, `quantity`, preço unitário cifrado | Linhas de exportação, mercado ou moagem. Não são deduzidas das caixas da colheita. |
+| `sale_discounts` | `id`, `user_id`, `sale_id`, motivo, valor cifrado | Descontos separados do preço original; o desconto total não pode exceder o valor bruto. |
+| `sale_receipts` | `id`, `user_id`, `sale_id`, `received_at`, valor cifrado | Recebimentos, inclusive parciais. |
+| `expenses` | `id`, `user_id`, `paid_at`, categoria, descrição, valor cifrado | Despesas gerais pagas, como energia de irrigação e outros custos. |
+| `input_products` | `id`, `user_id`, `name`, `category`, `default_unit`, `stock_control_state` | Cadastro de fertilizantes e defensivos. O controle fica `pending` enquanto o saldo inicial for desconhecido. |
+| `input_purchases` | `id`, `user_id`, `purchased_at`, fornecedor opcional, observação | Cabeçalho de uma compra de insumos. A data da compra fica separada da data em que foi paga. |
+| `purchase_items` | `id`, `user_id`, `purchase_id`, `product_id`, quantidade, unidade, custo unitário cifrado | Detalha o que entrou no estoque e o custo por produto. |
+| `input_purchase_payments` | `id`, `user_id`, `purchase_id`, `paid_at`, valor cifrado | Registra saídas de caixa de compras, permitindo pagamento imediato, parcial ou a prazo. Para compra imediata, cria-se um pagamento junto com a compra. |
+| `spray_applications` | `id`, `user_id`, `applied_at`, observações | Evento de pulverização que aparece no histórico e no calendário. |
+| `spraying_inputs` | `id`, `user_id`, `spray_application_id`, `product_id`, quantidade usada, unidade | Insumos usados em uma pulverização. Permite cadastrar e selecionar um novo produto sem perder o formulário atual. |
+| `stock_movements` | `id`, `user_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
+| `audit_events` | `id`, `user_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
 
 ## identidade e sessões propostas
 
-Esta seção descreve a próxima etapa; a tabela `sessions`, a autenticação e o bootstrap ainda não foram implementados. As tabelas `accounts` e `users` já existem. `accounts` é o limite dos dados de uma produção, e `users` representa a credencial do único cliente autorizado. O índice de `00006_single_manager.sql` limita a instalação a um único usuário. Funcionários continuam sendo registros operacionais sem credenciais.
+`users` representa o gerente que autentica na API. `employees` representa as pessoas da equipe e não contém credenciais. Não há tabela `accounts`: cada registro de negócio guarda `user_id`, que identifica o gerente dono dos dados. O índice de `00006_single_manager.sql` limita a instalação local a um gerente.
 
-O usuário autenticado será resolvido no servidor a cada requisição protegida. O cliente não envia `account_id` no corpo, query string ou cabeçalho. O servidor valida a sessão, carrega o usuário ativo e obtém o `account_id` pela relação persistida `users.account_id`; a aplicação passa esse escopo ao serviço da funcionalidade. Assim, o cadastro de funcionários deixa de depender de uma conta fixa na inicialização do processo.
+O cadastro de gerente está disponível em `POST /api/v1/auth/register`. Ele recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado no servidor em `AUTH_SETUP_TOKEN` e só funciona antes de existir um usuário. Esse token protege o primeiro cadastro; não há cadastro contínuo. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
 
-A coluna `login_name` ainda não define se o identificador será nome de usuário ou e-mail. Como não há requisito de recuperação por e-mail, a recomendação inicial é um nome de usuário definido no bootstrap; caso seja escolhido e-mail, será necessário definir também o fluxo de recuperação sem expor a existência da conta.
+Login, sessão e middleware ainda não foram implementados. Quando existirem, a API resolverá o `user_id` da sessão no servidor e passará esse identificador aos serviços. O cliente não poderá escolher `user_id` pelo corpo, query string ou cabeçalho. O login usará `login_name`, sem recuperação por e-mail nesta primeira versão.
 
 Proposta de tabela para sessões, ainda sujeita à migração:
 
 | tabela | campos principais | responsabilidade |
 | --- | --- | --- |
-| `sessions` | `id`, `user_id UUID REFERENCES users(id)`, `token_hash BYTEA UNIQUE`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis no servidor. `token_hash` guarda o SHA-256 do token aleatório entregue ao navegador; o valor original não é persistido. A sessão aponta para `user_id`, e a conta é obtida pela relação do usuário. |
+| `sessions` | `id`, `user_id UUID REFERENCES users(id)`, `token_hash BYTEA UNIQUE`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis no servidor. `token_hash` guarda o SHA-256 do token aleatório entregue ao navegador; o valor original não é persistido. |
 
-A senha em `users.password_hash` não será cifrada para recuperação. Será armazenada como hash Argon2id com salt aleatório gerado pela biblioteca e parâmetros codificados junto ao resultado, para permitir atualização do custo. Como ponto de partida, usar pelo menos `m=19456 KiB, t=2, p=1` e medir o custo no runtime de produção. Aplicar limite de tentativas e de verificações concorrentes para que o custo intencional do hash não permita esgotar recursos. A configuração de senha proposta é mínimo de 15 caracteres, suporte a pelo menos 64, sem regras artificiais de mistura de caracteres, com aceitação de gerenciadores e colagem. O NIST recomenda esses limites para senha usada como fator único; conferir também senhas comuns ou comprometidas. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
-
-O bootstrap criará a conta e o usuário em uma transação, por um processo de uso único antes de abrir o acesso público. Não haverá cadastro público. O caminho operacional desse bootstrap e a recuperação se a senha for perdida precisam ser definidos junto com o deploy. A troca de senha autenticada deverá exigir a senha atual e revogar as sessões existentes.
+O cadastro atual armazena `users.password_hash` como hash Argon2id com salt aleatório e parâmetros codificados no formato PHC; a senha não pode ser recuperada por decifragem. O custo inicial é `m=19456 KiB, t=2, p=1`, sujeito a medição no runtime de produção. A entrada é normalizada em Unicode NFC e aceita de 15 a 128 caracteres. Uma lista local bloqueia algumas senhas notoriamente fracas; ela não substitui uma lista ampla e atualizável de senhas comprometidas. Login ainda não foi implementado; quando for, tentativas e concorrência do Argon2id precisarão de limites. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
 
 Para produção, a sessão será enviada em cookie `__Host-agrofin_session` com `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` e sem `Domain`. O token terá 32 bytes aleatórios gerados por `crypto/rand`; o servidor validará a expiração e a revogação. O tempo ocioso e o prazo absoluto da sessão ainda precisam ser ajustados ao uso no celular. Logout revoga a sessão no banco e expira o cookie no navegador. Tokens de autenticação não serão guardados em `localStorage` nem `sessionStorage`. [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) e [MDN: cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies).
 
@@ -67,30 +64,27 @@ O modelo de publicação mantém interface e API na mesma origem, com a API sob 
 
 ```mermaid
 erDiagram
-    ACCOUNTS ||--o| USERS : autentica
-    ACCOUNTS ||--o{ EMPLOYEES : cadastra
-    ACCOUNTS ||--o{ HARVEST_RATES : configura
-    ACCOUNTS ||--o{ HARVESTS : registra
-    ACCOUNTS ||--o{ HARVEST_ITEMS : delimita
-    ACCOUNTS ||--o{ DAILY_WORK : registra
-    ACCOUNTS ||--o{ EMPLOYEE_PAYMENTS : paga
-    ACCOUNTS ||--o{ PAYROLL_ADJUSTMENTS : ajusta
-    ACCOUNTS ||--o{ SALES : registra
-    ACCOUNTS ||--o{ SALE_ITEMS : delimita
-    ACCOUNTS ||--o{ SALE_DISCOUNTS : delimita
-    ACCOUNTS ||--o{ SALE_RECEIPTS : delimita
-    ACCOUNTS ||--o{ EXPENSES : registra
-    ACCOUNTS ||--o{ INPUT_PRODUCTS : cadastra
-    ACCOUNTS ||--o{ INPUT_PURCHASES : registra
-    ACCOUNTS ||--o{ PURCHASE_ITEMS : delimita
-    ACCOUNTS ||--o{ INPUT_PURCHASE_PAYMENTS : delimita
-    ACCOUNTS ||--o{ SPRAY_APPLICATIONS : registra
-    ACCOUNTS ||--o{ SPRAYING_INPUTS : delimita
-    ACCOUNTS ||--o{ STOCK_MOVEMENTS : delimita
-    ACCOUNTS ||--o{ AUDIT_EVENTS : audita
+    USERS ||--o{ EMPLOYEES : cadastra
+    USERS ||--o{ HARVEST_RATES : configura
+    USERS ||--o{ HARVESTS : registra
+    USERS ||--o{ HARVEST_ITEMS : delimita
+    USERS ||--o{ DAILY_WORK : registra
+    USERS ||--o{ EMPLOYEE_PAYMENTS : paga
+    USERS ||--o{ PAYROLL_ADJUSTMENTS : ajusta
+    USERS ||--o{ SALES : registra
+    USERS ||--o{ SALE_ITEMS : delimita
+    USERS ||--o{ SALE_DISCOUNTS : delimita
+    USERS ||--o{ SALE_RECEIPTS : registra
+    USERS ||--o{ EXPENSES : registra
+    USERS ||--o{ INPUT_PRODUCTS : cadastra
+    USERS ||--o{ INPUT_PURCHASES : registra
+    USERS ||--o{ PURCHASE_ITEMS : delimita
+    USERS ||--o{ INPUT_PURCHASE_PAYMENTS : registra
+    USERS ||--o{ SPRAY_APPLICATIONS : registra
+    USERS ||--o{ SPRAYING_INPUTS : delimita
+    USERS ||--o{ STOCK_MOVEMENTS : delimita
+    USERS ||--o{ AUDIT_EVENTS : audita
 
-    USERS ||--o{ HARVESTS : cria
-    USERS ||--o{ AUDIT_EVENTS : atua
     EMPLOYEES |o--o{ HARVEST_RATES : tarifa_individual
     EMPLOYEES ||--o{ HARVESTS : colhe
     EMPLOYEES ||--o{ DAILY_WORK : recebe
@@ -110,7 +104,7 @@ erDiagram
     SPRAYING_INPUTS |o--o| STOCK_MOVEMENTS : gera_saida
 ```
 
-As referências entre tabelas de negócio usam também `account_id`. Assim, uma colheita não pode apontar para um funcionário de outra conta. `users` tem no máximo um registro na instalação; `employees` não tem credencial. O diagrama mostra as relações estruturais, não exige que todo cabeçalho já tenha uma linha: essa validação fica com a gravação transacional da API.
+As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado. Chaves estrangeiras compostas também garantem que um lançamento só possa apontar para funcionário e cabeçalho do mesmo gerente. `users` tem no máximo um registro na instalação; `employees` não tem credenciais. O diagrama mostra as relações estruturais, não exige que todo cabeçalho já tenha uma linha: essa validação fica com a gravação transacional da API.
 
 ## Regras e invariantes
 
@@ -142,7 +136,7 @@ O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia nã
 - Senhas usam hash próprio para senhas, não a criptografia reversível usada para valores financeiros.
 - Datas, quantidades, classificações, IDs e categorias ainda podem ficar visíveis. Essa exposição de metadados é uma limitação deliberada do modelo inicial e deve ser considerada na avaliação de privacidade.
 
-Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro por conta autorizada e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. A implementação futura deve testar confidencialidade do banco de teste e restauração com a chave correta.
+Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro pelo `user_id` autenticado e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. A implementação futura deve testar confidencialidade do banco de teste e restauração com a chave correta.
 
 ## Migrações e conexão
 
@@ -150,7 +144,7 @@ As migrações `00001` a `00006` criam as tabelas em ordem de dependência. O co
 
 No desenvolvimento local, `docker compose up -d --wait` inicia PostgreSQL, aplica as versões pendentes e depois inicia a API. Após adicionar outra migração, execute `docker compose run --rm migrate` para aplicá-la mesmo que o contêiner anterior já tenha terminado. Use `docker compose run --rm migrate go run ./cmd/migrate status` para consultar as versões.
 
-Cada `request_key` em pagamentos, recebimentos e despesas é único por conta para impedir que uma repetição da mesma requisição crie outra saída ou entrada. Esse índice não substitui a validação do valor devido ou recebido na API. `period_end` é o limite exclusivo dos períodos de pagamento; o dia que inicia a semana ainda precisa ser definido.
+Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente para impedir que uma repetição da mesma requisição crie outra saída ou entrada. Esse índice não substitui a validação do valor devido ou recebido na API. `period_end` é o limite exclusivo dos períodos de pagamento; o dia que inicia a semana ainda precisa ser definido.
 
 ## Decisões confirmadas e pontos em aberto
 
@@ -166,7 +160,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por conta pa
 ### Recomendações deste modelo
 
 - Usar PostgreSQL no desenvolvimento; o provedor de produção continua em aberto.
-- Usar `account_id` como fronteira técnica dos dados, sem representar acesso de funcionários ou vários gerentes.
+- Usar `user_id` como vínculo dos dados de negócio ao gerente; funcionários não têm identidade de acesso.
 - Guardar tarifas aplicadas na colheita e calcular saldos semanais e de estoque a partir dos lançamentos.
 - Separar compra de insumo de pagamento da compra, mesmo que a primeira versão crie os dois juntos para compras à vista.
 - Calcular relatórios na API depois da descriptografia.

@@ -54,7 +54,7 @@ O caminho de criação HTTP está implementado em `internal/funcionarios`, com t
 | arquivo | responsabilidade implementada |
 | --- | --- |
 | `employee.go` | Define `Employee` e normaliza o nome, removendo espaços das extremidades e rejeitando resultado vazio. Preserva acentos, grafia e espaços internos. |
-| `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com conta e estado ativo inicial antes de chamar a persistência. |
+| `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com o ID do gerente e estado ativo inicial antes de chamar a persistência. |
 | `repository.go` | `Repository.Create` recebe um `Employee` validado, executa o `INSERT` parametrizado e devolve a entidade com o ID gerado pelo banco. |
 | `handler.go` | Compõe o fluxo HTTP: verifica a disponibilidade, chama o serviço com o contexto da requisição e delega a entrada e a resposta às funções auxiliares. |
 | `handler_request.go` | Define o DTO de entrada e valida o tipo de mídia, o tamanho e o formato do JSON. A validação aqui é do protocolo; regras do cadastro ficam no serviço. |
@@ -68,84 +68,75 @@ A composição no `cmd/api/main.go` é:
 ```go
 repo := funcionarios.NewRepository(pool)
 service := funcionarios.NewService(repo)
-// A integração com o login ainda fornecerá a conta do cliente.
-handler := funcionarios.NewHandler(service, "")
+// O handler lê o principal do contexto; o middleware ainda será integrado.
+handler := funcionarios.NewHandler(service)
 funcionarios.RegisterRoutes(mux, handler)
 ```
 
 O pool é aberto e fechado pela aplicação; o repositório apenas o utiliza. A interface privada `employeeCreator`, declarada junto do serviço que a consome, permite testar a validação sem PostgreSQL. Ela descreve a única operação necessária, sem criar um repositório genérico ou interfaces antecipadas para outros domínios. Cada funcionalidade pode ter seu próprio repositório usando o mesmo pool.
 
-O serviço recebe conta e nome, normaliza e valida o nome e monta `Employee{AccountID: accountID, Name: name, Active: true}`. Em seguida chama `repo.Create(ctx, employee)`. O repositório recebe a struct de domínio por valor, persiste conta, nome e estado e devolve a entidade com ID gerado pelo banco. Receber por valor evita alterar a struct do chamador implicitamente; o resultado persistido é explícito no retorno. O ID fica vazio somente antes da inserção. `AccountID` é um vínculo técnico do domínio, não um campo do formulário HTTP. Nomes iguais continuam permitidos. O repositório não repete a normalização nem escolhe o estado inicial; as restrições SQL continuam protegendo a integridade. Como os campos de `Employee` são exportados, a struct sozinha não comprova validação: o serviço é a entrada das operações de cadastro. A inserção atual é uma única instrução atômica, sem necessidade de transação explícita.
+O serviço recebe o ID do gerente e o nome, normaliza e valida o nome e monta `Employee{UserID: userID, Name: name, Active: true}`. Em seguida chama `repo.Create(ctx, employee)`. O repositório recebe a struct de domínio por valor, persiste gerente, nome e estado e devolve a entidade com ID gerado pelo banco. Receber por valor evita alterar a struct do chamador implicitamente; o resultado persistido é explícito no retorno. O ID fica vazio somente antes da inserção. `UserID` é um vínculo técnico do domínio, não um campo do formulário HTTP. Nomes iguais continuam permitidos. O repositório não repete a normalização nem escolhe o estado inicial; as restrições SQL continuam protegendo a integridade. Como os campos de `Employee` são exportados, a struct sozinha não comprova validação: o serviço é a entrada das operações de cadastro. A inserção atual é uma única instrução atômica, sem necessidade de transação explícita.
 
-`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `accountID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco, sem ser reaproveitado nas requisições.
+`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `userID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco, sem ser reaproveitado nas requisições.
 
-O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `account_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
+O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `user_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
 
-O `main` monta o handler sem conta, e o POST responde `503` antes de chamar o serviço. O login deverá fornecer a conta do cliente autenticado por requisição. A conta nunca é aceita no corpo ou cabeçalho do cadastro. Não há mecanismo temporário de conta por variável de ambiente. Os testes fornecem uma conta diretamente para verificar o fluxo de cadastro independentemente da futura autenticação.
+O `main` monta o handler sem um gerente autenticado, e o POST responde `503` antes de chamar o serviço. O login deverá fornecer o `user_id` do gerente autenticado por requisição. Esse identificador nunca é aceito no corpo ou cabeçalho do cadastro. Os testes fornecem um ID diretamente para verificar o fluxo independentemente da futura autenticação.
 
-**Ainda pendente:** autenticação e origem autenticada de `accountID`, listagem persistida, renomeação e desativação. As regras permanecem no serviço e o SQL no repositório.
+**Ainda pendente:** middleware de autenticação que popula o principal da requisição, listagem persistida, renomeação e desativação. O tipo `auth.Principal` já reserva `user_id` no contexto; as regras permanecem no serviço e o SQL no repositório.
 
-Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e conta e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com a conta, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria sua própria conta e remove somente seus registros ao terminar.
+Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e `user_id` e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com o gerente, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria seu gerente de teste e remove somente os registros criados por ele ao terminar.
 
 ### identidade e autenticação propostas
 
-O código atual ainda não autentica: `main` monta o handler de funcionários com `accountID` vazio e o POST responde `503`. A autenticação abaixo é uma proposta de arquitetura, não comportamento entregue.
+O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. As migrações limitam esta instalação a um único gerente. O cadastro inicial está em `POST /api/v1/auth/register`, recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado por `AUTH_SETUP_TOKEN` e só funciona antes de existir usuário.
 
-#### modelo de identidade
-
-- `accounts` é a fronteira dos dados de uma produção. `users` é a credencial do cliente que administra essa conta; funcionários continuam sem login. As migrações já relacionam uma conta a no máximo um usuário e limitam a instalação a um gerente.
-- Criar a conta e o primeiro usuário juntos em uma transação por um processo de bootstrap de uso único, antes de abrir o acesso público. Não oferecer cadastro anônimo. Definir o procedimento operacional de bootstrap e recuperação ao validar o deploy.
-- A sessão identifica `user_id`; em cada requisição privada, a API verifica sessão e usuário ativo e obtém `account_id` por `users.account_id`. Ela cria um principal de servidor (`user_id`, `account_id`) e o disponibiliza no contexto da requisição. O handler de funcionários lê esse principal e passa a conta como argumento explícito ao serviço. Não aceitar conta do corpo, query string ou cabeçalho enviado pelo cliente.
-- Manter a implementação concreta no pacote `internal/auth`, com serviço de autenticação, repositório de usuários/sessões, middleware e handlers das rotas de autenticação. O `main` compõe essas dependências e protege as rotas de negócio. Não criar um pacote genérico de identidade até existir outro consumidor real.
+O hash de senha Argon2id, a rota `register` e o tipo de principal no contexto estão implementados. Login, sessão, cookie, CSRF e middleware continuam pendentes. Quando houver sessão, o middleware resolverá o `user_id` no servidor e os handlers passarão esse valor aos serviços. O cliente nunca envia o `user_id` de proprietário dos dados.
 
 ```mermaid
 flowchart TD
-    Browser["Navegador na mesma origem"] -->|"login e cookie"| API["API Go"]
+    Browser["Navegador na mesma origem"] -->|"cadastro ou login"| API["API Go"]
     API --> Auth["internal/auth"]
-    Auth -->|"verifica Argon2id"| Users[("users")]
+    Auth -->|"verifica Argon2id"| Users[("users: gerente")]
     Auth -->|"grava somente SHA-256 do token"| Sessions[("sessions")]
     Auth -->|"Set-Cookie HttpOnly Secure"| Browser
     Browser -->|"cookie em /api"| Middleware["middleware de sessão"]
     Middleware -->|"consulta hash do token"| Sessions
     Middleware --> Users
-    Users --> Accounts[("accounts")]
-    Middleware -->|"principal: user_id + account_id"| Employees["handler de funcionários"]
-    Employees -->|"account_id do servidor"| DB[("PostgreSQL")]
+    Middleware -->|"principal: user_id"| Employees["handler de funcionários"]
+    Employees -->|"user_id do servidor"| DB[("PostgreSQL")]
 ```
 
 #### senha
 
-Senha não é dado para cifrar e recuperar: armazenar somente um hash adaptativo Argon2id com salt aleatório, parâmetros e versão codificados no formato do hash. Começar no mínimo recomendado pela OWASP (`m=19456 KiB, t=2, p=1`), medir no ambiente publicado e aumentar o custo quando viável. Se aceitar Unicode, normalizar de forma consistente antes de gerar e verificar o hash. Recalcular o hash após login válido se os parâmetros antigos ficarem abaixo dos atuais. Nunca registrar senha ou hash em logs. A cifra autenticada dos valores financeiros continua sendo uma proteção separada.
+Senha não é dado para cifrar e recuperar: armazenar somente um hash adaptativo Argon2id com salt aleatório, parâmetros e versão codificados no formato PHC. O cadastro atual usa `m=19456 KiB, t=2, p=1`, sujeito a medição no runtime publicado. A entrada é normalizada em Unicode NFC e aceita de 15 a 128 caracteres. Uma lista local bloqueia algumas senhas conhecidamente fracas; uma lista ampla e atualizável de senhas comprometidas ainda precisa ser definida. Nunca registrar senha ou hash em logs. A cifra autenticada dos valores financeiros continua sendo uma proteção separada. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
 
-Como política inicial, exigir 15 caracteres, aceitar ao menos 64, permitir espaços, Unicode, colar e usar gerenciadores de senhas; evitar regras de composição e troca periódica. Rejeitar senhas comuns ou comprometidas. Limitar tentativas de login em um mecanismo compartilhado entre instâncias e limitar a concorrência de verificações Argon2id, pois o algoritmo consome memória e CPU deliberadamente. Ao ler parâmetros do hash, aceitar somente algoritmos e custos dentro de limites configurados para impedir que um valor alterado no banco force consumo arbitrário de recursos. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
+No login, limitar tentativas em mecanismo compartilhado entre instâncias e limitar a concorrência de verificações Argon2id, pois o algoritmo consome memória e CPU deliberadamente. Ao verificar o hash, aceitar somente algoritmos e custos dentro de limites configurados para impedir que um valor alterado no banco force consumo arbitrário de recursos.
 
-#### sessão e cookie
+#### sessão, cookie e origem
 
-- Preferir sessão opaca mantida no PostgreSQL, em vez de JWT no navegador: um token aleatório de 32 bytes gerado por `crypto/rand` vai no cookie; o banco guarda somente SHA-256 desse token, associado a usuário, criação, última atividade, expiração e revogação. Por ser aleatório de alta entropia, o token não precisa de hash lento de senha.
-- Emitir em produção `__Host-agrofin_session; Secure; HttpOnly; SameSite=Lax; Path=/`, sem `Domain`. Usar HTTPS em toda a aplicação. O cookie não fica acessível ao JavaScript; tokens de autenticação também não vão para `localStorage` ou `sessionStorage`.
-- Renovar a sessão após login, revogar no banco no logout e expirar o cookie na resposta. Aplicar prazo ocioso e absoluto no servidor; os valores exatos precisam equilibrar a operação no celular e o risco de dispositivo perdido. Mudança de senha revoga todas as sessões existentes.
-
-#### origem e csrf
-
-Manter a interface e a API na mesma origem, com `/api` encaminhado ao Go pelo proxy do Vite em desenvolvimento e pelo deploy em produção. Configurar a origem pública permitida explicitamente; não derivá-la de `Host` ou de cabeçalhos de proxy arbitrários. A API não habilita CORS com credenciais. Para operações de estado, inclusive login, exigir `Origin` igual à origem configurada, rejeitar `Sec-Fetch-Site: cross-site` quando presente e usar somente métodos não seguros (`POST`, `PATCH`, `DELETE`) para alterar estado. Nenhum `GET` pode alterar dados. `SameSite=Lax` é defesa em profundidade; uma origem irmã ainda precisa falhar na comparação exata. Se o frontend ou a API passarem a usar outra origem, revisar CSRF e CORS antes dessa mudança. [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+- Preferir sessão opaca mantida no PostgreSQL: gerar token aleatório de 32 bytes com `crypto/rand`, enviar no cookie e guardar somente SHA-256 do token, com usuário, criação, última atividade, expiração e revogação.
+- Em produção, emitir `__Host-agrofin_session; Secure; HttpOnly; SameSite=Lax; Path=/`, sem `Domain`, sempre por HTTPS. Renovar a sessão após login, revogar no banco no logout e expirar o cookie na resposta. Não guardar token em `localStorage` nem `sessionStorage`.
+- Manter interface e API na mesma origem, com `/api` encaminhado ao Go. Validar `Origin` contra a origem pública configurada em todas as operações que alteram estado e rejeitar `Sec-Fetch-Site: cross-site` quando presente. A API não habilita CORS com credenciais; nenhum `GET` altera dados. `SameSite=Lax` é defesa em profundidade, não substitui a validação de origem.
 
 #### rotas e ordem de implementação
 
 ```text
-POST /api/v1/auth/login   # credenciais; cria sessão e cookie
-POST /api/v1/auth/logout  # revoga sessão e limpa cookie
-GET  /api/v1/auth/me      # informa se há sessão válida e dados públicos mínimos
+POST /api/v1/auth/register  # cadastro único do gerente; requer token de cadastro
+POST /api/v1/auth/login     # credenciais; cria sessão e cookie
+POST /api/v1/auth/logout    # revoga sessão e limpa cookie
+GET  /api/v1/auth/me        # informa se há sessão válida e dados públicos mínimos
 ```
 
-Não haverá rota de cadastro de usuário. Primeiro implementar bootstrap e hash; depois sessão e cookie; em seguida login/logout e middleware; então ligar o principal por requisição às rotas de funcionários e remover o `503` provisório. Proteger também a listagem vazia atual, para que nenhuma rota de negócio permaneça pública por acidente. A rota de login deve devolver erro genérico para usuário inexistente e senha inválida, aplicar limitação de tentativas e não revelar se existe conta. Respostas de login e sessão devem usar `Cache-Control: no-store`.
+Próximo: implementar login e sessões; depois middleware e proteção de origem; então ligar o `user_id` autenticado às rotas de funcionários e remover o `503` provisório. Proteger também a listagem vazia atual para que nenhuma rota de negócio permaneça pública por acidente. Login deve devolver erro genérico para usuário inexistente e senha inválida, aplicar limitação de tentativas e usar `Cache-Control: no-store`.
 
-Antes de produção, validar pelo menos: acesso sem sessão retorna `401`; sessão expirada ou revogada falha; logout invalida o token no servidor; `account_id` forjado é ignorado/rejeitado; cada rota privada obtém a conta pelo usuário autenticado; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
+Antes de produção, validar: sessão expirada ou revogada falha; logout invalida o token no servidor; `user_id` forjado é ignorado/rejeitado; cada rota privada obtém o gerente pela sessão; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
 
 ## Sequência sugerida
 
 | etapa | entrega verificável |
 | --- | --- |
-| 1. base técnica | Validar React e Go sob a mesma origem; criar a conta e o usuário pelo bootstrap; implementar login, sessão, cookie, proteção de origem e principal por requisição; então liberar o cadastro autenticado de funcionários. |
+| 1. base técnica | React e Go sob a mesma origem, PostgreSQL e cadastro/Argon2id estão disponíveis; próximo implementar login, sessão, cookie, proteção CSRF e middleware que popula o principal por requisição para liberar o cadastro autenticado de funcionários. |
 | 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
 | 3. vendas e despesas | Registrar venda por classificação, desconto e recebimento; registrar energia e demais despesas; mostrar painel com vendido, recebido, devido, pago e saldo de caixa separados. |
 | 4. insumos e calendário | Registrar produto, compra, estoque e pulverização; permitir cadastro rápido; mostrar calendário e mudança das fases da Lua. |
