@@ -71,7 +71,7 @@ func TestCreateEmployeeHandler(t *testing.T) {
 			}
 			mux := http.NewServeMux()
 			RegisterRoutes(mux, NewHandler(service))
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/employees", strings.NewReader(tt.body)).WithContext(ctx)
+			req := httptest.NewRequest(http.MethodPost, "/employees", strings.NewReader(tt.body)).WithContext(ctx)
 			req.Header.Set("Content-Type", tt.contentType)
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, req)

@@ -58,7 +58,7 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	client.Timeout = 5 * time.Second
 	create := func(body string) employeeResponse {
 		t.Helper()
-		response, err := client.Post(server.URL+"/api/v1/employees", "application/json", strings.NewReader(body))
+		response, err := client.Post(server.URL+"/employees", "application/json", strings.NewReader(body))
 		require.NoError(t, err)
 		defer response.Body.Close()
 		// Só lemos o funcionário quando a criação HTTP terminou com sucesso.
@@ -88,7 +88,7 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	assert.True(t, active)
 	assert.False(t, deactivated)
 
-	response, err := client.Post(server.URL+"/api/v1/employees", "application/json", strings.NewReader(`{"name":"   "}`))
+	response, err := client.Post(server.URL+"/employees", "application/json", strings.NewReader(`{"name":"   "}`))
 	require.NoError(t, err)
 	response.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode)

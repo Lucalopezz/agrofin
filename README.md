@@ -51,13 +51,13 @@ compose.yaml           serviços para desenvolvimento local
    docker compose up -d --build --wait
    ```
 
-   O Compose inicia o banco, aplica as migrações e sobe a API e o frontend. Acesse [localhost:5173](http://localhost:5173). A API está em `http://127.0.0.1:8080`; confira sua resposta com:
+   O Compose inicia o banco, aplica as migrações e sobe a API e o frontend. Acesse [localhost:5173](http://localhost:5173). `API_PREFIX` no `.env` controla o prefixo das rotas (padrão: `/api/v1`) e também o proxy do frontend. Com o valor padrão, confira a API em `http://127.0.0.1:8080`:
 
    ```bash
    curl http://127.0.0.1:8080/api/v1/health
    ```
 
-As portas podem ser alteradas no `.env`. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
+As portas e o prefixo da API podem ser alterados no `.env`. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
 
 ## Comandos úteis
 

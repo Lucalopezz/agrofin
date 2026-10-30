@@ -31,6 +31,7 @@ func decodeCreateEmployeeRequest(w http.ResponseWriter, r *http.Request) (*creat
 	err = decoder.Decode(&input)
 	if err == nil && input != nil {
 		// Um segundo JSON ou conteúdo extra não pode ser ignorado depois do nome.
+		// {"name": "João"}{"name": "Maria"}
 		var extra any
 		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
 			if trailingErr == nil {

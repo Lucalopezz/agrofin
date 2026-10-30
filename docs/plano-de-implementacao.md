@@ -122,10 +122,10 @@ No login, limitar tentativas em mecanismo compartilhado entre instâncias e limi
 #### rotas e ordem de implementação
 
 ```text
-POST /api/v1/auth/register  # cadastro único do gerente; requer token de cadastro
-POST /api/v1/auth/login     # credenciais; cria sessão e cookie
-POST /api/v1/auth/logout    # revoga sessão e limpa cookie
-GET  /api/v1/auth/me        # informa se há sessão válida e dados públicos mínimos
+POST ${API_PREFIX}/auth/register  # cadastro único do gerente; requer token de cadastro
+POST ${API_PREFIX}/auth/login     # credenciais; cria sessão e cookie
+POST ${API_PREFIX}/auth/logout    # revoga sessão e limpa cookie
+GET  ${API_PREFIX}/auth/me        # informa se há sessão válida e dados públicos mínimos
 ```
 
 Próximo: implementar login e sessões; depois middleware e proteção de origem; então ligar o `user_id` autenticado às rotas de funcionários e remover o `503` provisório. Proteger também a listagem vazia atual para que nenhuma rota de negócio permaneça pública por acidente. Login deve devolver erro genérico para usuário inexistente e senha inválida, aplicar limitação de tentativas e usar `Cache-Control: no-store`.
@@ -146,17 +146,17 @@ O primeiro fluxo completo é o **MVP de validação**: já resolve a rotina de m
 
 ## Contrato inicial da api
 
-Manter rotas versionadas sob `/api/v1` e respostas JSON. Uma proposta mínima para o primeiro fluxo é:
+Manter respostas JSON. `API_PREFIX` configura uma vez o prefixo das rotas (padrão `/api/v1`); os pacotes Go registram apenas seus caminhos locais. Uma proposta mínima para o primeiro fluxo, expandida com o valor padrão, é:
 
 ```text
-GET/POST       /api/v1/employees
-PATCH          /api/v1/employees/{id}       # renomear
-DELETE         /api/v1/employees/{id}       # desativar, sem apagar histórico
-GET/POST       /api/v1/harvest-rates
-GET/POST       /api/v1/harvest-entries
-PATCH          /api/v1/harvest-entries/{id}
-GET            /api/v1/payroll-weeks/{week}/summary
-POST           /api/v1/employee-payments
+GET/POST       ${API_PREFIX}/employees
+PATCH          ${API_PREFIX}/employees/{id}       # renomear
+DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histórico
+GET/POST       ${API_PREFIX}/harvest-rates
+GET/POST       ${API_PREFIX}/harvest-entries
+PATCH          ${API_PREFIX}/harvest-entries/{id}
+GET            ${API_PREFIX}/payroll-weeks/{week}/summary
+POST           ${API_PREFIX}/employee-payments
 ```
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.

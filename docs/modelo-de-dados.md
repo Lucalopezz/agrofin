@@ -44,9 +44,9 @@ As 21 tabelas abaixo são criadas pelas seis migrações. O diagrama mostra as c
 
 `users` representa o gerente que autentica na API. `employees` representa as pessoas da equipe e não contém credenciais. Não há tabela `accounts`: cada registro de negócio guarda `user_id`, que identifica o gerente dono dos dados. O índice de `00006_single_manager.sql` limita a instalação local a um gerente.
 
-O cadastro de gerente está disponível em `POST /api/v1/auth/register`. Ele recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado no servidor em `AUTH_SETUP_TOKEN` e só funciona antes de existir um usuário. Esse token protege o primeiro cadastro; não há cadastro contínuo. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
+O cadastro de gerente está disponível em `POST ${API_PREFIX}/auth/register` (por padrão, `POST /api/v1/auth/register`). Ele recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado no servidor em `AUTH_SETUP_TOKEN` e só funciona antes de existir um usuário. Esse token protege o primeiro cadastro; não há cadastro contínuo. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
 
-Login, sessão e middleware ainda não foram implementados. Quando existirem, a API resolverá o `user_id` da sessão no servidor e passará esse identificador aos serviços. O cliente não poderá escolher `user_id` pelo corpo, query string ou cabeçalho. O login usará `login_name`, sem recuperação por e-mail nesta primeira versão.
+Login, sessão e middleware ainda não foram implementados. Quando existirem, a API resolverá o `user_id` da sessão no servidor e passará esse identificador aos serviços. O cliente não poderá escolher `user_id` pelo corpo, query string ou cabeçalho. `API_PREFIX` configura em um único lugar o prefixo das rotas (padrão `/api/v1`). O login usará `login_name`, sem recuperação por e-mail nesta primeira versão.
 
 Proposta de tabela para sessões, ainda sujeita à migração:
 

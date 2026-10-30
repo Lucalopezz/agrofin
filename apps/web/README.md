@@ -4,7 +4,7 @@ Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A pá
 
 ## Desenvolvimento
 
-Siga as instruções do [README principal](../../README.md#como-executar) para iniciar a aplicação com Docker e acesse http://localhost:5173. O Vite atualiza a página ao salvar alterações e encaminha `/api` para a API Go. O indicador de conexão aparece somente em desenvolvimento.
+Siga as instruções do [README principal](../../README.md#como-executar) para iniciar a aplicação com Docker e acesse http://localhost:5173. O Vite atualiza a página ao salvar alterações e encaminha o prefixo definido por `API_PREFIX` para a API Go. O indicador de conexão aparece somente em desenvolvimento.
 
 ```bash
 docker compose logs -f web
@@ -12,7 +12,7 @@ docker compose exec web pnpm run lint
 docker compose exec web pnpm run build
 ```
 
-Execute os comandos na raiz do repositório. Após alterar dependências, rode `docker compose restart web` para sincronizá-las com o lockfile. Para trabalhar sem Docker, em `apps/web`, execute `pnpm install --frozen-lockfile` e `pnpm run dev`; o proxy usa a API em `localhost:8080` por padrão. `API_PROXY_TARGET` permite mudar o destino no servidor Vite.
+Execute os comandos na raiz do repositório. Após alterar dependências, rode `docker compose restart web` para sincronizá-las com o lockfile. Para trabalhar sem Docker, em `apps/web`, execute `pnpm install --frozen-lockfile` e `pnpm run dev`; o Vite lê `API_PREFIX` do `.env` da raiz (padrão `/api/v1`) e usa a API em `localhost:8080`. `API_PROXY_TARGET` permite mudar o destino no servidor Vite.
 
 ## Organização
 
