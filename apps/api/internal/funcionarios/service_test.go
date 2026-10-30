@@ -21,7 +21,7 @@ func TestServiceCreate(t *testing.T) {
 	t.Run("monta entidade validada e preserva contexto", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		expectedInput := Employee{AccountID: "account-id", Name: "João D'Ávila", Active: true}
+		expectedInput := Employee{UserID: "user-id", Name: "João D'Ávila", Active: true}
 		expected := expectedInput
 		expected.ID = "employee-id"
 		called := false
@@ -36,7 +36,7 @@ func TestServiceCreate(t *testing.T) {
 			return expected, nil
 		})
 
-		got, err := NewService(repo).Create(ctx, "account-id", "  João D'Ávila \n")
+		got, err := NewService(repo).Create(ctx, "user-id", "  João D'Ávila \n")
 		require.NoError(t, err)
 		assert.Equal(t, expected, got)
 		assert.True(t, called, "a persistência deve ser chamada para um nome válido")
@@ -47,7 +47,7 @@ func TestServiceCreate(t *testing.T) {
 			t.Fatal("persistência chamada com nome inválido")
 			return Employee{}, nil
 		})
-		got, err := NewService(repo).Create(context.Background(), "account-id", " \t\n")
+		got, err := NewService(repo).Create(context.Background(), "user-id", " \t\n")
 		assert.ErrorIs(t, err, ErrInvalidName)
 		assert.Equal(t, Employee{}, got)
 	})
@@ -57,7 +57,7 @@ func TestServiceCreate(t *testing.T) {
 		repo := employeeCreatorFunc(func(context.Context, Employee) (Employee, error) {
 			return Employee{}, expectedErr
 		})
-		_, err := NewService(repo).Create(context.Background(), "account-id", "Ana")
+		_, err := NewService(repo).Create(context.Background(), "user-id", "Ana")
 		assert.ErrorIs(t, err, expectedErr)
 	})
 }

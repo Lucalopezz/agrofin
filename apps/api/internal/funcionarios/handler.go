@@ -3,28 +3,27 @@ package funcionarios
 import (
 	"context"
 	"net/http"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 )
 
 // O handler depende do caso de uso, sem acessar o banco ou validar o domínio.
 type employeeService interface {
-	Create(ctx context.Context, accountID, name string) (Employee, error)
+	Create(ctx context.Context, userID, name string) (Employee, error)
 }
 
 type Handler struct {
-	service   employeeService
-	accountID string
+	service employeeService
 }
 
-// NewHandler recebe uma conta definida pelo servidor, nunca pelo corpo ou
-// cabeçalhos do cadastro. A integração com o login ainda está pendente.
-func NewHandler(service employeeService, accountID string) *Handler {
-	return &Handler{service: service, accountID: accountID}
+func NewHandler(service employeeService) *Handler {
+	return &Handler{service: service}
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
-	// A aplicação ainda não fornece a conta do cliente autenticado. Até o login
-	// ser integrado, interrompemos o cadastro antes de chamar o serviço.
-	if h.accountID == "" {
+	// O ID precisa vir do middleware por requisição; sem login integrado, não criamos registros sem proprietário.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
 		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Error: "cadastro indisponível até a integração com o login"})
 		return
 	}
@@ -34,8 +33,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// O contexto nasce na requisição e segue até o SQL. A conta é do servidor;
+	// O contexto nasce na requisição e segue até o SQL. O user ID é do servidor;
 	// a normalização do nome e a montagem de Employee continuam no serviço.
-	employee, err := h.service.Create(r.Context(), h.accountID, input.Name)
+	employee, err := h.service.Create(r.Context(), principal.UserID, input.Name)
 	writeCreateEmployeeResponse(w, employee, err)
 }

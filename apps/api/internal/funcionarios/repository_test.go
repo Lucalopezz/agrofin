@@ -13,6 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 )
 
 func TestCreateEmployeeIntegration(t *testing.T) {
@@ -28,26 +30,29 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	require.NoError(t, err, "configurar o banco de teste")
 	defer pool.Close()
 
-	var accountID string
-	err = pool.QueryRow(ctx, "INSERT INTO accounts (name) VALUES ($1) RETURNING id::text", "teste de funcionários").Scan(&accountID)
-	require.NoError(t, err, "criar a conta de teste")
+	var userID string
+	err = pool.QueryRow(ctx, "INSERT INTO users (login_name, password_hash) VALUES ($1, $2) RETURNING id::text", "teste-funcionarios", "hash-de-teste").Scan(&userID)
+	require.NoError(t, err, "criar o gerente de teste")
 	defer func() {
 		// A limpeza tem prazo próprio para funcionar mesmo se o teste cancelar
-		// seu contexto. Só removemos registros vinculados à conta desta execução.
+		// seu contexto. Só removemos registros vinculados ao gerente desta execução.
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
 		// assert permite tentar a segunda limpeza mesmo se a primeira falhar.
-		_, err := pool.Exec(cleanupCtx, "DELETE FROM employees WHERE account_id = $1", accountID)
+		_, err := pool.Exec(cleanupCtx, "DELETE FROM employees WHERE user_id = $1", userID)
 		assert.NoError(t, err, "limpar os funcionários de teste")
-		_, err = pool.Exec(cleanupCtx, "DELETE FROM accounts WHERE id = $1", accountID)
-		assert.NoError(t, err, "limpar a conta de teste")
+		_, err = pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID)
+		assert.NoError(t, err, "limpar o gerente de teste")
 	}()
 
 	service := NewService(NewRepository(pool))
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, NewHandler(service, accountID))
+	RegisterRoutes(mux, NewHandler(service))
 	// Uma conexão HTTP real exercita rota, JSON, serviço e SQL juntos.
-	server := httptest.NewServer(mux)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCtx := auth.WithPrincipal(r.Context(), auth.Principal{UserID: userID})
+		mux.ServeHTTP(w, r.WithContext(requestCtx))
+	}))
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = 5 * time.Second
@@ -75,8 +80,8 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	var deactivated bool
 	err = pool.QueryRow(ctx, `
 		SELECT name, active, deactivated_at IS NOT NULL
-		FROM employees WHERE account_id = $1 AND id = $2
-	`, accountID, first.ID).Scan(&name, &active, &deactivated)
+		FROM employees WHERE user_id = $1 AND id = $2
+	`, userID, first.ID).Scan(&name, &active, &deactivated)
 	require.NoError(t, err, "consultar funcionário persistido")
 	assert.Equal(t, "João D'Ávila", name)
 	assert.Equal(t, first.Name, name)
@@ -92,10 +97,10 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	// depois de o repositório acrescentar contexto ao erro com %w.
 	canceledCtx, canceled := context.WithCancel(ctx)
 	canceled()
-	_, err = service.Create(canceledCtx, accountID, "Ana")
+	_, err = service.Create(canceledCtx, userID, "Ana")
 	assert.ErrorIs(t, err, context.Canceled)
 	var count int
-	err = pool.QueryRow(ctx, "SELECT count(*) FROM employees WHERE account_id = $1", accountID).Scan(&count)
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM employees WHERE user_id = $1", userID).Scan(&count)
 	require.NoError(t, err, "contar funcionários após cancelamento")
 	assert.Equal(t, 2, count)
 }

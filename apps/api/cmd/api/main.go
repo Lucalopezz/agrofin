@@ -40,8 +40,7 @@ func run() error {
 	// O main monta as dependências; HTTP, domínio e SQL continuam na feature.
 	repo := funcionarios.NewRepository(pool)
 	service := funcionarios.NewService(repo)
-	// A conta será fornecida pelo login; até essa integração, o POST retorna 503.
-	handler := funcionarios.NewHandler(service, "")
+	handler := funcionarios.NewHandler(service)
 	funcionarios.RegisterRoutes(mux, handler)
 
 	log.Println("api em http://localhost:8080")

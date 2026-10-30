@@ -19,23 +19,23 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-// Create persiste a entidade montada e validada pelo Service em uma conta existente.
+// Create persiste a entidade montada e validada pelo Service sob um gerente existente.
 // A validação de negócio fica no serviço; as restrições do banco continuam
 // protegendo a integridade caso outro caminho tente gravar dados inválidos.
 func (r *Repository) Create(ctx context.Context, employee Employee) (Employee, error) {
 	// O ID é gerado pelo banco; os demais dados vêm da entidade do serviço.
 	// RETURNING devolve a entidade persistida na mesma operação, sem SELECT extra.
 	const query = `
-		INSERT INTO employees (account_id, name, active)
+		INSERT INTO employees (user_id, name, active)
 		VALUES ($1, $2, $3)
-		RETURNING id::text, account_id::text, name, active
+		RETURNING id::text, user_id::text, name, active
 	`
 
 	// Parâmetros mantêm o nome separado do SQL. O contexto recebido preserva
 	// o cancelamento e o prazo do chamador até a consulta ao PostgreSQL.
-	err := r.pool.QueryRow(ctx, query, employee.AccountID, employee.Name, employee.Active).Scan(
+	err := r.pool.QueryRow(ctx, query, employee.UserID, employee.Name, employee.Active).Scan(
 		&employee.ID,
-		&employee.AccountID,
+		&employee.UserID,
 		&employee.Name,
 		&employee.Active,
 	)

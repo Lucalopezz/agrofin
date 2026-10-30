@@ -20,19 +20,19 @@ func NewService(repo employeeCreator) *Service {
 }
 
 // Create valida o nome e monta a entidade antes de solicitar sua gravação.
-// accountID é fornecido pelo chamador confiável, separado do nome do cadastro.
-func (s *Service) Create(ctx context.Context, accountID, name string) (Employee, error) {
+// userID é fornecido pelo chamador confiável, separado do nome do cadastro.
+func (s *Service) Create(ctx context.Context, userID, name string) (Employee, error) {
 	name, err := normalizeName(name)
 	if err != nil {
 		return Employee{}, err
 	}
 
-	// O serviço define o estado inicial do domínio. A conta vem do chamador
+	// O serviço define o estado inicial do domínio. O gerente vem do chamador
 	// confiável; o ID fica vazio até o banco gerar o identificador na inserção.
 	employee := Employee{
-		AccountID: accountID,
-		Name:      name,
-		Active:    true,
+		UserID: userID,
+		Name:   name,
+		Active: true,
 	}
 
 	// A persistência recebe a entidade pronta e o contexto da operação original.

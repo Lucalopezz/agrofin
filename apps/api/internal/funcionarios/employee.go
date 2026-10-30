@@ -9,10 +9,10 @@ import (
 // Publico a outros pacotes
 
 type Employee struct {
-	ID        string
-	AccountID string
-	Name      string
-	Active    bool
+	ID     string
+	UserID string
+	Name   string
+	Active bool
 }
 
 var ErrInvalidName = errors.New("funcionarios: nome obrigatório")
