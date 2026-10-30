@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
@@ -42,6 +43,10 @@ func run() error {
 	service := funcionarios.NewService(repo)
 	handler := funcionarios.NewHandler(service)
 	funcionarios.RegisterRoutes(mux, handler)
+
+	// O token de configuração fica somente no ambiente do servidor e é usado uma vez para criar o gerente.
+	authHandler := auth.NewHandler(auth.NewRepository(pool), os.Getenv("AUTH_SETUP_TOKEN"))
+	auth.RegisterRoutes(mux, authHandler)
 
 	log.Println("api em http://localhost:8080")
 	return http.ListenAndServe(":8080", mux)
