@@ -41,6 +41,28 @@ As 22 tabelas abaixo foram criadas pelas seis migrações. O diagrama mostra as 
 | `stock_movements` | `id`, `account_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
 | `audit_events` | `id`, `account_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
 
+## identidade e sessões propostas
+
+Esta seção descreve a próxima etapa; a tabela `sessions`, a autenticação e o bootstrap ainda não foram implementados. As tabelas `accounts` e `users` já existem. `accounts` é o limite dos dados de uma produção, e `users` representa a credencial do único cliente autorizado. O índice de `00006_single_manager.sql` limita a instalação a um único usuário. Funcionários continuam sendo registros operacionais sem credenciais.
+
+O usuário autenticado será resolvido no servidor a cada requisição protegida. O cliente não envia `account_id` no corpo, query string ou cabeçalho. O servidor valida a sessão, carrega o usuário ativo e obtém o `account_id` pela relação persistida `users.account_id`; a aplicação passa esse escopo ao serviço da funcionalidade. Assim, o cadastro de funcionários deixa de depender de uma conta fixa na inicialização do processo.
+
+A coluna `login_name` ainda não define se o identificador será nome de usuário ou e-mail. Como não há requisito de recuperação por e-mail, a recomendação inicial é um nome de usuário definido no bootstrap; caso seja escolhido e-mail, será necessário definir também o fluxo de recuperação sem expor a existência da conta.
+
+Proposta de tabela para sessões, ainda sujeita à migração:
+
+| tabela | campos principais | responsabilidade |
+| --- | --- | --- |
+| `sessions` | `id`, `user_id UUID REFERENCES users(id)`, `token_hash BYTEA UNIQUE`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis no servidor. `token_hash` guarda o SHA-256 do token aleatório entregue ao navegador; o valor original não é persistido. A sessão aponta para `user_id`, e a conta é obtida pela relação do usuário. |
+
+A senha em `users.password_hash` não será cifrada para recuperação. Será armazenada como hash Argon2id com salt aleatório gerado pela biblioteca e parâmetros codificados junto ao resultado, para permitir atualização do custo. Como ponto de partida, usar pelo menos `m=19456 KiB, t=2, p=1` e medir o custo no runtime de produção. Aplicar limite de tentativas e de verificações concorrentes para que o custo intencional do hash não permita esgotar recursos. A configuração de senha proposta é mínimo de 15 caracteres, suporte a pelo menos 64, sem regras artificiais de mistura de caracteres, com aceitação de gerenciadores e colagem. O NIST recomenda esses limites para senha usada como fator único; conferir também senhas comuns ou comprometidas. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
+
+O bootstrap criará a conta e o usuário em uma transação, por um processo de uso único antes de abrir o acesso público. Não haverá cadastro público. O caminho operacional desse bootstrap e a recuperação se a senha for perdida precisam ser definidos junto com o deploy. A troca de senha autenticada deverá exigir a senha atual e revogar as sessões existentes.
+
+Para produção, a sessão será enviada em cookie `__Host-agrofin_session` com `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` e sem `Domain`. O token terá 32 bytes aleatórios gerados por `crypto/rand`; o servidor validará a expiração e a revogação. O tempo ocioso e o prazo absoluto da sessão ainda precisam ser ajustados ao uso no celular. Logout revoga a sessão no banco e expira o cookie no navegador. Tokens de autenticação não serão guardados em `localStorage` nem `sessionStorage`. [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) e [MDN: cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies).
+
+O modelo de publicação mantém interface e API na mesma origem, com a API sob `/api`; o proxy do Vite segue essa forma no desenvolvimento. A produção exige HTTPS. Como cookies são enviados automaticamente pelo navegador, `SameSite` será apenas uma camada: toda operação que altera dados, inclusive login, também validará `Origin` contra a origem pública configurada e rejeitará requisições `cross-site` quando os cabeçalhos Fetch Metadata estiverem presentes. Rotas `GET` não alteram dados, e a API não habilita CORS com credenciais. Se no futuro web e API forem separados por origem, será necessário rever CORS e a defesa CSRF antes de publicar essa arquitetura. [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+
 ## Relações principais
 
 ```mermaid

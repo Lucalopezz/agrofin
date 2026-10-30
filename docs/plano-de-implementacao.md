@@ -87,11 +87,65 @@ O `main` monta o handler sem conta, e o POST responde `503` antes de chamar o se
 
 Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e conta e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com a conta, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria sua própria conta e remove somente seus registros ao terminar.
 
+### identidade e autenticação propostas
+
+O código atual ainda não autentica: `main` monta o handler de funcionários com `accountID` vazio e o POST responde `503`. A autenticação abaixo é uma proposta de arquitetura, não comportamento entregue.
+
+#### modelo de identidade
+
+- `accounts` é a fronteira dos dados de uma produção. `users` é a credencial do cliente que administra essa conta; funcionários continuam sem login. As migrações já relacionam uma conta a no máximo um usuário e limitam a instalação a um gerente.
+- Criar a conta e o primeiro usuário juntos em uma transação por um processo de bootstrap de uso único, antes de abrir o acesso público. Não oferecer cadastro anônimo. Definir o procedimento operacional de bootstrap e recuperação ao validar o deploy.
+- A sessão identifica `user_id`; em cada requisição privada, a API verifica sessão e usuário ativo e obtém `account_id` por `users.account_id`. Ela cria um principal de servidor (`user_id`, `account_id`) e o disponibiliza no contexto da requisição. O handler de funcionários lê esse principal e passa a conta como argumento explícito ao serviço. Não aceitar conta do corpo, query string ou cabeçalho enviado pelo cliente.
+- Manter a implementação concreta no pacote `internal/auth`, com serviço de autenticação, repositório de usuários/sessões, middleware e handlers das rotas de autenticação. O `main` compõe essas dependências e protege as rotas de negócio. Não criar um pacote genérico de identidade até existir outro consumidor real.
+
+```mermaid
+flowchart TD
+    Browser["Navegador na mesma origem"] -->|"login e cookie"| API["API Go"]
+    API --> Auth["internal/auth"]
+    Auth -->|"verifica Argon2id"| Users[("users")]
+    Auth -->|"grava somente SHA-256 do token"| Sessions[("sessions")]
+    Auth -->|"Set-Cookie HttpOnly Secure"| Browser
+    Browser -->|"cookie em /api"| Middleware["middleware de sessão"]
+    Middleware -->|"consulta hash do token"| Sessions
+    Middleware --> Users
+    Users --> Accounts[("accounts")]
+    Middleware -->|"principal: user_id + account_id"| Employees["handler de funcionários"]
+    Employees -->|"account_id do servidor"| DB[("PostgreSQL")]
+```
+
+#### senha
+
+Senha não é dado para cifrar e recuperar: armazenar somente um hash adaptativo Argon2id com salt aleatório, parâmetros e versão codificados no formato do hash. Começar no mínimo recomendado pela OWASP (`m=19456 KiB, t=2, p=1`), medir no ambiente publicado e aumentar o custo quando viável. Se aceitar Unicode, normalizar de forma consistente antes de gerar e verificar o hash. Recalcular o hash após login válido se os parâmetros antigos ficarem abaixo dos atuais. Nunca registrar senha ou hash em logs. A cifra autenticada dos valores financeiros continua sendo uma proteção separada.
+
+Como política inicial, exigir 15 caracteres, aceitar ao menos 64, permitir espaços, Unicode, colar e usar gerenciadores de senhas; evitar regras de composição e troca periódica. Rejeitar senhas comuns ou comprometidas. Limitar tentativas de login em um mecanismo compartilhado entre instâncias e limitar a concorrência de verificações Argon2id, pois o algoritmo consome memória e CPU deliberadamente. Ao ler parâmetros do hash, aceitar somente algoritmos e custos dentro de limites configurados para impedir que um valor alterado no banco force consumo arbitrário de recursos. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
+
+#### sessão e cookie
+
+- Preferir sessão opaca mantida no PostgreSQL, em vez de JWT no navegador: um token aleatório de 32 bytes gerado por `crypto/rand` vai no cookie; o banco guarda somente SHA-256 desse token, associado a usuário, criação, última atividade, expiração e revogação. Por ser aleatório de alta entropia, o token não precisa de hash lento de senha.
+- Emitir em produção `__Host-agrofin_session; Secure; HttpOnly; SameSite=Lax; Path=/`, sem `Domain`. Usar HTTPS em toda a aplicação. O cookie não fica acessível ao JavaScript; tokens de autenticação também não vão para `localStorage` ou `sessionStorage`.
+- Renovar a sessão após login, revogar no banco no logout e expirar o cookie na resposta. Aplicar prazo ocioso e absoluto no servidor; os valores exatos precisam equilibrar a operação no celular e o risco de dispositivo perdido. Mudança de senha revoga todas as sessões existentes.
+
+#### origem e csrf
+
+Manter a interface e a API na mesma origem, com `/api` encaminhado ao Go pelo proxy do Vite em desenvolvimento e pelo deploy em produção. Configurar a origem pública permitida explicitamente; não derivá-la de `Host` ou de cabeçalhos de proxy arbitrários. A API não habilita CORS com credenciais. Para operações de estado, inclusive login, exigir `Origin` igual à origem configurada, rejeitar `Sec-Fetch-Site: cross-site` quando presente e usar somente métodos não seguros (`POST`, `PATCH`, `DELETE`) para alterar estado. Nenhum `GET` pode alterar dados. `SameSite=Lax` é defesa em profundidade; uma origem irmã ainda precisa falhar na comparação exata. Se o frontend ou a API passarem a usar outra origem, revisar CSRF e CORS antes dessa mudança. [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+
+#### rotas e ordem de implementação
+
+```text
+POST /api/v1/auth/login   # credenciais; cria sessão e cookie
+POST /api/v1/auth/logout  # revoga sessão e limpa cookie
+GET  /api/v1/auth/me      # informa se há sessão válida e dados públicos mínimos
+```
+
+Não haverá rota de cadastro de usuário. Primeiro implementar bootstrap e hash; depois sessão e cookie; em seguida login/logout e middleware; então ligar o principal por requisição às rotas de funcionários e remover o `503` provisório. Proteger também a listagem vazia atual, para que nenhuma rota de negócio permaneça pública por acidente. A rota de login deve devolver erro genérico para usuário inexistente e senha inválida, aplicar limitação de tentativas e não revelar se existe conta. Respostas de login e sessão devem usar `Cache-Control: no-store`.
+
+Antes de produção, validar pelo menos: acesso sem sessão retorna `401`; sessão expirada ou revogada falha; logout invalida o token no servidor; `account_id` forjado é ignorado/rejeitado; cada rota privada obtém a conta pelo usuário autenticado; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
+
 ## Sequência sugerida
 
 | etapa | entrega verificável |
 | --- | --- |
-| 1. base técnica | Protótipo com uma página React chamando uma rota Go sob `/api` no mesmo preview da Vercel; desenvolvimento local equivalente, banco, migrações e autenticação. |
+| 1. base técnica | Validar React e Go sob a mesma origem; criar a conta e o usuário pelo bootstrap; implementar login, sessão, cookie, proteção de origem e principal por requisição; então liberar o cadastro autenticado de funcionários. |
 | 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
 | 3. vendas e despesas | Registrar venda por classificação, desconto e recebimento; registrar energia e demais despesas; mostrar painel com vendido, recebido, devido, pago e saldo de caixa separados. |
 | 4. insumos e calendário | Registrar produto, compra, estoque e pulverização; permitir cadastro rápido; mostrar calendário e mudança das fases da Lua. |
