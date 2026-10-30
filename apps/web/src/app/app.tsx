@@ -1,14 +1,52 @@
-import { HomePage } from '@/features/inicio/pages/home-page'
+import { useEffect, useState } from 'react'
+import { DashboardLayout, type DemoPage } from '@/features/painel/components/dashboard-layout'
+import { LandingPage } from '@/features/inicio/pages/landing-page'
+import { DashboardPage } from '@/features/painel/pages/dashboard-page'
+import { ColheitaPage } from '@/features/colheita/pages/colheita-page'
+import { PagamentosPage } from '@/features/pagamentos/pages/pagamentos-page'
+import { VendasPage } from '@/features/vendas/pages/vendas-page'
+import { DespesasPage } from '@/features/despesas/pages/despesas-page'
+import { InsumosPage } from '@/features/insumos/pages/insumos-page'
+import { PulverizacoesPage } from '@/features/pulverizacoes/pages/pulverizacoes-page'
+import { CalendarioPage } from '@/features/calendario/pages/calendario-page'
+import { RelatoriosPage } from '@/features/relatorios/pages/relatorios-page'
+
+type Route = DemoPage | 'landing'
+
+function readRoute(): Route {
+  const slug = window.location.hash.replace(/^#\/demo\/?/, '')
+  const pages: DemoPage[] = ['inicio', 'colheitas', 'pagamentos', 'vendas', 'despesas', 'insumos', 'pulverizacoes', 'calendario', 'relatorios']
+  return pages.includes(slug as DemoPage) ? slug as DemoPage : 'landing'
+}
 
 export function App() {
-  return (
-    <div className="min-h-dvh">
-      <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-5 py-5">
-          <img src="/images/marca/logo-agrofin.png" alt="agrofin" width={960} height={326} className="h-12 w-auto" />
-        </div>
-      </header>
-      <main id="conteudo" className="mx-auto max-w-4xl px-5 py-10 sm:py-16"><HomePage /></main>
-    </div>
-  )
+  const [route, setRoute] = useState<Route>(readRoute)
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(readRoute())
+    window.addEventListener('hashchange', syncRoute)
+    return () => window.removeEventListener('hashchange', syncRoute)
+  }, [])
+
+  function navigate(page: Route) {
+    const hash = page === 'landing' ? '#/' : `#/demo/${page}`
+    if (window.location.hash === hash) setRoute(page)
+    else window.location.hash = hash
+  }
+
+  if (route === 'landing') return <LandingPage onOpenDemo={() => navigate('inicio')} />
+
+  const pageContent = {
+    inicio: <DashboardPage onNavigate={navigate} />,
+    colheitas: <ColheitaPage />,
+    pagamentos: <PagamentosPage />,
+    vendas: <VendasPage />,
+    despesas: <DespesasPage />,
+    insumos: <InsumosPage />,
+    pulverizacoes: <PulverizacoesPage onNavigate={navigate} />,
+    calendario: <CalendarioPage />,
+    relatorios: <RelatoriosPage />,
+  }[route]
+
+  return <DashboardLayout page={route} onNavigate={navigate}>{pageContent}</DashboardLayout>
 }

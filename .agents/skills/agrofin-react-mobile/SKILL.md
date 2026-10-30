@@ -17,6 +17,7 @@ Leia [os fluxos mobile](../../../docs/fluxos-mobile.md) e os [critérios de acei
 
 - Priorize as ações de registrar caixas, pagar funcionário e registrar pulverização. Permita registrar vários funcionários mantendo a data, com confirmação clara do total antes de salvar.
 - Use rótulos diretos, áreas de toque confortáveis, foco visível e erros junto aos campos. Confira a tela com teclado do celular aberto e sem rolagem horizontal. Não dependa só de cor ou ícone para comunicar estado.
+- Comece cada frase visível, título, rótulo, botão e mensagem com letra maiúscula; use capitalização de frase, sem colocar todas as palavras em maiúscula.
 - Mostre vendido, recebido, devido e pago com nomes diferentes. Um estado sem registros não deve parecer falha de conexão.
 - O cadastro rápido de insumo deve devolver o usuário ao formulário de pulverização com o rascunho intacto.
 

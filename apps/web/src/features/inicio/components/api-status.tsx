@@ -33,7 +33,7 @@ export function ApiStatus() {
 
   return (
     <section className="rounded-2xl border bg-secondary p-5" aria-labelledby="conexao-titulo">
-      <h2 id="conexao-titulo" className="font-medium">ambiente de desenvolvimento</h2>
+      <h2 id="conexao-titulo" className="font-medium">Ambiente de desenvolvimento</h2>
       <p role="status" className="mt-2 text-sm text-muted-foreground">
         {status === 'checking' ? 'Verificando conexão com a API…' : status === 'connected' ? 'Conexão com a API funcionando.' : 'Não foi possível conectar à API. Confira se o serviço está iniciado.'}
       </p>

@@ -2,7 +2,7 @@
 
 ## contexto e estado atual
 
-Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, API Go mínima com conexão ao PostgreSQL e migrações do esquema; a rota de funcionários ainda devolve uma listagem vazia e o frontend React possui uma base com Vite, Tailwind e shadcn, sem telas de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
+Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, uma API Go com conexão ao PostgreSQL e migrações do esquema; a rota de funcionários ainda devolve uma listagem vazia. O frontend React tem uma landing page e telas demonstrativas com dados mockados; elas não implementam nem persistem os fluxos de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
 
 Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/requisitos.md) e [critérios de aceite](docs/criterios-de-aceite.md) para entender o comportamento. Consulte o [modelo de dados](docs/modelo-de-dados.md), os [fluxos mobile](docs/fluxos-mobile.md) e o [plano de implementação](docs/plano-de-implementacao.md) conforme a tarefa. Não transforme uma decisão pendente em regra definitiva sem evidência ou resposta do usuário.
 
@@ -16,7 +16,8 @@ Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/re
 - Ausência de lançamento em um dia não representa falta nem gera penalidade.
 - Valores financeiros exigem proteção contra vazamento isolado do banco. Não introduzir persistência em texto claro de tarifas, preços, pagamentos, recebimentos ou despesas. Consultar a skill de dados financeiros antes de alterar essa área.
 - Em textos de produto e documentação, usar **cliente** para o administrador da produção. Não registrar relação familiar ou dados pessoais do caso que motivou o projeto.
-- Documentação e interface em português, acompanhando o material atual. Identificadores de código podem usar inglês. Manter títulos em minúsculas.
+- Documentação e interface em português, acompanhando o material atual. Identificadores de código podem usar inglês.
+- Começar toda frase, título, rótulo, botão e mensagem visível na interface com letra maiúscula. Usar capitalização de frase, sem colocar todas as palavras em maiúscula.
 
 ## skills locais
 

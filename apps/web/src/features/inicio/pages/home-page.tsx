@@ -5,7 +5,7 @@ export function HomePage() {
   return (
     <div className="space-y-8">
       <section className="space-y-4">
-        <p className="text-sm font-medium text-primary">gestão da produção de limão</p>
+        <p className="text-sm font-medium text-primary">Gestão da produção de limão</p>
         <h1 className="max-w-xl text-3xl font-semibold tracking-tight sm:text-4xl">Mais simplicidade na rotina do campo.</h1>
         <p className="max-w-xl leading-relaxed text-muted-foreground">Um lugar para acompanhar a colheita, os pagamentos e os cuidados com a produção.</p>
         {/* O srcSet evita baixar a foto maior quando a largura e a densidade da tela permitem usar a menor. */}

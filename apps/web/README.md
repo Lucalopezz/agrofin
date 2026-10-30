@@ -1,6 +1,15 @@
 # Frontend do agrofin
 
-Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A página inicial está disponível; as telas de negócio ainda serão implementadas.
+Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A interface inclui uma landing page e um painel navegável de demonstração para apresentar os fluxos previstos do agrofin.
+
+## demonstração visual
+
+- A landing page abre em `http://localhost:5173/`; use **explorar o painel** para entrar no protótipo.
+- O painel tem páginas de visão geral, colheitas, pagamentos, vendas, despesas, insumos, pulverizações, calendário e relatórios.
+- Os formulários de colheita, pagamento, venda, despesa e pulverização simulam prévias, confirmações e atualizações em memória no navegador.
+- Todos os dados são fictícios. A demonstração não lê nem grava lançamentos na API ou no banco e não substitui autenticação, validação ou regras de negócio do servidor.
+
+As páginas e interações são material de apresentação; os fluxos de negócio continuam pendentes de integração e validação com o cliente.
 
 ## Desenvolvimento
 
