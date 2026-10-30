@@ -29,6 +29,8 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	require.NoError(t, err, "configurar o banco de teste")
 	defer pool.Close()
+	unlockIntegrationDatabase := acquireIntegrationDatabaseLock(t, ctx, pool)
+	defer unlockIntegrationDatabase()
 
 	var userID string
 	err = pool.QueryRow(ctx, "INSERT INTO users (login_name, password_hash) VALUES ($1, $2) RETURNING id::text", "teste-funcionarios", "hash-de-teste").Scan(&userID)
@@ -47,7 +49,7 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 
 	service := NewService(NewRepository(pool))
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, NewHandler(service))
+	RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
 	// Uma conexão HTTP real exercita rota, JSON, serviço e SQL juntos.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCtx := auth.WithPrincipal(r.Context(), auth.Principal{UserID: userID})
@@ -103,4 +105,20 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM employees WHERE user_id = $1", userID).Scan(&count)
 	require.NoError(t, err, "contar funcionários após cancelamento")
 	assert.Equal(t, 2, count)
+}
+
+func acquireIntegrationDatabaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) func() {
+	t.Helper()
+	connection, err := pool.Acquire(ctx)
+	require.NoError(t, err, "reservar conexão para serializar integrações")
+	const lockKey int64 = 2026103001
+	_, err = connection.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey)
+	require.NoError(t, err, "serializar testes que usam o gerente único")
+	return func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, err := connection.Exec(cleanupCtx, "SELECT pg_advisory_unlock($1)", lockKey)
+		assert.NoError(t, err, "liberar trava de integração")
+		connection.Release()
+	}
 }
