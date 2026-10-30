@@ -61,6 +61,8 @@ func matchesSetupToken(expected, provided string) bool {
 	if len(provided) == 0 || len(provided) > 256 {
 		return false
 	}
+
+	// Usa o hash SHA-256 para comparar os tokens de forma segura, evitando ataques de timing.
 	expectedHash := sha256.Sum256([]byte(expected))
 	providedHash := sha256.Sum256([]byte(provided))
 	return subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) == 1

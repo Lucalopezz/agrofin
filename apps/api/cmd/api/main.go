@@ -55,7 +55,9 @@ func run() error {
 	funcionarios.RegisterRoutes(apiMux, handler)
 
 	// O token de configuração fica somente no ambiente do servidor e é usado uma vez para criar o gerente.
-	authHandler := auth.NewHandler(auth.NewRepository(pool), os.Getenv("AUTH_SETUP_TOKEN"))
+	authRepo := auth.NewRepository(pool)
+	authService := auth.NewService(authRepo)
+	authHandler := auth.NewHandler(authService, os.Getenv("AUTH_SETUP_TOKEN"))
 	auth.RegisterRoutes(apiMux, authHandler)
 
 	mux := http.NewServeMux()

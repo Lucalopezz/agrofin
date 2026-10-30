@@ -2,6 +2,8 @@ package auth
 
 import "errors"
 
+var ErrManagerAlreadyRegistered = errors.New("auth: gerente já cadastrado")
+
 type validationError struct {
 	message string
 }
