@@ -81,17 +81,17 @@ O serviço recebe o ID do gerente e o nome, normaliza e valida o nome e monta `E
 
 O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `user_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
 
-O `main` monta o handler sem um gerente autenticado, e o POST responde `503` antes de chamar o serviço. O login deverá fornecer o `user_id` do gerente autenticado por requisição. Esse identificador nunca é aceito no corpo ou cabeçalho do cadastro. Os testes fornecem um ID diretamente para verificar o fluxo independentemente da futura autenticação.
+O middleware de sessão valida o cookie e anexa o `user_id` confirmado ao contexto por requisição. As rotas `GET /employees` e `POST /employees` exigem sessão; o handler também responde `401` se for usado sem o middleware. Esse identificador nunca é aceito no corpo ou cabeçalho do cadastro. Os testes de handler fornecem um principal controlado e os testes de integração passam pelo fluxo HTTP com o vínculo do gerente.
 
-**Ainda pendente:** middleware de autenticação que popula o principal da requisição, listagem persistida, renomeação e desativação. O tipo `auth.Principal` já reserva `user_id` no contexto; as regras permanecem no serviço e o SQL no repositório.
+**Ainda pendente:** listagem persistida, renomeação e desativação. O tipo `auth.Principal` transporta a identidade validada pelo middleware; as regras permanecem no serviço e o SQL no repositório.
 
 Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e `user_id` e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com o gerente, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria seu gerente de teste e remove somente os registros criados por ele ao terminar.
 
-### identidade e autenticação propostas
+### identidade e autenticação implementadas
 
 O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. As migrações limitam esta instalação a um único gerente. O cadastro inicial está em `POST /api/v1/auth/register`, recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado por `AUTH_SETUP_TOKEN` e só funciona antes de existir usuário.
 
-O hash de senha Argon2id, a rota `register` e o tipo de principal no contexto estão implementados. Login, sessão, cookie, CSRF e middleware continuam pendentes. Quando houver sessão, o middleware resolverá o `user_id` no servidor e os handlers passarão esse valor aos serviços. O cliente nunca envia o `user_id` de proprietário dos dados.
+O cadastro inicial, login, logout, consulta da sessão, cookie e middleware estão implementados. O middleware resolve o token opaco no PostgreSQL e anexa o `user_id` ao contexto; o cliente nunca escolhe esse vínculo. A sessão expira após sete dias sem atividade ou trinta dias desde o login. Cada login ganha um token novo de 32 bytes aleatórios; somente SHA-256 é persistido. Credenciais inexistentes, senha incorreta e usuário inativo recebem a mesma resposta. Verificações Argon2id são limitadas a duas simultâneas por processo; limitar tentativas por IP fica para a borda antes da publicação.
 
 ```mermaid
 flowchart TD
@@ -111,13 +111,13 @@ flowchart TD
 
 Senha não é dado para cifrar e recuperar: armazenar somente um hash adaptativo Argon2id com salt aleatório, parâmetros e versão codificados no formato PHC. O cadastro atual usa `m=19456 KiB, t=2, p=1`, sujeito a medição no runtime publicado. A entrada é normalizada em Unicode NFC e aceita de 15 a 128 caracteres. Uma lista local bloqueia algumas senhas conhecidamente fracas; uma lista ampla e atualizável de senhas comprometidas ainda precisa ser definida. Nunca registrar senha ou hash em logs. A cifra autenticada dos valores financeiros continua sendo uma proteção separada. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
 
-No login, limitar tentativas em mecanismo compartilhado entre instâncias e limitar a concorrência de verificações Argon2id, pois o algoritmo consome memória e CPU deliberadamente. Ao verificar o hash, aceitar somente algoritmos e custos dentro de limites configurados para impedir que um valor alterado no banco force consumo arbitrário de recursos.
+Ao verificar o hash, aceitar somente Argon2id e parâmetros dentro de limites rígidos para impedir que um hash alterado no banco force consumo arbitrário de recursos. O processo limita a duas verificações Argon2id concorrentes para conter consumo de memória. Ainda não há limite de frequência de logins; antes da publicação, configurar rate limiting na borda confiável, que conhece o IP real e evita uma tabela de contadores no banco da aplicação.
 
 #### sessão, cookie e origem
 
-- Preferir sessão opaca mantida no PostgreSQL: gerar token aleatório de 32 bytes com `crypto/rand`, enviar no cookie e guardar somente SHA-256 do token, com usuário, criação, última atividade, expiração e revogação.
-- Em produção, emitir `__Host-agrofin_session; Secure; HttpOnly; SameSite=Lax; Path=/`, sem `Domain`, sempre por HTTPS. Renovar a sessão após login, revogar no banco no logout e expirar o cookie na resposta. Não guardar token em `localStorage` nem `sessionStorage`.
-- Manter interface e API na mesma origem, com `/api` encaminhado ao Go. Validar `Origin` contra a origem pública configurada em todas as operações que alteram estado e rejeitar `Sec-Fetch-Site: cross-site` quando presente. A API não habilita CORS com credenciais; nenhum `GET` altera dados. `SameSite=Lax` é defesa em profundidade, não substitui a validação de origem.
+- A tabela `sessions` guarda usuário, hash do token, criação, última atividade, expiração absoluta e revogação. Cada requisição autenticada atualiza `last_seen_at`; sessões revogadas ou vencidas não resolvem um principal.
+- Em produção, emitir `__Host-agrofin_session; Secure; HttpOnly; SameSite=Lax; Path=/`, sem `Domain`, sempre por HTTPS. No HTTP local, usar `agrofin_session` sem `Secure` para permitir o navegador de desenvolvimento. A configuração exige que `SESSION_COOKIE_SECURE` corresponda ao esquema de `PUBLIC_ORIGIN`. Logout revoga no banco e expira o cookie. Tokens não ficam em `localStorage` nem `sessionStorage`.
+- Manter interface e API na mesma origem. Todas as operações diferentes de `GET`, `HEAD` e `OPTIONS` validam `Origin`, rejeitam `Sec-Fetch-Site` diferente de `same-origin` quando presente e exigem o cabeçalho `X-Agrofin-Request: 1`. A API não habilita CORS com credenciais. `SameSite=Lax` é defesa em profundidade, não substitui essa validação.
 
 #### rotas e ordem de implementação
 
@@ -128,7 +128,7 @@ POST ${API_PREFIX}/auth/logout    # revoga sessão e limpa cookie
 GET  ${API_PREFIX}/auth/me        # informa se há sessão válida e dados públicos mínimos
 ```
 
-Próximo: implementar login e sessões; depois middleware e proteção de origem; então ligar o `user_id` autenticado às rotas de funcionários e remover o `503` provisório. Proteger também a listagem vazia atual para que nenhuma rota de negócio permaneça pública por acidente. Login deve devolver erro genérico para usuário inexistente e senha inválida, aplicar limitação de tentativas e usar `Cache-Control: no-store`.
+Todas as rotas de negócio existentes exigem sessão. Rotas de autenticação devolvem `Cache-Control: no-store`; o cadastro inicial, login e logout também passam pela proteção de origem. Ainda não há interface web para login; clientes HTTP devem enviar o cabeçalho `X-Agrofin-Request: 1` e a origem configurada.
 
 Antes de produção, validar: sessão expirada ou revogada falha; logout invalida o token no servidor; `user_id` forjado é ignorado/rejeitado; cada rota privada obtém o gerente pela sessão; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
 
@@ -136,7 +136,7 @@ Antes de produção, validar: sessão expirada ou revogada falha; logout invalid
 
 | etapa | entrega verificável |
 | --- | --- |
-| 1. base técnica | React e Go sob a mesma origem, PostgreSQL e cadastro/Argon2id estão disponíveis; próximo implementar login, sessão, cookie, proteção CSRF e middleware que popula o principal por requisição para liberar o cadastro autenticado de funcionários. |
+| 1. base técnica | React e Go sob a mesma origem, PostgreSQL, cadastro/Argon2id, sessão em cookie, proteção de origem e middleware que protege as rotas privadas estão disponíveis. |
 | 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
 | 3. vendas e despesas | Registrar venda por classificação, desconto e recebimento; registrar energia e demais despesas; mostrar painel com vendido, recebido, devido, pago e saldo de caixa separados. |
 | 4. insumos e calendário | Registrar produto, compra, estoque e pulverização; permitir cadastro rápido; mostrar calendário e mudança das fases da Lua. |

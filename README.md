@@ -43,7 +43,7 @@ compose.yaml           serviços para desenvolvimento local
    cp .env.example .env
    ```
 
-   No `.env`, substitua `POSTGRES_PASSWORD` por uma senha hexadecimal longa. Se já tiver um `.env`, preserve as credenciais existentes.
+   No `.env`, substitua `POSTGRES_PASSWORD` por uma senha hexadecimal longa e atualize a mesma senha em `TEST_DATABASE_URL`. Se já tiver um `.env`, preserve as credenciais existentes. `PUBLIC_ORIGIN` e `SESSION_COOKIE_SECURE=false` vêm ajustados para o frontend local em HTTP; em produção, configure a origem HTTPS e `SESSION_COOKIE_SECURE=true`.
 
 3. Inicie os serviços:
 
@@ -57,7 +57,7 @@ compose.yaml           serviços para desenvolvimento local
    curl http://127.0.0.1:8080/api/v1/health
    ```
 
-As portas e o prefixo da API podem ser alterados no `.env`. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
+As portas, o prefixo da API e a origem pública podem ser alterados no `.env`. O cookie de sessão local não usa `Secure` para funcionar em HTTP; a API exige `Secure` quando `PUBLIC_ORIGIN` usa HTTPS. Alterações no código atualizam o frontend e reiniciam a API automaticamente.
 
 ## Comandos úteis
 
@@ -70,7 +70,7 @@ As portas e o prefixo da API podem ser alterados no `.env`. Alterações no cód
 | Verificar o frontend | `docker compose exec web pnpm run lint` e `docker compose exec web pnpm run build` |
 | Parar serviços, preservando o banco | `docker compose down` |
 
-Para executar os testes Go, rode `go test ./...` em `apps/api`. O CI também verifica migrações, integração com PostgreSQL e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
+Para executar os testes Go com a integração PostgreSQL, carregue `.env` no shell e rode `go test ./...` em `apps/api`; o banco separado `agrofin_test` já está configurado em `TEST_DATABASE_URL` e precisa estar migrado. Sem essa variável no ambiente, os testes unitários rodam e a integração é ignorada. O CI também verifica migrações e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
 
 ## Documentação
 

@@ -1,6 +1,6 @@
 # Modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. O cadastro inicial do gerente e o hash Argon2id estão implementados. Login, sessões, cookies, criptografia de valores e gravação dos demais fluxos de negócio continuam pendentes.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Criptografia de valores e gravação dos demais fluxos de negócio continuam pendentes.
 
 ## Princípios do modelo
 
@@ -14,11 +14,12 @@ Este documento descreve o esquema relacional inicial implementado nas migraçõe
 
 ## Entidades migradas
 
-As 21 tabelas abaixo são criadas pelas seis migrações. O diagrama mostra as chaves estrangeiras; as definições completas de colunas, índices e restrições estão nos arquivos SQL.
+As 22 tabelas abaixo são criadas pelas sete migrações. O diagrama mostra as chaves estrangeiras; as definições completas de colunas, índices e restrições estão nos arquivos SQL.
 
 | tabela | campos e relações principais | responsabilidade |
 | --- | --- | --- |
-| `users` | `id`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. O cadastro grava a senha como hash Argon2id; login e sessões ainda não foram implementados. Um índice único impede cadastrar outro gerente na instalação. |
+| `users` | `id`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. A senha usa Argon2id. Um índice único impede cadastrar outro gerente na instalação. |
+| `sessions` | `id`, `user_id`, `token_hash`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis; guarda somente SHA-256 do token aleatório enviado no cookie. A validade é limitada por sete dias de inatividade e trinta dias absolutos. |
 | `employees` | `id`, `user_id`, `name`, `active`, `deactivated_at` | Cadastro mínimo de pessoas que trabalham na produção, sem login. O estado ativo só controla a disponibilidade para novos lançamentos; desativar preserva o histórico e não acontece por ausência em uma semana. |
 | `harvest_rates` | `id`, `user_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas por tipo de caixa e vigência. Funcionário opcional permite representar uma tarifa geral ou uma tarifa individual. |
 | `harvests` | `id`, `user_id`, `employee_id`, `harvest_date`, `created_by` | Cabeçalho de um lançamento de colheita para uma pessoa e uma data. Não restringir a um único cabeçalho por dia; isso permite correções e mais de um lançamento sem sobrescrever dados. |
@@ -40,25 +41,23 @@ As 21 tabelas abaixo são criadas pelas seis migrações. O diagrama mostra as c
 | `stock_movements` | `id`, `user_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
 | `audit_events` | `id`, `user_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
 
-## identidade e sessões propostas
+## identidade e sessões
 
 `users` representa o gerente que autentica na API. `employees` representa as pessoas da equipe e não contém credenciais. Não há tabela `accounts`: cada registro de negócio guarda `user_id`, que identifica o gerente dono dos dados. O índice de `00006_single_manager.sql` limita a instalação local a um gerente.
 
 O cadastro de gerente está disponível em `POST ${API_PREFIX}/auth/register` (por padrão, `POST /api/v1/auth/register`). Ele recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado no servidor em `AUTH_SETUP_TOKEN` e só funciona antes de existir um usuário. Esse token protege o primeiro cadastro; não há cadastro contínuo. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
 
-Login, sessão e middleware ainda não foram implementados. Quando existirem, a API resolverá o `user_id` da sessão no servidor e passará esse identificador aos serviços. O cliente não poderá escolher `user_id` pelo corpo, query string ou cabeçalho. `API_PREFIX` configura em um único lugar o prefixo das rotas (padrão `/api/v1`). O login usará `login_name`, sem recuperação por e-mail nesta primeira versão.
-
-Proposta de tabela para sessões, ainda sujeita à migração:
+Login, sessão e middleware estão implementados. A API resolve o `user_id` da sessão no servidor e passa esse identificador aos serviços. O cliente não pode escolher `user_id` pelo corpo, query string ou cabeçalho. `API_PREFIX` configura em um único lugar o prefixo das rotas (padrão `/api/v1`). O login usa `login_name`, sem recuperação por e-mail nesta primeira versão.
 
 | tabela | campos principais | responsabilidade |
 | --- | --- | --- |
 | `sessions` | `id`, `user_id UUID REFERENCES users(id)`, `token_hash BYTEA UNIQUE`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis no servidor. `token_hash` guarda o SHA-256 do token aleatório entregue ao navegador; o valor original não é persistido. |
 
-O cadastro atual armazena `users.password_hash` como hash Argon2id com salt aleatório e parâmetros codificados no formato PHC; a senha não pode ser recuperada por decifragem. O custo inicial é `m=19456 KiB, t=2, p=1`, sujeito a medição no runtime de produção. A entrada é normalizada em Unicode NFC e aceita de 15 a 128 caracteres. Uma lista local bloqueia algumas senhas notoriamente fracas; ela não substitui uma lista ampla e atualizável de senhas comprometidas. Login ainda não foi implementado; quando for, tentativas e concorrência do Argon2id precisarão de limites. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
+O cadastro armazena `users.password_hash` como hash Argon2id com salt aleatório e parâmetros codificados no formato PHC; a senha não pode ser recuperada por decifragem. O custo inicial é `m=19456 KiB, t=2, p=1`, sujeito a medição no runtime publicado. A entrada é normalizada em Unicode NFC e aceita de 15 a 128 caracteres. Uma lista local bloqueia algumas senhas notoriamente fracas; ela não substitui uma lista ampla e atualizável de senhas comprometidas. O verificador rejeita algoritmos desconhecidos e limita memória, iterações e paralelismo do hash persistido; duas operações Argon2id podem ocorrer ao mesmo tempo por processo. Limitação de frequência de tentativas por IP ainda deve ser configurada na borda antes da publicação. [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) e [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html).
 
-Para produção, a sessão será enviada em cookie `__Host-agrofin_session` com `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` e sem `Domain`. O token terá 32 bytes aleatórios gerados por `crypto/rand`; o servidor validará a expiração e a revogação. O tempo ocioso e o prazo absoluto da sessão ainda precisam ser ajustados ao uso no celular. Logout revoga a sessão no banco e expira o cookie no navegador. Tokens de autenticação não serão guardados em `localStorage` nem `sessionStorage`. [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) e [MDN: cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies).
+O token de 32 bytes aleatórios é codificado para o cookie, e somente seu SHA-256 é persistido. A sessão vence após sete dias sem atividade ou trinta dias absolutos; logout revoga a linha no banco. Em HTTPS, o cookie se chama `__Host-agrofin_session` e recebe `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` e nenhum `Domain`. No desenvolvimento HTTP, usa `agrofin_session` sem `Secure`; essa exceção depende de `SESSION_COOKIE_SECURE=false` e `PUBLIC_ORIGIN=http://localhost:5173`. Em produção, configure origem HTTPS e `SESSION_COOKIE_SECURE=true`. Tokens não são guardados em `localStorage` nem `sessionStorage`. [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) e [MDN: cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies).
 
-O modelo de publicação mantém interface e API na mesma origem, com a API sob `/api`; o proxy do Vite segue essa forma no desenvolvimento. A produção exige HTTPS. Como cookies são enviados automaticamente pelo navegador, `SameSite` será apenas uma camada: toda operação que altera dados, inclusive login, também validará `Origin` contra a origem pública configurada e rejeitará requisições `cross-site` quando os cabeçalhos Fetch Metadata estiverem presentes. Rotas `GET` não alteram dados, e a API não habilita CORS com credenciais. Se no futuro web e API forem separados por origem, será necessário rever CORS e a defesa CSRF antes de publicar essa arquitetura. [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
+O modelo mantém interface e API na mesma origem, com a API sob `/api`; o proxy do Vite segue essa forma no desenvolvimento. A produção exige HTTPS. Todas as operações que alteram estado validam `Origin`, rejeitam `Sec-Fetch-Site` diferente de `same-origin` quando presente e exigem `X-Agrofin-Request: 1`; a API não habilita CORS com credenciais. Se no futuro web e API forem separados por origem, será necessário rever CORS e a defesa CSRF antes de publicar essa arquitetura. A aplicação não limita a frequência de logins por IP; configure esse limite na borda/proxy antes de expor a API publicamente. [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html).
 
 ## Relações principais
 
