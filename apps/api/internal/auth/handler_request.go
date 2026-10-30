@@ -25,24 +25,25 @@ func decodeRegisterRequest(w http.ResponseWriter, r *http.Request) (*registerReq
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var input *registerRequest
-	if err := decoder.Decode(&input); err == nil && input != nil {
+	decodeErr := decoder.Decode(&input)
+	if decodeErr == nil && input != nil {
 		var extra any
 		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
 			if trailingErr == nil {
-				err = errors.New("mais de um valor json")
+				decodeErr = errors.New("mais de um valor json")
 			} else {
-				err = trailingErr
+				decodeErr = trailingErr
 			}
 		}
-	} else if err == nil {
-		err = errors.New("objeto json obrigatório")
+	} else if decodeErr == nil {
+		decodeErr = errors.New("objeto json obrigatório")
 	}
 	var sizeErr *http.MaxBytesError
-	if errors.As(err, &sizeErr) {
+	if errors.As(decodeErr, &sizeErr) {
 		writeError(w, http.StatusRequestEntityTooLarge, "corpo da requisição excede 4 KiB")
 		return nil, false
 	}
-	if err != nil || input == nil {
+	if decodeErr != nil || input == nil {
 		writeError(w, http.StatusBadRequest, "envie um único objeto JSON com login_name e password")
 		return nil, false
 	}
