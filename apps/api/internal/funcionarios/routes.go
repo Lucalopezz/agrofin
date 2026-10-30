@@ -6,11 +6,14 @@ import (
 	"net/http"
 )
 
-// RegisterRoutes mantém as rotas de funcionários junto da funcionalidade,
-// enquanto o main apenas compõe as partes da API.
-func RegisterRoutes(mux *http.ServeMux, handler *Handler) {
-	mux.HandleFunc("GET /employees", listEmployees)
-	mux.HandleFunc("POST /employees", handler.create)
+// RegisterRoutes mantém as rotas de funcionários privadas e recebe o middleware na composição da API.
+func RegisterRoutes(mux *http.ServeMux, handler *Handler, requireSession func(http.Handler) http.Handler) {
+	// A listagem também é privada: mesmo retornando uma lista vazia hoje, ela não
+	// deve virar uma rota pública por acidente quando ganhar persistência.
+	mux.Handle("GET /employees", requireSession(http.HandlerFunc(listEmployees)))
+	// O middleware envolve o handler: primeiro autentica, depois o handler pode
+	// ler o principal e chamar o Service de funcionários.
+	mux.Handle("POST /employees", requireSession(http.HandlerFunc(handler.create)))
 }
 
 func listEmployees(w http.ResponseWriter, _ *http.Request) {

@@ -32,7 +32,7 @@ func TestCreateEmployeeHandler(t *testing.T) {
 		expectedCalls int
 	}{
 		{name: "cadastro", body: `{"name":"Ana"}`, contentType: "application/json; charset=utf-8", expectedCode: 201, expectedCalls: 1},
-		{name: "sem gerente autenticado", body: `{"name":"Ana"}`, contentType: "application/json", unconfigured: true, expectedCode: 503},
+		{name: "sem gerente autenticado", body: `{"name":"Ana"}`, contentType: "application/json", unconfigured: true, expectedCode: 401},
 		{name: "sem content type", body: `{"name":"Ana"}`, expectedCode: 415},
 		{name: "tipo não suportado", body: `{"name":"Ana"}`, contentType: "text/plain", expectedCode: 415},
 		{name: "json inválido", body: `{"name":`, contentType: "application/json", expectedCode: 400},
@@ -70,7 +70,7 @@ func TestCreateEmployeeHandler(t *testing.T) {
 				ctx = auth.WithPrincipal(ctx, auth.Principal{UserID: userID})
 			}
 			mux := http.NewServeMux()
-			RegisterRoutes(mux, NewHandler(service))
+			RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
 			req := httptest.NewRequest(http.MethodPost, "/employees", strings.NewReader(tt.body)).WithContext(ctx)
 			req.Header.Set("Content-Type", tt.contentType)
 			response := httptest.NewRecorder()

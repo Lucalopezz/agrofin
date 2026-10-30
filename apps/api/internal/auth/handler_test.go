@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,15 @@ type managerRegistrarFunc func(context.Context, string, string) error
 
 func (f managerRegistrarFunc) RegisterManager(ctx context.Context, loginName, password string) error {
 	return f(ctx, loginName, password)
+}
+
+func (f managerRegistrarFunc) Login(ctx context.Context, loginName, password string) (createdSession, error) {
+	err := f(ctx, loginName, password)
+	return createdSession{Token: "test-session-token", ExpiresAt: time.Now().Add(time.Hour)}, err
+}
+
+func (f managerRegistrarFunc) Logout(ctx context.Context, _ string) error {
+	return f(ctx, "", "")
 }
 
 func TestRegisterHandler(t *testing.T) {
@@ -72,7 +82,7 @@ func TestRegisterHandler(t *testing.T) {
 				setupToken = ""
 			}
 			mux := http.NewServeMux()
-			RegisterRoutes(mux, NewHandler(registrar, setupToken))
+			RegisterRoutes(mux, NewHandler(registrar, HandlerConfig{SetupToken: setupToken}), func(next http.Handler) http.Handler { return next })
 			request := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(tt.body)).WithContext(ctx)
 			if tt.contentType != "" {
 				request.Header.Set("Content-Type", tt.contentType)
@@ -119,4 +129,66 @@ func TestMatchesSetupToken(t *testing.T) {
 			assert.Equal(t, tt.want, matchesSetupToken("segredo", tt.provided))
 		})
 	}
+}
+
+func TestLoginHandlerSetsHttpOnlySessionCookie(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	registrar := managerRegistrarFunc(func(gotCtx context.Context, loginName, password string) error {
+		assert.Same(t, ctx, gotCtx)
+		assert.Equal(t, "Gerente_1", loginName)
+		assert.Equal(t, "UmaSenhaForteComMaisDe15Caracteres", password)
+		return nil
+	})
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(registrar, HandlerConfig{CookieSecure: true}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(`{"login_name":"Gerente_1","password":"UmaSenhaForteComMaisDe15Caracteres"}`)).WithContext(ctx)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	assert.NotContains(t, response.Body.String(), "test-session-token")
+	assert.NotContains(t, response.Body.String(), "UmaSenhaForteComMaisDe15Caracteres")
+	var body sessionResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	assert.True(t, body.Authenticated)
+	cookies := response.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, secureSessionCookieName, cookies[0].Name)
+	assert.True(t, cookies[0].Secure)
+	assert.True(t, cookies[0].HttpOnly)
+	assert.Equal(t, http.SameSiteLaxMode, cookies[0].SameSite)
+}
+
+func TestLogoutHandlerRevokesAndClearsCookie(t *testing.T) {
+	var gotToken string
+	registrar := managerRegistrarFunc(func(_ context.Context, _, _ string) error { return nil })
+	handler := NewHandler(registrar, HandlerConfig{})
+	handler.service = logoutServiceStub{handlerService: handler.service, token: &gotToken}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, handler, func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
+	request.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "opaque-session-token"})
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNoContent, response.Code)
+	assert.Equal(t, "opaque-session-token", gotToken)
+	cookies := response.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, localSessionCookieName, cookies[0].Name)
+	assert.Equal(t, -1, cookies[0].MaxAge)
+	assert.True(t, cookies[0].HttpOnly)
+}
+
+type logoutServiceStub struct {
+	handlerService
+	token *string
+}
+
+func (s logoutServiceStub) Logout(_ context.Context, token string) error {
+	*s.token = token
+	return nil
 }

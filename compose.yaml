@@ -50,6 +50,8 @@ services:
       DATABASE_URL: "postgres://${POSTGRES_USER:?Defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?Defina POSTGRES_DB no .env}?sslmode=disable"
       API_PREFIX: ${API_PREFIX:-/api/v1}
       AUTH_SETUP_TOKEN: ${AUTH_SETUP_TOKEN:-}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Defina PUBLIC_ORIGIN no .env}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:?Defina SESSION_COOKIE_SECURE no .env}
     ports:
       - "127.0.0.1:${API_PORT:-8080}:8080"
     healthcheck:

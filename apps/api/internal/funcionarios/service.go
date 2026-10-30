@@ -22,6 +22,8 @@ func NewService(repo employeeCreator) *Service {
 // Create valida o nome e monta a entidade antes de solicitar sua gravação.
 // userID é fornecido pelo chamador confiável, separado do nome do cadastro.
 func (s *Service) Create(ctx context.Context, userID, name string) (Employee, error) {
+	// A identidade vem de um chamador confiável (o handler após middleware); o
+	// nome, por vir do cliente, precisa passar pelas regras do domínio.
 	name, err := normalizeName(name)
 	if err != nil {
 		return Employee{}, err
