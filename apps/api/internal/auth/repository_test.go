@@ -55,6 +55,8 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	service := NewService(repository)
 	created, err := service.Login(ctx, loginName, password)
 	require.NoError(t, err)
+	otherSession, err := service.Login(ctx, loginName, password)
+	require.NoError(t, err)
 	tokenBytes, err := base64.RawURLEncoding.DecodeString(created.Token)
 	require.NoError(t, err)
 	tokenHash := sha256.Sum256(tokenBytes)
@@ -76,6 +78,17 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	assert.Equal(t, "Nome atualizado", updatedProfile.Name)
 	assert.Equal(t, loginName, updatedProfile.LoginName, "alterar o nome não deve alterar o login")
 
+	const newPassword = "OutraSenhaForteComMaisDe15Caracteres"
+	require.NoError(t, service.ChangePassword(ctx, userID, password, newPassword))
+	_, err = service.AuthenticateSession(ctx, created.Token)
+	assert.ErrorIs(t, err, ErrInvalidSession, "trocar a senha deve revogar a sessão usada")
+	_, err = service.AuthenticateSession(ctx, otherSession.Token)
+	assert.ErrorIs(t, err, ErrInvalidSession, "a troca também revoga sessões abertas em outros navegadores")
+	_, err = service.Login(ctx, loginName, password)
+	assert.ErrorIs(t, err, ErrInvalidCredentials, "a senha anterior deixa de autenticar")
+	newSession, err := service.Login(ctx, loginName, newPassword)
+	require.NoError(t, err, "a nova senha deve autenticar")
+
 	require.NoError(t, service.SetManagerActive(ctx, userID, false))
 	var revoked bool
 	err = pool.QueryRow(ctx, "SELECT revoked_at IS NOT NULL FROM sessions WHERE token_hash = $1", tokenHash[:]).Scan(&revoked)
@@ -83,6 +96,10 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	assert.True(t, revoked, "desativar a conta deve invalidar todas as sessões existentes")
 	_, err = service.AuthenticateSession(ctx, created.Token)
 	assert.ErrorIs(t, err, ErrInvalidSession)
+	_, err = service.AuthenticateSession(ctx, newSession.Token)
+	assert.ErrorIs(t, err, ErrInvalidSession, "desativar a conta também revoga as sessões criadas depois da troca")
 	_, err = service.Login(ctx, loginName, password)
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
+	_, err = service.Login(ctx, loginName, newPassword)
 	assert.ErrorIs(t, err, ErrInvalidCredentials)
 }

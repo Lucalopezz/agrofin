@@ -15,6 +15,7 @@ type handlerService interface {
 	Logout(ctx context.Context, token string) error
 	GetManagerProfile(ctx context.Context, userID string) (ManagerProfile, error)
 	UpdateManagerName(ctx context.Context, userID, name string) (ManagerProfile, error)
+	ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error
 	SetManagerActive(ctx context.Context, userID string, active bool) error
 }
 
@@ -138,6 +139,46 @@ func (h *Handler) updateName(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, newManagerProfileResponse(profile))
+}
+
+func (h *Handler) changePassword(w http.ResponseWriter, r *http.Request) {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "autenticação necessária")
+		return
+	}
+	input, ok := decodePasswordChangeRequest(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.service.ChangePassword(r.Context(), principal.UserID, input.CurrentPassword, input.NewPassword); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidCredentials):
+			writeError(w, http.StatusUnauthorized, "senha atual incorreta")
+		case errors.Is(err, ErrInvalidSession):
+			clearSessionCookie(w, h.cookieSecure)
+			writeError(w, http.StatusUnauthorized, "sessão inválida; entre novamente")
+		case errors.Is(err, ErrPasswordChangeConflict):
+			// Outra troca ou desativação já pode ter revogado este cookie.
+			clearSessionCookie(w, h.cookieSecure)
+			writeError(w, http.StatusConflict, "a conta mudou durante a operação; entre novamente")
+		case errors.Is(err, ErrAuthenticationBusy):
+			writeError(w, http.StatusServiceUnavailable, "autenticação temporariamente indisponível")
+		case isValidationError(err):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			log.Print("falha ao trocar a senha do gerente")
+			writeError(w, http.StatusInternalServerError, "não foi possível trocar a senha")
+		}
+		return
+	}
+
+	// A transação já revogou todas as sessões; apagar o cookie sinaliza ao
+	// navegador que o cliente precisa autenticar de novo com a senha recém-alterada.
+	clearSessionCookie(w, h.cookieSecure)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {

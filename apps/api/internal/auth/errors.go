@@ -9,6 +9,7 @@ var ErrInvalidCredentials = errors.New("auth: credenciais inválidas")
 var ErrInvalidSession = errors.New("auth: sessão inválida")
 var ErrAuthenticationBusy = errors.New("auth: autenticação temporariamente ocupada")
 var ErrActivationRequiresOperator = errors.New("auth: ativação exige intervenção de operador")
+var ErrPasswordChangeConflict = errors.New("auth: estado da senha mudou durante a operação")
 
 var errManagerNotFound = errors.New("auth: gerente não encontrado")
 

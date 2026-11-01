@@ -28,6 +28,11 @@ type managerStatusPatchRequest struct {
 	Active *bool `json:"active"`
 }
 
+type passwordChangeRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 // decodeCredentialsRequest valida o formato de login; as regras do login ficam no Service.
 func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (*credentialsRequest, bool) {
 	var input *credentialsRequest
@@ -76,6 +81,20 @@ func decodeManagerStatusPatchRequest(w http.ResponseWriter, r *http.Request) (*m
 	}
 	if input == nil || input.Active == nil {
 		writeError(w, http.StatusBadRequest, "active é obrigatório e deve ser true ou false")
+		return nil, false
+	}
+	return input, true
+}
+
+// decodePasswordChangeRequest aceita as duas senhas necessárias; confirmação
+// de senha é validação de formulário e não precisa ser enviada à API.
+func decodePasswordChangeRequest(w http.ResponseWriter, r *http.Request) (*passwordChangeRequest, bool) {
+	var input *passwordChangeRequest
+	if !decodeJSONRequest(w, r, &input) {
+		return nil, false
+	}
+	if input == nil || input.CurrentPassword == "" || input.NewPassword == "" {
+		writeError(w, http.StatusBadRequest, "current_password e new_password são obrigatórios")
 		return nil, false
 	}
 	return input, true

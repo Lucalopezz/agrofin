@@ -60,6 +60,23 @@ func (r *Repository) FindManager(ctx context.Context, loginName string) (Manager
 	return manager, nil
 }
 
+// FindManagerByID carrega a credencial da conta identificada pelo principal da sessão.
+func (r *Repository) FindManagerByID(ctx context.Context, userID string) (Manager, error) {
+	var manager Manager
+	err := r.pool.QueryRow(ctx, `
+		SELECT id::text, name, login_name, password_hash, active
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(&manager.ID, &manager.Name, &manager.LoginName, &manager.PasswordHash, &manager.Active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Manager{}, errManagerNotFound
+	}
+	if err != nil {
+		return Manager{}, errors.New("não foi possível consultar a credencial do gerente")
+	}
+	return manager, nil
+}
+
 // FindManagerProfile lê somente dados públicos para /auth/me, sem carregar o hash da senha.
 func (r *Repository) FindManagerProfile(ctx context.Context, userID string) (ManagerProfile, error) {
 	var profile ManagerProfile
@@ -93,6 +110,47 @@ func (r *Repository) UpdateManagerName(ctx context.Context, manager Manager) (Ma
 		return ManagerProfile{}, errors.New("não foi possível atualizar o nome do gerente")
 	}
 	return profile, nil
+}
+
+// UpdateManagerPassword atualiza a senha e revoga as sessões na mesma transação.
+// Assim, um cookie emitido antes da troca nunca continua válido com a senha nova.
+func (r *Repository) UpdateManagerPassword(ctx context.Context, change ManagerPasswordChange) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return errors.New("não foi possível iniciar a troca de senha")
+	}
+	defer func() {
+		// O rollback precisa terminar mesmo se o contexto HTTP já tiver sido cancelado.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+
+	result, err := tx.Exec(ctx, `
+		UPDATE users
+		SET password_hash = $1
+		WHERE id = $2 AND password_hash = $3 AND active = true
+	`, change.NewPasswordHash, change.UserID, change.PreviousPasswordHash)
+	if err != nil {
+		return errors.New("não foi possível atualizar a senha")
+	}
+	if result.RowsAffected() != 1 {
+		// Pode significar que outra troca venceu a corrida ou que a conta foi
+		// desativada após o middleware validar esta requisição.
+		return ErrPasswordChangeConflict
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE sessions
+		SET revoked_at = now()
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, change.UserID); err != nil {
+		return errors.New("não foi possível revogar as sessões após a troca de senha")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return errors.New("não foi possível finalizar a troca de senha")
+	}
+	return nil
 }
 
 // SetManagerActive grava o estado e revoga sessões na mesma transação para que

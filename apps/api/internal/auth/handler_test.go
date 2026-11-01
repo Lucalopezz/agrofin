@@ -29,6 +29,10 @@ func (f managerRegistrarFunc) Logout(ctx context.Context, _ string) error {
 	return f(ctx, "", "", "")
 }
 
+func (managerRegistrarFunc) ChangePassword(context.Context, string, string, string) error {
+	return nil
+}
+
 func (managerRegistrarFunc) GetManagerProfile(_ context.Context, userID string) (ManagerProfile, error) {
 	return ManagerProfile{ID: userID, Name: "Gerente", LoginName: "gerente", Active: true}, nil
 }
@@ -171,14 +175,18 @@ func TestLogoutHandlerRevokesAndClearsCookie(t *testing.T) {
 
 type managerProfileServiceStub struct {
 	handlerService
-	profile       ManagerProfile
-	profileErr    error
-	updatedUserID string
-	updatedName   string
-	updateErr     error
-	activeUserID  string
-	activeValue   bool
-	statusErr     error
+	profile         ManagerProfile
+	profileErr      error
+	updatedUserID   string
+	updatedName     string
+	updateErr       error
+	activeUserID    string
+	activeValue     bool
+	statusErr       error
+	passwordUserID  string
+	currentPassword string
+	newPassword     string
+	passwordErr     error
 }
 
 func (s *managerProfileServiceStub) GetManagerProfile(context.Context, string) (ManagerProfile, error) {
@@ -202,6 +210,13 @@ func (s *managerProfileServiceStub) SetManagerActive(_ context.Context, userID s
 		return ErrActivationRequiresOperator
 	}
 	return s.statusErr
+}
+
+func (s *managerProfileServiceStub) ChangePassword(_ context.Context, userID, currentPassword, newPassword string) error {
+	s.passwordUserID = userID
+	s.currentPassword = currentPassword
+	s.newPassword = newPassword
+	return s.passwordErr
 }
 
 func TestMeHandlerReturnsManagerProfile(t *testing.T) {
@@ -241,6 +256,56 @@ func TestUpdateManagerNameHandlerDoesNotChangeLoginName(t *testing.T) {
 	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
 	assert.Equal(t, "Novo Nome", body.User.Name)
 	assert.Equal(t, "login-fixo", body.User.LoginName)
+}
+
+func TestChangePasswordHandlerUsesCurrentPrincipalAndClearsCookie(t *testing.T) {
+	service := &managerProfileServiceStub{}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"SenhaAtualComMaisDe15Caracteres","new_password":"NovaSenhaComMaisDe15Caracteres"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "current-session"})
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNoContent, response.Code)
+	assert.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	assert.Empty(t, response.Body.String())
+	assert.Equal(t, "manager-id", service.passwordUserID)
+	assert.Equal(t, "SenhaAtualComMaisDe15Caracteres", service.currentPassword)
+	assert.Equal(t, "NovaSenhaComMaisDe15Caracteres", service.newPassword)
+	cookies := response.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, -1, cookies[0].MaxAge)
+}
+
+func TestChangePasswordHandlerDoesNotAcceptConfirmationField(t *testing.T) {
+	service := &managerProfileServiceStub{}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"senha-atual","new_password":"senha-nova","confirm_password":"senha-nova"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assert.Empty(t, service.passwordUserID, "campo desconhecido deve ser rejeitado antes de chamar o Service")
+}
+
+func TestChangePasswordHandlerMapsWrongCurrentPassword(t *testing.T) {
+	service := &managerProfileServiceStub{passwordErr: ErrInvalidCredentials}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"senha-atual","new_password":"senha-nova"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusUnauthorized, response.Code)
+	assert.Contains(t, response.Body.String(), "senha atual incorreta")
 }
 
 func TestUpdateManagerStatusDeactivatesAndClearsCookie(t *testing.T) {

@@ -19,8 +19,10 @@ type managerCreator interface {
 type authRepository interface {
 	managerCreator
 	FindManager(ctx context.Context, loginName string) (Manager, error)
+	FindManagerByID(ctx context.Context, userID string) (Manager, error)
 	FindManagerProfile(ctx context.Context, userID string) (ManagerProfile, error)
 	UpdateManagerName(ctx context.Context, manager Manager) (ManagerProfile, error)
+	UpdateManagerPassword(ctx context.Context, change ManagerPasswordChange) error
 	SetManagerActive(ctx context.Context, manager Manager) error
 	CreateSession(ctx context.Context, session Session) error
 	ResolveSession(ctx context.Context, tokenHash []byte) (Principal, error)
@@ -100,6 +102,63 @@ func (s *Service) UpdateManagerName(ctx context.Context, userID, name string) (M
 		return ManagerProfile{}, err
 	}
 	return s.repo.UpdateManagerName(ctx, Manager{ID: userID, Name: name})
+}
+
+// ChangePassword confirma a senha atual, valida e calcula o hash da nova senha
+// antes de pedir a persistência. Após salvar, o Repository revoga todas as sessões.
+func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, newPassword string) error {
+	// Verificar a senha atual e calcular a nova envolve Argon2id; a mesma barreira
+	// do login mantém esse trabalho limitado a duas operações simultâneas.
+	if err := s.acquirePasswordWork(ctx); err != nil {
+		return err
+	}
+	defer s.releasePasswordWork()
+
+	// Procurar o gerente pelo ID da sessão evita que um usuário malicioso tente trocar a
+	// senha de outra conta apenas conhecendo o login_name. O Repository compara o hash
+	manager, err := s.repo.FindManagerByID(ctx, userID)
+	if errors.Is(err, errManagerNotFound) {
+		return ErrInvalidSession
+	}
+	if err != nil {
+		return err
+	}
+	if !manager.Active {
+		return ErrInvalidSession
+	}
+
+	currentPassword, err = normalizePasswordInput(currentPassword)
+	if err != nil || !verifyPasswordHash(manager.PasswordHash, currentPassword) {
+		// O principal já identifica a conta; ainda assim, uma senha atual incorreta
+		// não deve revelar detalhes do hash ou do estado interno da conta.
+		return ErrInvalidCredentials
+	}
+
+	newPassword, err = validateNewPassword(newPassword, manager.LoginName)
+	if err != nil {
+		return err
+	}
+	if newPassword == currentPassword {
+		return invalidInput("a nova senha deve ser diferente da senha atual")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	newPasswordHash, err := hashPasswordMaterial(newPassword)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	// O Repository compara o hash anterior dentro da transação. Isso impede que
+	// duas trocas concorrentes sobrescrevam silenciosamente uma à outra.
+	return s.repo.UpdateManagerPassword(ctx, ManagerPasswordChange{
+		UserID:               manager.ID,
+		PreviousPasswordHash: manager.PasswordHash,
+		NewPasswordHash:      newPasswordHash,
+	})
 }
 
 // SetManagerActive aceita desativação por uma sessão válida; a reativação ainda

@@ -17,22 +17,26 @@ import (
 type managerCreatorFunc func(context.Context, Manager) error
 
 type authRepositoryStub struct {
-	manager           Manager
-	loginName         string
-	findErr           error
-	profile           ManagerProfile
-	findProfileErr    error
-	updatedManager    Manager
-	updateProfileErr  error
-	statusManager     Manager
-	setStatusErr      error
-	session           Session
-	createSessionErr  error
-	resolvedPrincipal Principal
-	resolveSessionErr error
-	resolvedTokenHash []byte
-	revokedTokenHash  []byte
-	revokeSessionErr  error
+	manager            Manager
+	loginName          string
+	findErr            error
+	managerByID        Manager
+	findManagerByIDErr error
+	profile            ManagerProfile
+	findProfileErr     error
+	updatedManager     Manager
+	updateProfileErr   error
+	statusManager      Manager
+	setStatusErr       error
+	passwordChange     ManagerPasswordChange
+	changePasswordErr  error
+	session            Session
+	createSessionErr   error
+	resolvedPrincipal  Principal
+	resolveSessionErr  error
+	resolvedTokenHash  []byte
+	revokedTokenHash   []byte
+	revokeSessionErr   error
 }
 
 func (r *authRepositoryStub) CreateManager(context.Context, Manager) error { return nil }
@@ -45,6 +49,10 @@ func (r *authRepositoryStub) FindManager(_ context.Context, loginName string) (M
 	return r.manager, nil
 }
 
+func (r *authRepositoryStub) FindManagerByID(context.Context, string) (Manager, error) {
+	return r.managerByID, r.findManagerByIDErr
+}
+
 func (r *authRepositoryStub) FindManagerProfile(context.Context, string) (ManagerProfile, error) {
 	return r.profile, r.findProfileErr
 }
@@ -52,6 +60,11 @@ func (r *authRepositoryStub) FindManagerProfile(context.Context, string) (Manage
 func (r *authRepositoryStub) UpdateManagerName(_ context.Context, manager Manager) (ManagerProfile, error) {
 	r.updatedManager = manager
 	return r.profile, r.updateProfileErr
+}
+
+func (r *authRepositoryStub) UpdateManagerPassword(_ context.Context, change ManagerPasswordChange) error {
+	r.passwordChange = change
+	return r.changePasswordErr
 }
 
 func (r *authRepositoryStub) SetManagerActive(_ context.Context, manager Manager) error {
@@ -82,12 +95,20 @@ func (managerCreatorFunc) FindManager(context.Context, string) (Manager, error) 
 	return Manager{}, errManagerNotFound
 }
 
+func (managerCreatorFunc) FindManagerByID(context.Context, string) (Manager, error) {
+	return Manager{}, errManagerNotFound
+}
+
 func (managerCreatorFunc) FindManagerProfile(context.Context, string) (ManagerProfile, error) {
 	return ManagerProfile{}, errManagerNotFound
 }
 
 func (managerCreatorFunc) UpdateManagerName(context.Context, Manager) (ManagerProfile, error) {
 	return ManagerProfile{}, errManagerNotFound
+}
+
+func (managerCreatorFunc) UpdateManagerPassword(context.Context, ManagerPasswordChange) error {
+	return errManagerNotFound
 }
 
 func (managerCreatorFunc) SetManagerActive(context.Context, Manager) error { return nil }
@@ -176,6 +197,54 @@ func TestServiceManagerProfile(t *testing.T) {
 		_, err := NewService(repo).UpdateManagerName(context.Background(), "manager-id", "  ")
 		assert.True(t, isValidationError(err))
 		assert.Empty(t, repo.updatedManager.ID)
+	})
+}
+
+func TestServiceChangePassword(t *testing.T) {
+	const currentPassword = "UmaSenhaForteComMaisDe15Caracteres"
+	const newPassword = "OutraSenhaForteComMaisDe15Caracteres"
+	currentHash, err := createPasswordHash(currentPassword, "gerente")
+	require.NoError(t, err)
+	manager := Manager{ID: "manager-id", LoginName: "gerente", PasswordHash: currentHash, Active: true}
+
+	t.Run("valida as duas senhas e envia somente hashes ao repository", func(t *testing.T) {
+		repo := &authRepositoryStub{managerByID: manager}
+		err := NewService(repo).ChangePassword(context.Background(), manager.ID, currentPassword, newPassword)
+		require.NoError(t, err)
+		assert.Equal(t, manager.ID, repo.passwordChange.UserID)
+		assert.Equal(t, currentHash, repo.passwordChange.PreviousPasswordHash)
+		assert.NotEqual(t, newPassword, repo.passwordChange.NewPasswordHash)
+		assert.True(t, verifyPasswordHash(repo.passwordChange.NewPasswordHash, newPassword))
+	})
+
+	t.Run("senha atual incorreta não altera a credencial", func(t *testing.T) {
+		repo := &authRepositoryStub{managerByID: manager}
+		err := NewService(repo).ChangePassword(context.Background(), manager.ID, "SenhaAtualErradaComTamanhoSuficiente", newPassword)
+		assert.ErrorIs(t, err, ErrInvalidCredentials)
+		assert.Empty(t, repo.passwordChange.UserID)
+	})
+
+	t.Run("nova senha inválida não chega ao repository", func(t *testing.T) {
+		repo := &authRepositoryStub{managerByID: manager}
+		err := NewService(repo).ChangePassword(context.Background(), manager.ID, currentPassword, "curta")
+		assert.True(t, isValidationError(err))
+		assert.Empty(t, repo.passwordChange.UserID)
+	})
+
+	t.Run("nova senha deve ser diferente da atual", func(t *testing.T) {
+		repo := &authRepositoryStub{managerByID: manager}
+		err := NewService(repo).ChangePassword(context.Background(), manager.ID, currentPassword, currentPassword)
+		assert.True(t, isValidationError(err))
+		assert.Empty(t, repo.passwordChange.UserID)
+	})
+
+	t.Run("conta inativa não pode trocar senha", func(t *testing.T) {
+		inactive := manager
+		inactive.Active = false
+		repo := &authRepositoryStub{managerByID: inactive}
+		err := NewService(repo).ChangePassword(context.Background(), manager.ID, currentPassword, newPassword)
+		assert.ErrorIs(t, err, ErrInvalidSession)
+		assert.Empty(t, repo.passwordChange.UserID)
 	})
 }
 

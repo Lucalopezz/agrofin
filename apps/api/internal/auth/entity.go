@@ -31,6 +31,14 @@ type ManagerProfile struct {
 	Active    bool
 }
 
+// ManagerPasswordChange leva ao Repository somente hashes, nunca senhas em
+// texto claro. O hash anterior funciona como condição de concorrência no UPDATE.
+type ManagerPasswordChange struct {
+	UserID               string
+	PreviousPasswordHash string
+	NewPasswordHash      string
+}
+
 // Session contém o hash do token, nunca o valor que será entregue ao navegador.
 type Session struct {
 	UserID string

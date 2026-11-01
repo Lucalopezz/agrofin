@@ -20,6 +20,10 @@
     {
       "key": "password",
       "value": "Limoes-Verdes!Teste2026"
+    },
+    {
+      "key": "new_password",
+      "value": "Limoes-Novos!Teste2026"
     }
   ],
   "item": [
@@ -182,6 +186,43 @@
           }
         ]
       }
+    },
+    {
+      "name": "Manual - Trocar senha",
+      "description": "Execute somente se quiser trocar a senha. A operação encerra todas as sessões e exige um novo login.",
+      "item": [
+        {
+          "name": "Trocar senha (encerra sessões)",
+          "request": {
+            "description": "Exige sessão ativa e a senha atual. Envia somente current_password e new_password; a confirmação é feita no formulário do frontend. Depois da resposta 204, atualize a variável password com o novo valor antes de entrar novamente.",
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me/password",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"current_password\":\"{{password}}\",\"new_password\":\"{{new_password}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     {
       "name": "Manual - Desativar conta",
