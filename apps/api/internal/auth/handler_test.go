@@ -14,24 +14,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type managerRegistrarFunc func(context.Context, string, string) error
+type managerRegistrarFunc func(context.Context, string, string, string) error
 
-func (f managerRegistrarFunc) RegisterManager(ctx context.Context, loginName, password string) error {
-	return f(ctx, loginName, password)
+func (f managerRegistrarFunc) RegisterManager(ctx context.Context, name, loginName, password string) error {
+	return f(ctx, name, loginName, password)
 }
 
 func (f managerRegistrarFunc) Login(ctx context.Context, loginName, password string) (createdSession, error) {
-	err := f(ctx, loginName, password)
+	err := f(ctx, "", loginName, password)
 	return createdSession{Token: "test-session-token", ExpiresAt: time.Now().Add(time.Hour)}, err
 }
 
 func (f managerRegistrarFunc) Logout(ctx context.Context, _ string) error {
-	return f(ctx, "", "")
+	return f(ctx, "", "", "")
 }
+
+func (managerRegistrarFunc) GetManagerProfile(_ context.Context, userID string) (ManagerProfile, error) {
+	return ManagerProfile{ID: userID, Name: "Gerente", LoginName: "gerente", Active: true}, nil
+}
+
+func (f managerRegistrarFunc) UpdateManagerName(ctx context.Context, userID, name string) (ManagerProfile, error) {
+	if err := f(ctx, name, "", ""); err != nil {
+		return ManagerProfile{}, err
+	}
+	return ManagerProfile{ID: userID, Name: name, LoginName: "gerente", Active: true}, nil
+}
+
+func (managerRegistrarFunc) SetManagerActive(context.Context, string, bool) error { return nil }
 
 func TestRegisterHandler(t *testing.T) {
 	const expectedToken = "token-de-configuracao"
-	const validBody = `{"login_name":"Gerente_1","password":"UmaSenhaForteComMaisDe15Caracteres"}`
+	const validBody = `{"name":"Gerente da Produção","login_name":"Gerente_1","password":"UmaSenhaForteComMaisDe15Caracteres"}`
 	tests := []struct {
 		name             string
 		body             string
@@ -41,10 +54,11 @@ func TestRegisterHandler(t *testing.T) {
 		serviceErr       error
 		expectedStatus   int
 		expectedCalls    int
+		expectedName     string
 		expectedLogin    string
 		expectedPassword string
 	}{
-		{name: "cadastro concluído", body: validBody, contentType: "application/json; charset=utf-8", token: expectedToken, expectedStatus: http.StatusCreated, expectedCalls: 1, expectedLogin: "Gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
+		{name: "cadastro concluído", body: validBody, contentType: "application/json; charset=utf-8", token: expectedToken, expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "Gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
 		{name: "token de configuração ausente no servidor", body: validBody, contentType: "application/json", token: expectedToken, disableSetup: true, expectedStatus: http.StatusServiceUnavailable},
 		{name: "token não enviado", body: validBody, contentType: "application/json", expectedStatus: http.StatusForbidden},
 		{name: "token inválido", body: validBody, contentType: "application/json", token: "outro-token", expectedStatus: http.StatusForbidden},
@@ -67,9 +81,12 @@ func TestRegisterHandler(t *testing.T) {
 			defer cancel()
 
 			calls := 0
-			registrar := managerRegistrarFunc(func(gotCtx context.Context, loginName, password string) error {
+			registrar := managerRegistrarFunc(func(gotCtx context.Context, name, loginName, password string) error {
 				calls++
 				assert.Same(t, ctx, gotCtx)
+				if tt.expectedName != "" {
+					assert.Equal(t, tt.expectedName, name)
+				}
 				if tt.expectedLogin != "" {
 					assert.Equal(t, tt.expectedLogin, loginName)
 					assert.Equal(t, tt.expectedPassword, password)
@@ -134,7 +151,7 @@ func TestMatchesSetupToken(t *testing.T) {
 func TestLoginHandlerSetsHttpOnlySessionCookie(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	registrar := managerRegistrarFunc(func(gotCtx context.Context, loginName, password string) error {
+	registrar := managerRegistrarFunc(func(gotCtx context.Context, _, loginName, password string) error {
 		assert.Same(t, ctx, gotCtx)
 		assert.Equal(t, "Gerente_1", loginName)
 		assert.Equal(t, "UmaSenhaForteComMaisDe15Caracteres", password)
@@ -164,7 +181,7 @@ func TestLoginHandlerSetsHttpOnlySessionCookie(t *testing.T) {
 
 func TestLogoutHandlerRevokesAndClearsCookie(t *testing.T) {
 	var gotToken string
-	registrar := managerRegistrarFunc(func(_ context.Context, _, _ string) error { return nil })
+	registrar := managerRegistrarFunc(func(_ context.Context, _, _, _ string) error { return nil })
 	handler := NewHandler(registrar, HandlerConfig{})
 	handler.service = logoutServiceStub{handlerService: handler.service, token: &gotToken}
 	mux := http.NewServeMux()
@@ -181,6 +198,116 @@ func TestLogoutHandlerRevokesAndClearsCookie(t *testing.T) {
 	assert.Equal(t, localSessionCookieName, cookies[0].Name)
 	assert.Equal(t, -1, cookies[0].MaxAge)
 	assert.True(t, cookies[0].HttpOnly)
+}
+
+type managerProfileServiceStub struct {
+	handlerService
+	profile       ManagerProfile
+	profileErr    error
+	updatedUserID string
+	updatedName   string
+	updateErr     error
+	activeUserID  string
+	activeValue   bool
+	statusErr     error
+}
+
+func (s *managerProfileServiceStub) GetManagerProfile(context.Context, string) (ManagerProfile, error) {
+	return s.profile, s.profileErr
+}
+
+func (s *managerProfileServiceStub) UpdateManagerName(_ context.Context, userID, name string) (ManagerProfile, error) {
+	s.updatedUserID = userID
+	s.updatedName = name
+	if s.updateErr != nil {
+		return ManagerProfile{}, s.updateErr
+	}
+	s.profile.Name = name
+	return s.profile, nil
+}
+
+func (s *managerProfileServiceStub) SetManagerActive(_ context.Context, userID string, active bool) error {
+	s.activeUserID = userID
+	s.activeValue = active
+	if active {
+		return ErrActivationRequiresOperator
+	}
+	return s.statusErr
+}
+
+func TestMeHandlerReturnsManagerProfile(t *testing.T) {
+	service := &managerProfileServiceStub{profile: ManagerProfile{
+		ID: "manager-id", Name: "Gerente", LoginName: "login-fixo", Active: true,
+	}}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodGet, "/auth/me", nil)
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	var body managerProfileHTTPResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	assert.True(t, body.Authenticated)
+	assert.Equal(t, userResponse{ID: "manager-id", Name: "Gerente", LoginName: "login-fixo", Active: true}, body.User)
+}
+
+func TestUpdateManagerNameHandlerDoesNotChangeLoginName(t *testing.T) {
+	service := &managerProfileServiceStub{profile: ManagerProfile{
+		ID: "manager-id", LoginName: "login-fixo", Active: true,
+	}}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me", strings.NewReader(`{"name":"Novo Nome"}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "manager-id", service.updatedUserID)
+	assert.Equal(t, "Novo Nome", service.updatedName)
+	var body managerProfileHTTPResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	assert.Equal(t, "Novo Nome", body.User.Name)
+	assert.Equal(t, "login-fixo", body.User.LoginName)
+}
+
+func TestUpdateManagerStatusDeactivatesAndClearsCookie(t *testing.T) {
+	service := &managerProfileServiceStub{}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/status", strings.NewReader(`{"active":false}`))
+	request.Header.Set("Content-Type", "application/json")
+	request.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "current-session"})
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	assert.Equal(t, "manager-id", service.activeUserID)
+	assert.False(t, service.activeValue)
+	var body managerStatusResponse
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+	assert.False(t, body.Active)
+	cookies := response.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, -1, cookies[0].MaxAge)
+}
+
+func TestUpdateManagerStatusRequiresOperatorForActivation(t *testing.T) {
+	service := &managerProfileServiceStub{}
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/status", strings.NewReader(`{"active":true}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusConflict, response.Code)
+	assert.Contains(t, response.Body.String(), "operador")
 }
 
 type logoutServiceStub struct {

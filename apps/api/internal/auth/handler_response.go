@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
@@ -14,6 +15,22 @@ type sessionResponse struct {
 	Authenticated bool `json:"authenticated"`
 }
 
+type userResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	LoginName string `json:"login_name"`
+	Active    bool   `json:"active"`
+}
+
+type managerProfileHTTPResponse struct {
+	Authenticated bool         `json:"authenticated"`
+	User          userResponse `json:"user"`
+}
+
+type managerStatusResponse struct {
+	Active bool `json:"active"`
+}
+
 type errorResponse struct {
 	Error string `json:"error"`
 }
@@ -21,6 +38,27 @@ type errorResponse struct {
 // writeError padroniza erros sem incluir detalhes internos de SQL ou criptografia.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
+}
+
+func newManagerProfileResponse(profile ManagerProfile) managerProfileHTTPResponse {
+	return managerProfileHTTPResponse{
+		Authenticated: true,
+		User:          userResponse(profile),
+	}
+}
+
+// writeManagerProfileError mantém validação, ausência e falha de persistência
+// separadas na borda HTTP sem expor mensagens do driver.
+func writeManagerProfileError(w http.ResponseWriter, err error, internalMessage string) {
+	switch {
+	case isValidationError(err):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, errManagerNotFound):
+		writeError(w, http.StatusNotFound, "conta não encontrada")
+	default:
+		log.Print(internalMessage)
+		writeError(w, http.StatusInternalServerError, internalMessage)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

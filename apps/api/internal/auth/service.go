@@ -19,6 +19,9 @@ type managerCreator interface {
 type authRepository interface {
 	managerCreator
 	FindManager(ctx context.Context, loginName string) (Manager, error)
+	FindManagerProfile(ctx context.Context, userID string) (ManagerProfile, error)
+	UpdateManagerName(ctx context.Context, manager Manager) (ManagerProfile, error)
+	SetManagerActive(ctx context.Context, manager Manager) error
 	CreateSession(ctx context.Context, session Session) error
 	ResolveSession(ctx context.Context, tokenHash []byte) (Principal, error)
 	RevokeSession(ctx context.Context, tokenHash []byte) error
@@ -49,10 +52,16 @@ func NewService(repo authRepository) *Service {
 
 // RegisterManager normaliza e valida as credenciais, gera o hash e só então
 // entrega ao Repository a entidade pronta para gravação.
-func (s *Service) RegisterManager(ctx context.Context, loginName, password string) error {
+func (s *Service) RegisterManager(ctx context.Context, name, loginName, password string) error {
+	// Nome público e login têm regras distintas: o nome pode conter espaços e
+	// acentos; o login continua normalizado pelo alfabeto definido em password.go.
+	name, err := normalizeManagerName(name)
+	if err != nil {
+		return err
+	}
 	// Normalizar antes de comparar ou persistir garante que o mesmo login não tenha
 	// variantes por espaços ou diferenças entre maiúsculas e minúsculas.
-	loginName, err := normalizeLoginName(loginName)
+	loginName, err = normalizeLoginName(loginName)
 	if err != nil {
 		return err
 	}
@@ -69,12 +78,37 @@ func (s *Service) RegisterManager(ctx context.Context, loginName, password strin
 	}
 
 	manager := Manager{
+		Name:         name,
 		LoginName:    loginName,
 		PasswordHash: passwordHash,
 		// O primeiro e único gerente já pode usar a API assim que o cadastro termina.
 		Active: true,
 	}
 	return s.repo.CreateManager(ctx, manager)
+}
+
+// GetManagerProfile busca os dados públicos do gerente autenticado, sem ler hash de senha.
+func (s *Service) GetManagerProfile(ctx context.Context, userID string) (ManagerProfile, error) {
+	return s.repo.FindManagerProfile(ctx, userID)
+}
+
+// UpdateManagerName valida o novo nome e entrega ao Repository uma entidade pronta.
+// LoginName fica deliberadamente fora da entidade parcial para não ser alterado.
+func (s *Service) UpdateManagerName(ctx context.Context, userID, name string) (ManagerProfile, error) {
+	name, err := normalizeManagerName(name)
+	if err != nil {
+		return ManagerProfile{}, err
+	}
+	return s.repo.UpdateManagerName(ctx, Manager{ID: userID, Name: name})
+}
+
+// SetManagerActive aceita desativação por uma sessão válida; reativar a única
+// conta exige operador, pois a própria conta não consegue autenticar desativada.
+func (s *Service) SetManagerActive(ctx context.Context, userID string, active bool) error {
+	if active {
+		return ErrActivationRequiresOperator
+	}
+	return s.repo.SetManagerActive(ctx, Manager{ID: userID, Active: false})
 }
 
 // Login verifica as credenciais sem revelar se o login existe e cria uma sessão opaca.

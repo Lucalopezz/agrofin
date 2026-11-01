@@ -33,7 +33,7 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	defer unlockIntegrationDatabase()
 
 	var userID string
-	err = pool.QueryRow(ctx, "INSERT INTO users (login_name, password_hash) VALUES ($1, $2) RETURNING id::text", "teste-funcionarios", "hash-de-teste").Scan(&userID)
+	err = pool.QueryRow(ctx, "INSERT INTO users (name, login_name, password_hash) VALUES ($1, $2, $3) RETURNING id::text", "Gerente de teste", "teste-funcionarios", "hash-de-teste").Scan(&userID)
 	require.NoError(t, err, "criar o gerente de teste")
 	defer func() {
 		// A limpeza tem prazo próprio para funcionar mesmo se o teste cancelar

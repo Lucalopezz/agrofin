@@ -45,7 +45,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API e as camadas de cadastro de funcionários estão implementados; o POST ainda depende da integração com o login para ficar disponível. A autenticação, os demais fluxos de escrita, a criptografia na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. Os demais fluxos de escrita, a criptografia de valores financeiros na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ### Organização interna do cadastro de funcionários
 
@@ -89,9 +89,9 @@ Os testes de serviço verificam normalização, bloqueio de nome vazio antes da 
 
 ### identidade e autenticação implementadas
 
-O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. As migrações limitam esta instalação a um único gerente. O cadastro inicial está em `POST /api/v1/auth/register`, recebe `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado por `AUTH_SETUP_TOKEN` e só funciona antes de existir usuário.
+O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. As migrações limitam esta instalação a um único gerente. O cadastro inicial está em `POST /api/v1/auth/register`, recebe `name`, `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado por `AUTH_SETUP_TOKEN` e só funciona antes de existir usuário.
 
-O cadastro inicial, login, logout, consulta da sessão, cookie e middleware estão implementados. O middleware resolve o token opaco no PostgreSQL e anexa o `user_id` ao contexto; o cliente nunca escolhe esse vínculo. A sessão expira após sete dias sem atividade ou trinta dias desde o login. Cada login ganha um token novo de 32 bytes aleatórios; somente SHA-256 é persistido. Credenciais inexistentes, senha incorreta e usuário inativo recebem a mesma resposta. Verificações Argon2id são limitadas a duas simultâneas por processo; limitar tentativas por IP fica para a borda antes da publicação.
+O cadastro inicial, login, logout, consulta da sessão, perfil, alteração de nome, desativação, cookie e middleware estão implementados. O cadastro recebe `name`, `login_name` e `password`; o nome é exibido no perfil e `login_name` permanece imutável pela API. `GET /auth/me` retorna o perfil autenticado. `PATCH /auth/me` atualiza somente `name`. `PATCH /auth/me/status` aceita desativação, encerra as sessões na mesma transação e limpa o cookie. Uma conta desativada não autentica. Como há apenas um gerente, reativar exige intervenção de operador; sessões antigas são revogadas e não voltam a funcionar. O middleware resolve o token opaco no PostgreSQL e anexa o `user_id` ao contexto; o cliente nunca escolhe esse vínculo. A sessão expira após sete dias sem atividade ou trinta dias desde o login. Cada login ganha um token novo de 32 bytes aleatórios; somente SHA-256 é persistido. Credenciais inexistentes, senha incorreta e usuário inativo recebem a mesma resposta. Verificações Argon2id são limitadas a duas simultâneas por processo; limitar tentativas por IP fica para a borda antes da publicação.
 
 ```mermaid
 flowchart TD
@@ -125,7 +125,9 @@ Ao verificar o hash, aceitar somente Argon2id e parâmetros dentro de limites r�
 POST ${API_PREFIX}/auth/register  # cadastro único do gerente; requer token de cadastro
 POST ${API_PREFIX}/auth/login     # credenciais; cria sessão e cookie
 POST ${API_PREFIX}/auth/logout    # revoga sessão e limpa cookie
-GET  ${API_PREFIX}/auth/me        # informa se há sessão válida e dados públicos mínimos
+GET  ${API_PREFIX}/auth/me        # retorna o perfil autenticado
+PATCH ${API_PREFIX}/auth/me       # altera somente o nome de exibição
+PATCH ${API_PREFIX}/auth/me/status # desativa a conta e revoga sessões; reativação por operador
 ```
 
 Todas as rotas de negócio existentes exigem sessão. Rotas de autenticação devolvem `Cache-Control: no-store`; o cadastro inicial, login e logout também passam pela proteção de origem. Ainda não há interface web para login; clientes HTTP devem enviar o cabeçalho `X-Agrofin-Request: 1` e a origem configurada.

@@ -14,9 +14,12 @@ const setupTokenHeader = "X-Agrofin-Setup-Token"
 // handlerService é o contrato HTTP mínimo; os handlers não conhecem SQL nem
 // implementam as regras de senha e sessão.
 type handlerService interface {
-	RegisterManager(ctx context.Context, loginName, password string) error
+	RegisterManager(ctx context.Context, name, loginName, password string) error
 	Login(ctx context.Context, loginName, password string) (createdSession, error)
 	Logout(ctx context.Context, token string) error
+	GetManagerProfile(ctx context.Context, userID string) (ManagerProfile, error)
+	UpdateManagerName(ctx context.Context, userID, name string) (ManagerProfile, error)
+	SetManagerActive(ctx context.Context, userID string, active bool) error
 }
 
 // HandlerConfig contém valores de configuração já lidos e validados pelo main.
@@ -50,12 +53,12 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	input, ok := decodeCredentialsRequest(w, r)
+	input, ok := decodeRegistrationRequest(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.service.RegisterManager(r.Context(), input.LoginName, input.Password); err != nil {
+	if err := h.service.RegisterManager(r.Context(), input.Name, input.LoginName, input.Password); err != nil {
 		switch {
 		case errors.Is(err, ErrManagerAlreadyRegistered):
 			writeError(w, http.StatusConflict, "cadastro do gerente já concluído")
@@ -121,13 +124,66 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	// A rota é protegida por middleware, mas esta guarda também protege o handler
-	// se for montado isoladamente em outro mux ou em um teste.
-	if _, ok := PrincipalFromContext(r.Context()); !ok {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "autenticação necessária")
 		return
 	}
-	writeJSON(w, http.StatusOK, sessionResponse{Authenticated: true})
+	profile, err := h.service.GetManagerProfile(r.Context(), principal.UserID)
+	if err != nil {
+		writeManagerProfileError(w, err, "não foi possível consultar o perfil do gerente")
+		return
+	}
+	writeJSON(w, http.StatusOK, newManagerProfileResponse(profile))
+}
+
+func (h *Handler) updateName(w http.ResponseWriter, r *http.Request) {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "autenticação necessária")
+		return
+	}
+	input, ok := decodeManagerNamePatchRequest(w, r)
+	if !ok {
+		return
+	}
+
+	// O contrato não aceita login_name; só o nome de exibição pode ser alterado.
+	profile, err := h.service.UpdateManagerName(r.Context(), principal.UserID, input.Name)
+	if err != nil {
+		writeManagerProfileError(w, err, "não foi possível atualizar o perfil do gerente")
+		return
+	}
+	writeJSON(w, http.StatusOK, newManagerProfileResponse(profile))
+}
+
+func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
+	principal, ok := PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "autenticação necessária")
+		return
+	}
+	input, ok := decodeManagerStatusPatchRequest(w, r)
+	if !ok {
+		return
+	}
+	if err := h.service.SetManagerActive(r.Context(), principal.UserID, *input.Active); err != nil {
+		switch {
+		case errors.Is(err, ErrActivationRequiresOperator):
+			writeError(w, http.StatusConflict, "a ativação da conta exige intervenção de um operador")
+		case errors.Is(err, errManagerNotFound):
+			writeError(w, http.StatusNotFound, "conta não encontrada")
+		default:
+			log.Print("falha ao atualizar o estado da conta")
+			writeError(w, http.StatusInternalServerError, "não foi possível atualizar o estado da conta")
+		}
+		return
+	}
+
+	// Desativar revoga a sessão atual na transação do Repository e o cookie é
+	// apagado na mesma resposta, evitando que o navegador continue apresentando-o.
+	clearSessionCookie(w, h.cookieSecure)
+	writeJSON(w, http.StatusOK, managerStatusResponse{Active: false})
 }
 
 func matchesSetupToken(expected, provided string) bool {

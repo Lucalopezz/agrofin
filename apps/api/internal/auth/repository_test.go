@@ -39,10 +39,10 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	_, err = pool.Exec(ctx, "DELETE FROM users WHERE login_name = $1", loginName)
 	require.NoError(t, err)
 	err = pool.QueryRow(ctx, `
-		INSERT INTO users (login_name, password_hash)
-		VALUES ($1, $2)
+		INSERT INTO users (name, login_name, password_hash)
+		VALUES ($1, $2, $3)
 		RETURNING id::text
-	`, loginName, passwordHash).Scan(&userID)
+	`, "Gerente de teste", loginName, passwordHash).Scan(&userID)
 	require.NoError(t, err, "criar gerente de teste")
 	defer func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -69,9 +69,24 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, userID, principal.UserID)
 
-	require.NoError(t, service.Logout(ctx, created.Token))
+	profile, err := service.GetManagerProfile(ctx, userID)
+	require.NoError(t, err)
+	assert.Equal(t, "Gerente de teste", profile.Name)
+	assert.Equal(t, loginName, profile.LoginName)
+	updatedProfile, err := service.UpdateManagerName(ctx, userID, "  Nome atualizado  ")
+	require.NoError(t, err)
+	assert.Equal(t, "Nome atualizado", updatedProfile.Name)
+	assert.Equal(t, loginName, updatedProfile.LoginName, "alterar o nome não deve alterar o login")
+
+	require.NoError(t, service.SetManagerActive(ctx, userID, false))
+	var revoked bool
+	err = pool.QueryRow(ctx, "SELECT revoked_at IS NOT NULL FROM sessions WHERE token_hash = $1", tokenHash[:]).Scan(&revoked)
+	require.NoError(t, err)
+	assert.True(t, revoked, "desativar a conta deve invalidar todas as sessões existentes")
 	_, err = service.AuthenticateSession(ctx, created.Token)
 	assert.ErrorIs(t, err, ErrInvalidSession)
+	_, err = service.Login(ctx, loginName, password)
+	assert.ErrorIs(t, err, ErrInvalidCredentials)
 }
 
 func acquireAuthIntegrationDatabaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) func() {
