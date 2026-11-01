@@ -10,4 +10,5 @@ func RegisterRoutes(mux *http.ServeMux, handler *Handler, requireSession func(ht
 	mux.Handle("POST /employees", requireSession(http.HandlerFunc(handler.create)))
 	mux.Handle("PATCH /employees/{id}", requireSession(http.HandlerFunc(handler.rename)))
 	mux.Handle("DELETE /employees/{id}", requireSession(http.HandlerFunc(handler.deactivate)))
+	mux.Handle("PATCH /employees/{id}/reactivate", requireSession(http.HandlerFunc(handler.reactivate)))
 }

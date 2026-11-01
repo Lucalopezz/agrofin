@@ -331,6 +331,90 @@ func TestEmployeesIntegration(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client), "tentativas rejeitadas não alteram os registros")
 
+	reactivate := func(client *http.Client, employeeID string) {
+		t.Helper()
+		response := request(client, http.MethodPatch, "/employees/"+employeeID+"/reactivate", "", http.StatusNoContent)
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		assert.Empty(t, body)
+		assert.Empty(t, response.Header.Get("Content-Type"))
+	}
+	response = request(server.Client(), http.MethodPatch, "/employees/"+second.ID+"/reactivate", "", http.StatusUnauthorized)
+	response.Body.Close()
+	for _, missingHeader := range []string{"Origin", "X-Agrofin-Request"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, server.URL+"/employees/"+second.ID+"/reactivate", nil)
+		require.NoError(t, err)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("X-Agrofin-Request", "1")
+		req.Header.Del(missingHeader)
+		response, err := client.Do(req)
+		require.NoError(t, err)
+		response.Body.Close()
+		assert.Equal(t, http.StatusForbidden, response.StatusCode, missingHeader)
+	}
+
+	// Um funcionário inativo real da outra conta prova que reativar não pode
+	// contornar o isolamento, nem quando a query tenta escolher o dono.
+	deactivate(otherClient, otherEmployee.ID)
+	otherEmployee.Active = false
+	for _, path := range []string{
+		"/employees/00000000-0000-0000-0000-000000000001/reactivate",
+		"/employees/" + otherEmployee.ID + "/reactivate?user_id=" + otherUserID,
+	} {
+		response = request(client, http.MethodPatch, path, "", http.StatusNotFound)
+		var body errorResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
+		response.Body.Close()
+		assert.Equal(t, "Funcionário não encontrado", body.Error)
+	}
+	response = request(otherClient, http.MethodPatch, "/employees/"+second.ID+"/reactivate", "", http.StatusNotFound)
+	response.Body.Close()
+	assert.Equal(t, []employeeResponse{otherEmployee}, list(otherClient))
+	response = request(client, http.MethodPatch, "/employees/nao-e-uuid/reactivate", "", http.StatusBadRequest)
+	response.Body.Close()
+	response = request(client, http.MethodPatch, "/employees/"+second.ID+"/reactivate", `{"active":false}`, http.StatusBadRequest)
+	response.Body.Close()
+	err = service.Reactivate(canceledCtx, userID, second.ID)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client), "requisições rejeitadas não reativam o registro")
+
+	var createdAt time.Time
+	err = pool.QueryRow(ctx, "SELECT created_at FROM employees WHERE id = $1", second.ID).Scan(&createdAt)
+	require.NoError(t, err)
+	reactivate(client, second.ID)
+	reactivate(client, second.ID)
+	// A repetição e um registro que sempre esteve ativo têm o mesmo sucesso.
+	reactivate(client, ana.ID)
+	second.Active = true
+	var restoredCreatedAt time.Time
+	var deactivatedAtCleared bool
+	err = pool.QueryRow(ctx, "SELECT name, user_id::text, active, deactivated_at IS NULL, created_at FROM employees WHERE id = $1", second.ID).
+		Scan(&persistedName, &persistedUserID, &active, &deactivatedAtCleared, &restoredCreatedAt)
+	require.NoError(t, err)
+	assert.Equal(t, second.Name, persistedName)
+	assert.Equal(t, userID, persistedUserID)
+	assert.True(t, active)
+	assert.True(t, deactivatedAtCleared, "um ativo não pode manter o marcador da desativação atual")
+	assert.True(t, createdAt.Equal(restoredCreatedAt), "reativar não cria outro cadastro")
+	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client))
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM harvests WHERE id = $1 AND user_id = $2 AND employee_id = $3", harvestID, userID, second.ID).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "reativar preserva o mesmo histórico")
+
+	// Um novo ciclo de inatividade ganha outra data; o ciclo anterior terminou
+	// na reativação. Repetir a desativação dentro do novo ciclo mantém essa data.
+	deactivate(client, second.ID)
+	second.Active = false
+	var nextDeactivatedAt, repeatedNextDeactivatedAt time.Time
+	err = pool.QueryRow(ctx, "SELECT deactivated_at FROM employees WHERE id = $1", second.ID).Scan(&nextDeactivatedAt)
+	require.NoError(t, err)
+	assert.True(t, nextDeactivatedAt.After(firstDeactivatedAt))
+	deactivate(client, second.ID)
+	err = pool.QueryRow(ctx, "SELECT deactivated_at FROM employees WHERE id = $1", second.ID).Scan(&repeatedNextDeactivatedAt)
+	require.NoError(t, err)
+	assert.True(t, nextDeactivatedAt.Equal(repeatedNextDeactivatedAt))
+
 	// Desativar a própria conta não deve revogar sessões de outros clientes.
 	response = request(client, http.MethodPatch, "/auth/me/status", `{"active":false}`, http.StatusOK)
 	response.Body.Close()

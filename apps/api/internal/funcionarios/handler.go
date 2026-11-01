@@ -13,6 +13,7 @@ type employeeService interface {
 	List(ctx context.Context, userID string) ([]Employee, error)
 	Rename(ctx context.Context, userID, employeeID, name string) (Employee, error)
 	Deactivate(ctx context.Context, userID, employeeID string) error
+	Reactivate(ctx context.Context, userID, employeeID string) error
 }
 
 type Handler struct {
@@ -88,10 +89,26 @@ func (h *Handler) deactivate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	employeeID, ok := decodeDeactivateEmployeeRequest(w, r)
+	employeeID, ok := decodeEmployeeStateChangeRequest(w, r)
 	if !ok {
 		return
 	}
 	err := h.service.Deactivate(r.Context(), principal.UserID, employeeID)
 	writeDeactivateEmployeeResponse(w, err)
+}
+
+func (h *Handler) reactivate(w http.ResponseWriter, r *http.Request) {
+	// O principal confirmado pela sessão continua sendo a única fonte do dono.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	employeeID, ok := decodeEmployeeStateChangeRequest(w, r)
+	if !ok {
+		return
+	}
+	err := h.service.Reactivate(r.Context(), principal.UserID, employeeID)
+	writeReactivateEmployeeResponse(w, err)
 }

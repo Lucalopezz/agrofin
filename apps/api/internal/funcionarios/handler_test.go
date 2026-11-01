@@ -22,6 +22,7 @@ type employeeServiceStub struct {
 	list       func(context.Context, string) ([]Employee, error)
 	rename     func(context.Context, string, string, string) (Employee, error)
 	deactivate func(context.Context, string, string) error
+	reactivate func(context.Context, string, string) error
 }
 
 func (s employeeServiceStub) Create(ctx context.Context, userID, name string) (Employee, error) {
@@ -38,6 +39,10 @@ func (s employeeServiceStub) Rename(ctx context.Context, userID, employeeID, nam
 
 func (s employeeServiceStub) Deactivate(ctx context.Context, userID, employeeID string) error {
 	return s.deactivate(ctx, userID, employeeID)
+}
+
+func (s employeeServiceStub) Reactivate(ctx context.Context, userID, employeeID string) error {
+	return s.reactivate(ctx, userID, employeeID)
 }
 
 func TestCreateEmployeeHandler(t *testing.T) {
@@ -179,8 +184,9 @@ func TestEmployeeRoutesRequireSession(t *testing.T) {
 		{http.MethodPost, "/employees"},
 		{http.MethodPatch, "/employees/00000000-0000-0000-0000-000000000001"},
 		{http.MethodDelete, "/employees/00000000-0000-0000-0000-000000000001"},
+		{http.MethodPatch, "/employees/00000000-0000-0000-0000-000000000001/reactivate"},
 	} {
-		t.Run(route.method, func(t *testing.T) {
+		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			// Um principal artificial não pode contornar o middleware registrado na rota.
 			// O serviço vazio também faz o teste falhar se o fluxo alcançar o handler.
 			called := false
@@ -345,6 +351,78 @@ func TestDeactivateEmployeeHandler(t *testing.T) {
 			RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
 			// Query e cabeçalho não podem substituir o dono confirmado pela sessão.
 			request := httptest.NewRequest(http.MethodDelete, "/employees/"+id+"?user_id=outro", strings.NewReader(tt.body)).WithContext(ctx)
+			request.Header.Set("X-User-ID", "outro")
+			if tt.unknownLength {
+				request.ContentLength = -1
+				request.TransferEncoding = []string{"chunked"}
+			}
+			response := httptest.NewRecorder()
+			mux.ServeHTTP(response, request)
+			assert.Equal(t, tt.expectedCode, response.Code)
+			assert.Equal(t, tt.expectedCalls, calls)
+			if tt.expectedCode == http.StatusNoContent {
+				assert.Empty(t, response.Body.String())
+				assert.Empty(t, response.Header().Get("Content-Type"))
+			} else {
+				assert.Equal(t, "application/json; charset=utf-8", response.Header().Get("Content-Type"))
+				var body map[string]any
+				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
+				assert.Len(t, body, 1)
+				assert.NotEmpty(t, body["error"])
+				assert.NotContains(t, response.Body.String(), "detalhe privado")
+			}
+		})
+	}
+}
+
+func TestReactivateEmployeeHandler(t *testing.T) {
+	const employeeID = "a1b2c3d4-1234-4567-89ab-0123456789ab"
+	tests := []struct {
+		name          string
+		id            string
+		body          string
+		unknownLength bool
+		unconfigured  bool
+		serviceErr    error
+		expectedCode  int
+		expectedCalls int
+	}{
+		{name: "reativa sem corpo ou content type", expectedCode: 204, expectedCalls: 1},
+		{name: "uuid com maiúsculas", id: strings.ToUpper(employeeID), expectedCode: 204, expectedCalls: 1},
+		{name: "sem sessão", unconfigured: true, expectedCode: 401},
+		{name: "uuid inválido", id: "nao-e-uuid", expectedCode: 400},
+		{name: "estado não pode vir do corpo", body: `{"active":false}`, expectedCode: 400},
+		{name: "dono não pode vir do corpo", body: `{"user_id":"outro"}`, expectedCode: 400},
+		{name: "json vazio também é corpo", body: `{}`, expectedCode: 400},
+		{name: "corpo de tamanho desconhecido", body: `{}`, unknownLength: true, expectedCode: 400},
+		{name: "registro não encontrado", serviceErr: fmt.Errorf("consulta: %w", ErrNotFound), expectedCode: 404, expectedCalls: 1},
+		{name: "falha interna", serviceErr: errors.New("detalhe privado do banco"), expectedCode: 500, expectedCalls: 1},
+		{name: "prazo esgotado", serviceErr: fmt.Errorf("consulta: %w", context.DeadlineExceeded), expectedCode: 504, expectedCalls: 1},
+		{name: "cancelamento", serviceErr: fmt.Errorf("consulta: %w", context.Canceled), expectedCode: 408, expectedCalls: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id := tt.id
+			if id == "" {
+				id = employeeID
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if !tt.unconfigured {
+				ctx = auth.WithPrincipal(ctx, auth.Principal{UserID: "gerente-da-sessao"})
+			}
+			calls := 0
+			service := employeeServiceStub{reactivate: func(gotCtx context.Context, userID, gotID string) error {
+				calls++
+				assert.Same(t, ctx, gotCtx)
+				assert.Equal(t, "gerente-da-sessao", userID)
+				assert.Equal(t, id, gotID)
+				return tt.serviceErr
+			}}
+			mux := http.NewServeMux()
+			RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
+			// Apenas o principal fornece o dono, independentemente de query ou cabeçalho.
+			request := httptest.NewRequest(http.MethodPatch, "/employees/"+id+"/reactivate?user_id=outro", strings.NewReader(tt.body)).WithContext(ctx)
 			request.Header.Set("X-User-ID", "outro")
 			if tt.unknownLength {
 				request.ContentLength = -1

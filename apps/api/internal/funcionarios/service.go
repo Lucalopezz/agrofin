@@ -9,6 +9,7 @@ type employeeRepository interface {
 	List(ctx context.Context, userID string) ([]Employee, error)
 	Rename(ctx context.Context, employee Employee) (Employee, error)
 	Deactivate(ctx context.Context, employee Employee) error
+	Reactivate(ctx context.Context, employee Employee) error
 }
 
 // Service coordena os casos de uso do cadastro de funcionários.
@@ -70,4 +71,12 @@ func (s *Service) Deactivate(ctx context.Context, userID, employeeID string) err
 	// O nome não participa desta operação e não deve ser sobrescrito.
 	employee := Employee{ID: employeeID, UserID: userID, Active: false}
 	return s.repo.Deactivate(ctx, employee)
+}
+
+// Reactivate restaura o mesmo cadastro sob o gerente identificado pela sessão.
+func (s *Service) Reactivate(ctx context.Context, userID, employeeID string) error {
+	// A operação define o estado ativo sem receber nome, dono ou estado do corpo.
+	// Os lançamentos anteriores continuam vinculados ao mesmo ID.
+	employee := Employee{ID: employeeID, UserID: userID, Active: true}
+	return s.repo.Reactivate(ctx, employee)
 }

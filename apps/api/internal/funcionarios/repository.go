@@ -146,3 +146,23 @@ func (r *Repository) Deactivate(ctx context.Context, employee Employee) error {
 	}
 	return nil
 }
+
+// Reactivate restaura o estado ativo sem criar outro funcionário ou alterar vínculos.
+func (r *Repository) Reactivate(ctx context.Context, employee Employee) error {
+	const query = `
+		UPDATE employees
+		SET active = $1, deactivated_at = NULL
+		WHERE id = $2 AND user_id = $3
+	`
+	// A restrição do banco exige que um ativo não tenha data de desativação.
+	// Atualizar os dois campos juntos preserva essa invariante sem consulta prévia.
+	// Um registro já ativo também é sucesso; o filtro sempre inclui o dono.
+	result, err := r.pool.Exec(ctx, query, employee.Active, employee.ID, employee.UserID)
+	if err != nil {
+		return fmt.Errorf("reativar funcionário: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

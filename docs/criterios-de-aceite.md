@@ -28,9 +28,9 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
 - Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 
-### Próximas etapas de HU-01 — reativação e filtro
+### HU-01 — reativação implementada e filtro planejado
 
-Estes critérios descrevem o comportamento planejado, ainda não implementado. A reativação será entregue e revisada antes de iniciar o filtro.
+A reativação está implementada na API. O filtro continua planejado para a etapa posterior à revisão da reativação.
 
 - Reativar restaura o mesmo cadastro com `active=true` e `deactivated_at` vazio, preservando ID, dono, nome e vínculos históricos. Não cria outro funcionário nem altera lançamentos anteriores.
 - Repetir a reativação retorna `204` sem corpo, inclusive para funcionário já ativo. Registro inexistente ou de outra conta recebe `404`, sem alterar registros nem revelar sua existência.

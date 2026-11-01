@@ -224,7 +224,25 @@
       }
     },
     {
-      "name": "10 - Sair",
+      "name": "10 - Reativar funcionário",
+      "request": {
+        "description": "Exige sessão ativa. Use o mesmo employee_id do cadastro desativado. Envie sem corpo. Restaura active=true e limpa deactivated_at, preservando ID, nome, dono e histórico. Retorna 204 vazio, inclusive para registro já ativo. Registro inexistente ou de outra conta retorna 404. Liste novamente para conferir.",
+        "method": "PATCH",
+        "url": "{{base_url}}/employees/{{employee_id}}/reactivate",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "11 - Sair",
       "request": {
         "method": "POST",
         "url": "{{base_url}}/auth/logout",

@@ -16,6 +16,7 @@ type employeeRepositoryStub struct {
 	list       func(context.Context, string) ([]Employee, error)
 	rename     func(context.Context, Employee) (Employee, error)
 	deactivate func(context.Context, Employee) error
+	reactivate func(context.Context, Employee) error
 }
 
 func (r employeeRepositoryStub) Create(ctx context.Context, employee Employee) (Employee, error) {
@@ -32,6 +33,10 @@ func (r employeeRepositoryStub) Rename(ctx context.Context, employee Employee) (
 
 func (r employeeRepositoryStub) Deactivate(ctx context.Context, employee Employee) error {
 	return r.deactivate(ctx, employee)
+}
+
+func (r employeeRepositoryStub) Reactivate(ctx context.Context, employee Employee) error {
+	return r.reactivate(ctx, employee)
 }
 
 func TestServiceCreate(t *testing.T) {
@@ -145,6 +150,32 @@ func TestServiceDeactivate(t *testing.T) {
 				return expectedErr
 			}}
 			err := NewService(repo).Deactivate(ctx, "user-id", "employee-id")
+			assert.ErrorIs(t, err, expectedErr)
+		})
+	}
+}
+
+func TestServiceReactivate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	called := false
+	repo := employeeRepositoryStub{reactivate: func(gotCtx context.Context, employee Employee) error {
+		called = true
+		assert.Same(t, ctx, gotCtx)
+		// A reativação mantém o vínculo e escolhe true explicitamente, sem
+		// transportar um nome novo ou depender do valor zero do estado.
+		assert.Equal(t, Employee{ID: "employee-id", UserID: "user-id", Active: true}, employee)
+		return nil
+	}}
+	require.NoError(t, NewService(repo).Reactivate(ctx, "user-id", "employee-id"))
+	assert.True(t, called)
+
+	for _, expectedErr := range []error{ErrNotFound, context.Canceled, context.DeadlineExceeded, errors.New("falha de persistência")} {
+		t.Run("preserva erro "+expectedErr.Error(), func(t *testing.T) {
+			repo := employeeRepositoryStub{reactivate: func(context.Context, Employee) error {
+				return expectedErr
+			}}
+			err := NewService(repo).Reactivate(ctx, "user-id", "employee-id")
 			assert.ErrorIs(t, err, expectedErr)
 		})
 	}
