@@ -13,7 +13,7 @@ import (
 // deixa a função nil falhar, revelando um desvio no fluxo do serviço.
 type employeeRepositoryStub struct {
 	create     func(context.Context, Employee) (Employee, error)
-	list       func(context.Context, string) ([]Employee, error)
+	list       func(context.Context, string, *bool) ([]Employee, error)
 	rename     func(context.Context, Employee) (Employee, error)
 	deactivate func(context.Context, Employee) error
 	reactivate func(context.Context, Employee) error
@@ -23,8 +23,8 @@ func (r employeeRepositoryStub) Create(ctx context.Context, employee Employee) (
 	return r.create(ctx, employee)
 }
 
-func (r employeeRepositoryStub) List(ctx context.Context, userID string) ([]Employee, error) {
-	return r.list(ctx, userID)
+func (r employeeRepositoryStub) List(ctx context.Context, userID string, active *bool) ([]Employee, error) {
+	return r.list(ctx, userID, active)
 }
 
 func (r employeeRepositoryStub) Rename(ctx context.Context, employee Employee) (Employee, error) {

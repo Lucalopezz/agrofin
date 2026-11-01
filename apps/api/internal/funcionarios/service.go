@@ -6,7 +6,7 @@ import "context"
 // Ela permite testar o serviço sem depender do PostgreSQL.
 type employeeRepository interface {
 	Create(ctx context.Context, employee Employee) (Employee, error)
-	List(ctx context.Context, userID string) ([]Employee, error)
+	List(ctx context.Context, userID string, active *bool) ([]Employee, error)
 	Rename(ctx context.Context, employee Employee) (Employee, error)
 	Deactivate(ctx context.Context, employee Employee) error
 	Reactivate(ctx context.Context, employee Employee) error
@@ -46,8 +46,9 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Employee, er
 }
 
 // List consulta os funcionários do gerente identificado pelo chamador confiável.
-func (s *Service) List(ctx context.Context, userID string) ([]Employee, error) {
-	return s.repo.List(ctx, userID)
+// active nil preserva a listagem de ambos os estados; false filtra os inativos.
+func (s *Service) List(ctx context.Context, userID string, active *bool) ([]Employee, error) {
+	return s.repo.List(ctx, userID, active)
 }
 
 // Rename valida o novo nome antes da persistência; userID vem do chamador

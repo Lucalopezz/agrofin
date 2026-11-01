@@ -19,7 +19,7 @@ import (
 // Funções não configuradas falham se o handler chamar um caso de uso inesperado.
 type employeeServiceStub struct {
 	create     func(context.Context, string, string) (Employee, error)
-	list       func(context.Context, string) ([]Employee, error)
+	list       func(context.Context, string, *bool) ([]Employee, error)
 	rename     func(context.Context, string, string, string) (Employee, error)
 	deactivate func(context.Context, string, string) error
 	reactivate func(context.Context, string, string) error
@@ -29,8 +29,8 @@ func (s employeeServiceStub) Create(ctx context.Context, userID, name string) (E
 	return s.create(ctx, userID, name)
 }
 
-func (s employeeServiceStub) List(ctx context.Context, userID string) ([]Employee, error) {
-	return s.list(ctx, userID)
+func (s employeeServiceStub) List(ctx context.Context, userID string, active *bool) ([]Employee, error) {
+	return s.list(ctx, userID, active)
 }
 
 func (s employeeServiceStub) Rename(ctx context.Context, userID, employeeID, name string) (Employee, error) {
@@ -117,24 +117,43 @@ func TestCreateEmployeeHandler(t *testing.T) {
 }
 
 func TestListEmployeesHandler(t *testing.T) {
+	active, inactive := true, false
 	employees := []Employee{
 		{ID: "employee-1", UserID: "gerente-da-sessao", Name: "Ana", Active: true},
 		{ID: "employee-2", UserID: "gerente-da-sessao", Name: "João", Active: false},
 	}
 	tests := []struct {
-		name          string
-		unconfigured  bool
-		employees     []Employee
-		serviceErr    error
-		expectedCode  int
-		expectedCalls int
-		expectedJSON  string
+		name           string
+		query          string
+		expectedActive *bool
+		unconfigured   bool
+		employees      []Employee
+		serviceErr     error
+		expectedCode   int
+		expectedCalls  int
+		expectedJSON   string
 	}{
 		{name: "lista com estados preservados", employees: employees, expectedCode: 200, expectedCalls: 1,
 			expectedJSON: `[{"id":"employee-1","name":"Ana","active":true},{"id":"employee-2","name":"João","active":false}]`},
+		{name: "somente ativos", query: "&active=true", expectedActive: &active, employees: employees[:1], expectedCode: 200, expectedCalls: 1,
+			expectedJSON: `[{"id":"employee-1","name":"Ana","active":true}]`},
+		{name: "somente inativos", query: "&active=false", expectedActive: &inactive, employees: employees[1:], expectedCode: 200, expectedCalls: 1,
+			expectedJSON: `[{"id":"employee-2","name":"João","active":false}]`},
+		{name: "filtro sem resultados", query: "&active=false", expectedActive: &inactive, expectedCode: 200, expectedCalls: 1, expectedJSON: `[]`},
 		{name: "slice nil vira array vazio", expectedCode: 200, expectedCalls: 1, expectedJSON: `[]`},
 		{name: "lista vazia", employees: []Employee{}, expectedCode: 200, expectedCalls: 1, expectedJSON: `[]`},
 		{name: "sem sessão", unconfigured: true, expectedCode: 401},
+		{name: "sem sessão com filtro inválido", query: "&active=talvez", unconfigured: true, expectedCode: 401},
+		{name: "valor vazio", query: "&active=", expectedCode: 400},
+		{name: "parâmetro sem valor", query: "&active", expectedCode: 400},
+		{name: "valor inválido", query: "&active=talvez", expectedCode: 400},
+		{name: "número não representa estado", query: "&active=1", expectedCode: 400},
+		{name: "maiúsculas não pertencem ao contrato", query: "&active=TRUE", expectedCode: 400},
+		{name: "valor com espaços", query: "&active=+false+", expectedCode: 400},
+		{name: "estados diferentes repetidos", query: "&active=true&active=false", expectedCode: 400},
+		{name: "mesmo estado repetido", query: "&active=false&active=false", expectedCode: 400},
+		{name: "escape inválido não vira filtro ausente", query: "&active=%ZZ", expectedCode: 400},
+		{name: "separador inválido não vira filtro ausente", query: "&active=true;active=false", expectedCode: 400},
 		{name: "falha interna não expõe lista parcial", employees: employees, serviceErr: errors.New("detalhe privado do banco"), expectedCode: 500, expectedCalls: 1},
 		{name: "prazo esgotado", serviceErr: fmt.Errorf("consulta: %w", context.DeadlineExceeded), expectedCode: 504, expectedCalls: 1},
 		{name: "cancelamento", serviceErr: fmt.Errorf("consulta: %w", context.Canceled), expectedCode: 408, expectedCalls: 1},
@@ -147,16 +166,17 @@ func TestListEmployeesHandler(t *testing.T) {
 				ctx = auth.WithPrincipal(ctx, auth.Principal{UserID: "gerente-da-sessao"})
 			}
 			calls := 0
-			service := employeeServiceStub{list: func(gotCtx context.Context, userID string) ([]Employee, error) {
+			service := employeeServiceStub{list: func(gotCtx context.Context, userID string, gotActive *bool) ([]Employee, error) {
 				calls++
 				assert.Same(t, ctx, gotCtx)
 				assert.Equal(t, "gerente-da-sessao", userID)
+				assert.Equal(t, tt.expectedActive, gotActive)
 				return tt.employees, tt.serviceErr
 			}}
 			mux := http.NewServeMux()
 			RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
 			// Identidades fornecidas pelo cliente não podem substituir o principal validado.
-			request := httptest.NewRequest(http.MethodGet, "/employees?user_id=outro-gerente", nil).WithContext(ctx)
+			request := httptest.NewRequest(http.MethodGet, "/employees?user_id=outro-gerente"+tt.query, nil).WithContext(ctx)
 			request.Header.Set("X-User-ID", "outro-gerente")
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)

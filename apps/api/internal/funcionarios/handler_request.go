@@ -7,12 +7,36 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 // Cadastro e renomeação compartilham o mesmo contrato de entrada: somente name.
 type employeeNameRequest struct {
 	Name string `json:"name"`
+}
+
+// Retorna ponteiro para bool, pois pode ser null, true ou false. O ponteiro distingue explicitamente false de parâmetro ausente (nil).
+func decodeListEmployeesRequest(w http.ResponseWriter, r *http.Request) (*bool, bool) {
+	// URL.Query ignora erros de decodificação. Não podemos transformar uma
+	// query malformada em ausência de filtro e devolver ambos os estados.
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Parâmetros de consulta inválidos"})
+		return nil, false
+	}
+	values, present := query["active"]
+	if !present {
+		return nil, true
+	}
+	// Um valor repetido é ambíguo, mesmo quando os dois valores são iguais.
+	if len(values) != 1 || (values[0] != "true" && values[0] != "false") {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Informe active uma única vez com true ou false"})
+		return nil, false
+	}
+	// O ponteiro distingue explicitamente false de parâmetro ausente (nil).
+	active := values[0] == "true"
+	return &active, true
 }
 
 func decodeEmployeeNameRequest(w http.ResponseWriter, r *http.Request) (*employeeNameRequest, bool) {

@@ -2,7 +2,7 @@
 
 ## contexto e estado atual
 
-Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, uma API Go com conexão ao PostgreSQL e migrações do esquema; o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários exigem sessão. O frontend React tem uma landing page e telas demonstrativas com dados mockados; elas não implementam nem persistem os fluxos de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
+Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, uma API Go com conexão ao PostgreSQL e migrações do esquema; o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários exigem sessão; a listagem permite filtrar por estado ativo/inativo. O frontend React tem uma landing page e telas demonstrativas com dados mockados; elas não implementam nem persistem os fluxos de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
 
 Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/requisitos.md) e [critérios de aceite](docs/criterios-de-aceite.md) para entender o comportamento. Consulte o [modelo de dados](docs/modelo-de-dados.md), os [fluxos mobile](docs/fluxos-mobile.md) e o [plano de implementação](docs/plano-de-implementacao.md) conforme a tarefa. Não transforme uma decisão pendente em regra definitiva sem evidência ou resposta do usuário.
 

@@ -108,9 +108,13 @@ func TestEmployeesIntegration(t *testing.T) {
 	response.Body.Close()
 	response = request(server.Client(), http.MethodGet, "/employees", "", http.StatusUnauthorized)
 	response.Body.Close()
-	list := func(client *http.Client) []employeeResponse {
+	listWithQuery := func(client *http.Client, query string) []employeeResponse {
 		t.Helper()
-		response, err := client.Get(server.URL + "/employees")
+		path := server.URL + "/employees"
+		if query != "" {
+			path += "?" + query
+		}
+		response, err := client.Get(path)
 		require.NoError(t, err)
 		defer response.Body.Close()
 		require.Equal(t, http.StatusOK, response.StatusCode)
@@ -120,7 +124,15 @@ func TestEmployeesIntegration(t *testing.T) {
 		require.NotNil(t, employees)
 		return employees
 	}
+	list := func(client *http.Client) []employeeResponse {
+		t.Helper()
+		return listWithQuery(client, "")
+	}
 	assert.Empty(t, list(client))
+	assert.Empty(t, listWithQuery(client, "active=true"))
+	assert.Empty(t, listWithQuery(client, "active=false"))
+	response = request(server.Client(), http.MethodGet, "/employees?active=false", "", http.StatusUnauthorized)
+	response.Body.Close()
 	create := func(client *http.Client, body string) employeeResponse {
 		t.Helper()
 		response := request(client, http.MethodPost, "/employees", body, http.StatusCreated)
@@ -214,6 +226,8 @@ func TestEmployeesIntegration(t *testing.T) {
 		expected[1], expected[2] = second, first
 	}
 	assert.Equal(t, expected, list(client))
+	assert.Equal(t, []employeeResponse{ana, first}, listWithQuery(client, "active=true"))
+	assert.Equal(t, []employeeResponse{second}, listWithQuery(client, "active=false"))
 
 	// As duas contas têm funcionários reais. Cada sessão deve enxergar somente
 	// os seus, mesmo quando o cliente tenta escolher outro dono na requisição.
@@ -228,6 +242,13 @@ func TestEmployeesIntegration(t *testing.T) {
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&filtered))
 	response.Body.Close()
 	assert.Equal(t, expected, filtered, "a query não pode substituir o dono derivado da sessão")
+	assert.Equal(t, []employeeResponse{ana, first}, listWithQuery(client, "active=true&user_id="+otherUserID))
+	assert.Equal(t, []employeeResponse{otherEmployee}, listWithQuery(otherClient, "active=true"))
+	assert.Empty(t, listWithQuery(otherClient, "active=false"))
+	for _, query := range []string{"active=", "active=talvez", "active=true&active=false"} {
+		response = request(client, http.MethodGet, "/employees?"+query, "", http.StatusBadRequest)
+		response.Body.Close()
+	}
 
 	rename := func(employee employeeResponse, newName string) employeeResponse {
 		t.Helper()
@@ -358,6 +379,10 @@ func TestEmployeesIntegration(t *testing.T) {
 	// contornar o isolamento, nem quando a query tenta escolher o dono.
 	deactivate(otherClient, otherEmployee.ID)
 	otherEmployee.Active = false
+	// Ambos os gerentes têm um inativo real; o filtro não pode misturar as equipes.
+	assert.Equal(t, []employeeResponse{second}, listWithQuery(client, "active=false&user_id="+otherUserID))
+	assert.Equal(t, []employeeResponse{otherEmployee}, listWithQuery(otherClient, "active=false"))
+	assert.Empty(t, listWithQuery(otherClient, "active=true"))
 	for _, path := range []string{
 		"/employees/00000000-0000-0000-0000-000000000001/reactivate",
 		"/employees/" + otherEmployee.ID + "/reactivate?user_id=" + otherUserID,
@@ -398,6 +423,8 @@ func TestEmployeesIntegration(t *testing.T) {
 	assert.True(t, deactivatedAtCleared, "um ativo não pode manter o marcador da desativação atual")
 	assert.True(t, createdAt.Equal(restoredCreatedAt), "reativar não cria outro cadastro")
 	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client))
+	assert.Empty(t, listWithQuery(client, "active=false"))
+	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, listWithQuery(client, "active=true"))
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM harvests WHERE id = $1 AND user_id = $2 AND employee_id = $3", harvestID, userID, second.ID).Scan(&count)
 	require.NoError(t, err)
 	assert.Equal(t, 1, count, "reativar preserva o mesmo histórico")
@@ -414,6 +441,8 @@ func TestEmployeesIntegration(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT deactivated_at FROM employees WHERE id = $1", second.ID).Scan(&repeatedNextDeactivatedAt)
 	require.NoError(t, err)
 	assert.True(t, nextDeactivatedAt.Equal(repeatedNextDeactivatedAt))
+	assert.Equal(t, []employeeResponse{second}, listWithQuery(client, "active=false"))
+	assert.ElementsMatch(t, []employeeResponse{ana, first}, listWithQuery(client, "active=true"))
 
 	// Desativar a própria conta não deve revogar sessões de outros clientes.
 	response = request(client, http.MethodPatch, "/auth/me/status", `{"active":false}`, http.StatusOK)
@@ -421,6 +450,9 @@ func TestEmployeesIntegration(t *testing.T) {
 	response = request(client, http.MethodGet, "/employees", "", http.StatusUnauthorized)
 	response.Body.Close()
 	assert.Len(t, list(otherClient), 1)
-	_, err = service.List(canceledCtx, userID)
+	_, err = service.List(canceledCtx, userID, nil)
+	assert.ErrorIs(t, err, context.Canceled)
+	inactive := false
+	_, err = service.List(canceledCtx, userID, &inactive)
 	assert.ErrorIs(t, err, context.Canceled)
 }

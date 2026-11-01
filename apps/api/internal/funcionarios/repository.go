@@ -49,17 +49,20 @@ func (r *Repository) Create(ctx context.Context, employee Employee) (Employee, e
 }
 
 // List consulta os funcionários vinculados ao gerente informado.
-func (r *Repository) List(ctx context.Context, userID string) ([]Employee, error) {
+func (r *Repository) List(ctx context.Context, userID string, active *bool) ([]Employee, error) {
 	const query = `
 		SELECT id::text, user_id::text, name, active
 		FROM employees
 		WHERE user_id = $1
+		  AND ($2::boolean IS NULL OR active = $2)
 		ORDER BY name, id
 	`
 
 	// O filtro limita a consulta ao dono dos dados. O ID desempata nomes iguais,
 	// mantendo a ordem previsível sem confundir pessoas com o mesmo nome.
-	rows, err := r.pool.Query(ctx, query, userID)
+	// NULL representa ausência de filtro, enquanto false precisa continuar
+	// distinto para consultar inativos. O gerente é obrigatório nos três casos.
+	rows, err := r.pool.Query(ctx, query, userID, active)
 	if err != nil {
 		return nil, fmt.Errorf("listar funcionários: %w", err)
 	}

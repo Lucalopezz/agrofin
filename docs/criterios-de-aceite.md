@@ -28,14 +28,16 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
 - Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 
-### HU-01 — reativação implementada e filtro planejado
+### HU-01 — reativação e filtro implementados
 
-A reativação está implementada na API. O filtro continua planejado para a etapa posterior à revisão da reativação.
+A reativação e o filtro de estado estão implementados na API; sua integração com a interface continua pendente.
 
 - Reativar restaura o mesmo cadastro com `active=true` e `deactivated_at` vazio, preservando ID, dono, nome e vínculos históricos. Não cria outro funcionário nem altera lançamentos anteriores.
 - Repetir a reativação retorna `204` sem corpo, inclusive para funcionário já ativo. Registro inexistente ou de outra conta recebe `404`, sem alterar registros nem revelar sua existência.
 - Desativar novamente depois de reativar registra uma nova data para o novo ciclo de inatividade. A repetição de uma desativação no mesmo ciclo mantém a primeira data.
-- O filtro planejado `active=true` retorna somente ativos; `active=false`, somente inativos. Sem filtro, a listagem continua retornando ambos, sempre limitados ao gerente da sessão.
+- O filtro `active=true` retorna somente ativos; `active=false`, somente inativos. Sem filtro, a listagem continua retornando ambos, sempre limitados ao gerente da sessão, ordenados por nome e ID e sem deduplicar nomes. Sem resultados, retorna `[]`.
+- `active` vazio, inválido, repetido, mesmo com valores iguais, ou query malformada retorna `400` antes de consultar a persistência. O filtro não aceita `1`, `0` ou variações em maiúsculas.
+- Após desativar ou reativar um funcionário, a próxima consulta filtrada reflete o estado persistido sem criar outro registro ou misturar dados de contas diferentes.
 
 ### HU-03, HU-04 e HU-05 — fechamento semanal
 

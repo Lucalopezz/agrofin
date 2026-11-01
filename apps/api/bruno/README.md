@@ -1,6 +1,6 @@
 # Testar a API no Bruno
 
-A coleção [agrofin.postman_collection.json](agrofin.postman_collection.json) contém as treze rotas implementadas. O formato Postman v2.1 permite importar um único arquivo no Bruno, sem instalar o Postman.
+A coleção [agrofin.postman_collection.json](agrofin.postman_collection.json) contém as treze rotas implementadas em quinze requisições, incluindo as variações da listagem por estado. O formato Postman v2.1 permite importar um único arquivo no Bruno, sem instalar o Postman.
 
 ## Importar
 
@@ -23,4 +23,14 @@ Para conferir a proteção da renomeação, tente usar na segunda conta o `emplo
 
 A desativação também respeita o isolamento: usar o `employee_id` de outra conta retorna `404` e não altera aquele registro, mesmo que ele já esteja inativo. UUID malformado ou qualquer corpo na requisição retorna `400`. O `DELETE` exige `Origin` e `X-Agrofin-Request: 1`, mas não exige `Content-Type`.
 
-Para testar a reativação isoladamente, faça login, preencha `employee_id` e envie **10 - Reativar funcionário**. Ela exige `Origin` e `X-Agrofin-Request: 1`, sem corpo ou necessidade de `Content-Type`. UUID ou corpo inválido retorna `400`; registro inexistente ou de outra conta retorna `404`. Reativar limpa a data da inatividade atual; desativar novamente inicia um novo ciclo com outra data. Isso não reativa contas de gerente nem altera sessões. O filtro de ativos/inativos continua planejado para a próxima etapa.
+Para testar a reativação isoladamente, faça login, preencha `employee_id` e envie **10 - Reativar funcionário**. Ela exige `Origin` e `X-Agrofin-Request: 1`, sem corpo ou necessidade de `Content-Type`. UUID ou corpo inválido retorna `400`; registro inexistente ou de outra conta retorna `404`. Reativar limpa a data da inatividade atual; desativar novamente inicia um novo ciclo com outra data. Isso não reativa contas de gerente nem altera sessões. O filtro de ativos/inativos está disponível nas requisições **07.1** e **07.2**.
+
+## Filtrar funcionários por estado
+
+- **07 - Listar funcionários:** sem `active`, retorna ativos e inativos.
+- **07.1 - Listar funcionários ativos:** usa `?active=true`.
+- **07.2 - Listar funcionários inativos:** usa `?active=false`.
+
+As três consultas exigem sessão e retornam somente dados do gerente autenticado, ordenados por nome e ID; sem resultados, retornam `[]`. Envie `active` uma única vez, com `true` ou `false` em minúsculas. Valor vazio, diferente ou repetido e query malformada retornam `400`.
+
+Para conferir, cadastre um funcionário e execute **07.1**; depois desative-o com **09** e execute **07.2**. Reative-o com **10** e confirme que ele volta a aparecer em **07.1**. A consulta **07** continua mostrando o mesmo cadastro nos dois estados. Tente o filtro nas duas contas para conferir o isolamento; enviar `user_id` na query não altera o dono derivado da sessão.

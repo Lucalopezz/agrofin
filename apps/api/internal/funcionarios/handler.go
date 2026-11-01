@@ -10,7 +10,7 @@ import (
 // O handler depende do caso de uso, sem acessar o banco ou validar o domínio.
 type employeeService interface {
 	Create(ctx context.Context, userID, name string) (Employee, error)
-	List(ctx context.Context, userID string) ([]Employee, error)
+	List(ctx context.Context, userID string, active *bool) ([]Employee, error)
 	Rename(ctx context.Context, userID, employeeID, name string) (Employee, error)
 	Deactivate(ctx context.Context, userID, employeeID string) error
 	Reactivate(ctx context.Context, userID, employeeID string) error
@@ -33,7 +33,11 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	employees, err := h.service.List(r.Context(), principal.UserID)
+	active, ok := decodeListEmployeesRequest(w, r)
+	if !ok {
+		return
+	}
+	employees, err := h.service.List(r.Context(), principal.UserID, active)
 	writeListEmployeesResponse(w, employees, err)
 }
 

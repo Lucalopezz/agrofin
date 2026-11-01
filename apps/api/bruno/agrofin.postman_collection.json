@@ -171,7 +171,24 @@
       "name": "07 - Listar funcionários",
       "request": {
         "method": "GET",
-        "url": "{{base_url}}/employees"
+        "url": "{{base_url}}/employees",
+        "description": "Sem active, retorna ativos e inativos do gerente autenticado. O filtro opcional aceita uma única ocorrência de active=true ou active=false; vazio, repetido ou inválido retorna 400."
+      }
+    },
+    {
+      "name": "07.1 - Listar funcionários ativos",
+      "request": {
+        "description": "Retorna somente os funcionários ativos do gerente autenticado, ordenados por nome e ID. Sem resultados, retorna [].",
+        "method": "GET",
+        "url": "{{base_url}}/employees?active=true"
+      }
+    },
+    {
+      "name": "07.2 - Listar funcionários inativos",
+      "request": {
+        "description": "Retorna somente os funcionários inativos do gerente autenticado, ordenados por nome e ID. Sem resultados, retorna [].",
+        "method": "GET",
+        "url": "{{base_url}}/employees?active=false"
       }
     },
     {
