@@ -78,6 +78,24 @@ func writeRenameEmployeeResponse(w http.ResponseWriter, employee Employee, err e
 	}
 }
 
+func writeDeactivateEmployeeResponse(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Funcionário não encontrado"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para desativar funcionário esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// O log identifica a operação sem incluir detalhes privados do driver.
+		log.Print("erro de persistência ao desativar funcionário")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível desativar o funcionário"})
+	default:
+		// 204 não transporta JSON nem outro corpo, mesmo em chamadas repetidas.
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

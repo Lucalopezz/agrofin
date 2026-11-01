@@ -12,9 +12,10 @@ import (
 // Cada teste fornece somente a operação esperada; chamar outra operação
 // deixa a função nil falhar, revelando um desvio no fluxo do serviço.
 type employeeRepositoryStub struct {
-	create func(context.Context, Employee) (Employee, error)
-	list   func(context.Context, string) ([]Employee, error)
-	rename func(context.Context, Employee) (Employee, error)
+	create     func(context.Context, Employee) (Employee, error)
+	list       func(context.Context, string) ([]Employee, error)
+	rename     func(context.Context, Employee) (Employee, error)
+	deactivate func(context.Context, Employee) error
 }
 
 func (r employeeRepositoryStub) Create(ctx context.Context, employee Employee) (Employee, error) {
@@ -27,6 +28,10 @@ func (r employeeRepositoryStub) List(ctx context.Context, userID string) ([]Empl
 
 func (r employeeRepositoryStub) Rename(ctx context.Context, employee Employee) (Employee, error) {
 	return r.rename(ctx, employee)
+}
+
+func (r employeeRepositoryStub) Deactivate(ctx context.Context, employee Employee) error {
+	return r.deactivate(ctx, employee)
 }
 
 func TestServiceCreate(t *testing.T) {
@@ -114,6 +119,32 @@ func TestServiceRename(t *testing.T) {
 				return Employee{}, expectedErr
 			}}
 			_, err := NewService(repo).Rename(context.Background(), "user-id", "employee-id", "Ana")
+			assert.ErrorIs(t, err, expectedErr)
+		})
+	}
+}
+
+func TestServiceDeactivate(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	called := false
+	repo := employeeRepositoryStub{deactivate: func(gotCtx context.Context, employee Employee) error {
+		called = true
+		assert.Same(t, ctx, gotCtx)
+		// A entidade não pode perder o vínculo com o gerente nem transportar
+		// um novo nome: a operação escolhe apenas o estado inativo.
+		assert.Equal(t, Employee{ID: "employee-id", UserID: "user-id", Active: false}, employee)
+		return nil
+	}}
+	require.NoError(t, NewService(repo).Deactivate(ctx, "user-id", "employee-id"))
+	assert.True(t, called)
+
+	for _, expectedErr := range []error{ErrNotFound, context.Canceled, context.DeadlineExceeded, errors.New("falha de persistência")} {
+		t.Run("preserva erro "+expectedErr.Error(), func(t *testing.T) {
+			repo := employeeRepositoryStub{deactivate: func(context.Context, Employee) error {
+				return expectedErr
+			}}
+			err := NewService(repo).Deactivate(ctx, "user-id", "employee-id")
 			assert.ErrorIs(t, err, expectedErr)
 		})
 	}

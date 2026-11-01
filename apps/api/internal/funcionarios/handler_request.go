@@ -71,3 +71,18 @@ func decodeEmployeeID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Identificador do funcionário deve ser um UUID válido"})
 	return "", false
 }
+
+func decodeDeactivateEmployeeRequest(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, ok := decodeEmployeeID(w, r)
+	if !ok {
+		return "", false
+	}
+	// A desativação usa somente o caminho e a sessão. Ler até um byte rejeita
+	// qualquer corpo sem carregá-lo inteiro, inclusive com tamanho desconhecido.
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1))
+	if err != nil || len(body) != 0 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Envie a desativação sem corpo na requisição"})
+		return "", false
+	}
+	return id, true
+}

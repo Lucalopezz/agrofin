@@ -23,6 +23,8 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
 - Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição registra quem alterou, quando alterou e os valores anteriores.
+- Desativar um funcionário marca o cadastro como inativo e registra a data, preservando ID, dono, nome e histórico. A listagem do cadastro continua retornando o registro com `active=false`.
+- Repetir a desativação retorna o mesmo sucesso sem alterar a primeira data. Funcionário inexistente ou de outra conta recebe a mesma resposta `404`, sem alterar registros.
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
 - Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 

@@ -8,6 +8,7 @@ type employeeRepository interface {
 	Create(ctx context.Context, employee Employee) (Employee, error)
 	List(ctx context.Context, userID string) ([]Employee, error)
 	Rename(ctx context.Context, employee Employee) (Employee, error)
+	Deactivate(ctx context.Context, employee Employee) error
 }
 
 // Service coordena os casos de uso do cadastro de funcionários.
@@ -60,4 +61,13 @@ func (s *Service) Rename(ctx context.Context, userID, employeeID, name string) (
 	// o estado atual é preservado e devolvido pelo RETURNING do banco.
 	employee := Employee{ID: employeeID, UserID: userID, Name: name}
 	return s.repo.Rename(ctx, employee)
+}
+
+// Deactivate preserva o cadastro e seu histórico, tornando-o inativo.
+// userID vem do chamador confiável, identificado pela sessão.
+func (s *Service) Deactivate(ctx context.Context, userID, employeeID string) error {
+	// O serviço escolhe o estado de destino; não recebe um active do cliente.
+	// O nome não participa desta operação e não deve ser sobrescrito.
+	employee := Employee{ID: employeeID, UserID: userID, Active: false}
+	return s.repo.Deactivate(ctx, employee)
 }

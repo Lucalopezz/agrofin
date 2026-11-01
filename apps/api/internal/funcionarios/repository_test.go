@@ -3,6 +3,7 @@ package funcionarios
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -39,7 +40,9 @@ func TestEmployeesIntegration(t *testing.T) {
 		// quando uma falha interrompe o fluxo antes de todas as contas existirem.
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
-		_, err := pool.Exec(cleanupCtx, "DELETE FROM employees WHERE user_id IN (SELECT id FROM users WHERE login_name = ANY($1))", logins)
+		_, err := pool.Exec(cleanupCtx, "DELETE FROM harvests WHERE user_id IN (SELECT id FROM users WHERE login_name = ANY($1))", logins)
+		assert.NoError(t, err, "limpar o histórico de teste antes dos funcionários")
+		_, err = pool.Exec(cleanupCtx, "DELETE FROM employees WHERE user_id IN (SELECT id FROM users WHERE login_name = ANY($1))", logins)
 		assert.NoError(t, err, "limpar funcionários de teste")
 		// As sessões são removidas pelo ON DELETE CASCADE do usuário.
 		_, err = pool.Exec(cleanupCtx, "DELETE FROM users WHERE login_name = ANY($1)", logins)
@@ -130,6 +133,15 @@ func TestEmployeesIntegration(t *testing.T) {
 	}
 	first := create(client, `{"name":"  João D'Ávila  "}`)
 	second := create(client, `{"name":"João D'Ávila"}`)
+	deactivate := func(client *http.Client, employeeID string) {
+		t.Helper()
+		response := request(client, http.MethodDelete, "/employees/"+employeeID, "", http.StatusNoContent)
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		assert.Empty(t, body, "204 não deve enviar corpo")
+		assert.Empty(t, response.Header.Get("Content-Type"))
+	}
 	assert.NotEmpty(t, first.ID)
 	assert.NotEmpty(t, second.ID)
 	assert.NotEqual(t, first.ID, second.ID)
@@ -165,10 +177,36 @@ func TestEmployeesIntegration(t *testing.T) {
 	assert.Equal(t, 2, count)
 
 	ana := create(client, `{"name":"Ana"}`)
+	// A fixture de histórico usa apenas o cabeçalho, sem valores financeiros.
+	// Uma exclusão física quebraria o vínculo ou apagaria dados que devem permanecer.
+	var harvestID string
+	err = pool.QueryRow(ctx, `
+		INSERT INTO harvests (user_id, employee_id, harvest_date, created_by)
+		VALUES ($1, $2, CURRENT_DATE, $1) RETURNING id::text
+	`, userID, second.ID).Scan(&harvestID)
+	require.NoError(t, err)
+	response = request(server.Client(), http.MethodDelete, "/employees/"+second.ID, "", http.StatusUnauthorized)
+	response.Body.Close()
 	// A listagem do cadastro preserva o estado dos inativos. Excluí-los da seleção
 	// de novos lançamentos pertence ao fluxo de colheita, ainda não implementado.
-	_, err = pool.Exec(ctx, "UPDATE employees SET active = false, deactivated_at = now() WHERE id = $1", second.ID)
+	deactivate(client, second.ID)
+	var firstDeactivatedAt time.Time
+	var deactivatedUserID string
+	err = pool.QueryRow(ctx, "SELECT name, user_id::text, active, deactivated_at FROM employees WHERE id = $1", second.ID).
+		Scan(&name, &deactivatedUserID, &active, &firstDeactivatedAt)
 	require.NoError(t, err)
+	assert.Equal(t, second.Name, name)
+	assert.Equal(t, userID, deactivatedUserID)
+	assert.False(t, active)
+	assert.False(t, firstDeactivatedAt.IsZero())
+	deactivate(client, second.ID)
+	var repeatedDeactivatedAt time.Time
+	err = pool.QueryRow(ctx, "SELECT deactivated_at FROM employees WHERE id = $1", second.ID).Scan(&repeatedDeactivatedAt)
+	require.NoError(t, err)
+	assert.True(t, firstDeactivatedAt.Equal(repeatedDeactivatedAt), "repetir preserva a primeira data de desativação")
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM harvests WHERE id = $1 AND user_id = $2 AND employee_id = $3", harvestID, userID, second.ID).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count, "o histórico deve permanecer vinculado ao mesmo funcionário")
 	second.Active = false
 	expected := []employeeResponse{ana, first, second}
 	// Os dois nomes iguais são desempatados pelo ID, sem deduplicar pessoas.
@@ -207,17 +245,23 @@ func TestEmployeesIntegration(t *testing.T) {
 	response.Body.Close()
 
 	// A rota herda a proteção de escrita: nem cookie válido dispensa origem e marcador.
-	for _, missingHeader := range []string{"Origin", "X-Agrofin-Request"} {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, server.URL+"/employees/"+first.ID, strings.NewReader(`{"name":"Tentativa"}`))
-		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Origin", origin)
-		req.Header.Set("X-Agrofin-Request", "1")
-		req.Header.Del(missingHeader)
-		response, err := client.Do(req)
-		require.NoError(t, err)
-		response.Body.Close()
-		assert.Equal(t, http.StatusForbidden, response.StatusCode, missingHeader)
+	for _, method := range []string{http.MethodPatch, http.MethodDelete} {
+		for _, missingHeader := range []string{"Origin", "X-Agrofin-Request"} {
+			body := ""
+			if method == http.MethodPatch {
+				body = `{"name":"Tentativa"}`
+			}
+			req, err := http.NewRequestWithContext(ctx, method, server.URL+"/employees/"+first.ID, strings.NewReader(body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", origin)
+			req.Header.Set("X-Agrofin-Request", "1")
+			req.Header.Del(missingHeader)
+			response, err := client.Do(req)
+			require.NoError(t, err)
+			response.Body.Close()
+			assert.Equal(t, http.StatusForbidden, response.StatusCode, method+" sem "+missingHeader)
+		}
 	}
 	renamed := rename(first, " \tJoão  D'Ávila atualizado\n")
 	assert.Equal(t, "João  D'Ávila atualizado", renamed.Name)
@@ -263,6 +307,29 @@ func TestEmployeesIntegration(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled)
 	// Ler novamente comprova persistência e que as tentativas rejeitadas não gravaram.
 	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client))
+
+	// Um registro de outra conta não pode ser desativado, mesmo com o dono
+	// forjado na query. A resposta também não revela se aquele ID existe.
+	for _, path := range []string{
+		"/employees/00000000-0000-0000-0000-000000000001",
+		"/employees/" + otherEmployee.ID + "?user_id=" + otherUserID,
+	} {
+		response = request(client, http.MethodDelete, path, "", http.StatusNotFound)
+		var body errorResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
+		response.Body.Close()
+		assert.Equal(t, "Funcionário não encontrado", body.Error)
+	}
+	response = request(otherClient, http.MethodDelete, "/employees/"+second.ID, "", http.StatusNotFound)
+	response.Body.Close()
+	assert.Equal(t, []employeeResponse{otherEmployee}, list(otherClient), "a outra equipe continua ativa")
+	response = request(client, http.MethodDelete, "/employees/nao-e-uuid", "", http.StatusBadRequest)
+	response.Body.Close()
+	response = request(client, http.MethodDelete, "/employees/"+first.ID, `{"active":false}`, http.StatusBadRequest)
+	response.Body.Close()
+	err = service.Deactivate(canceledCtx, userID, first.ID)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client), "tentativas rejeitadas não alteram os registros")
 
 	// Desativar a própria conta não deve revogar sessões de outros clientes.
 	response = request(client, http.MethodPatch, "/auth/me/status", `{"active":false}`, http.StatusOK)

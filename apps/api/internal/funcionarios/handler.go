@@ -12,6 +12,7 @@ type employeeService interface {
 	Create(ctx context.Context, userID, name string) (Employee, error)
 	List(ctx context.Context, userID string) ([]Employee, error)
 	Rename(ctx context.Context, userID, employeeID, name string) (Employee, error)
+	Deactivate(ctx context.Context, userID, employeeID string) error
 }
 
 type Handler struct {
@@ -77,4 +78,20 @@ func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
 
 	employee, err := h.service.Rename(r.Context(), principal.UserID, employeeID, input.Name)
 	writeRenameEmployeeResponse(w, employee, err)
+}
+
+func (h *Handler) deactivate(w http.ResponseWriter, r *http.Request) {
+	// A sessão é a única fonte do dono, mesmo se o handler for usado sem middleware.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	employeeID, ok := decodeDeactivateEmployeeRequest(w, r)
+	if !ok {
+		return
+	}
+	err := h.service.Deactivate(r.Context(), principal.UserID, employeeID)
+	writeDeactivateEmployeeResponse(w, err)
 }

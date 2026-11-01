@@ -125,3 +125,24 @@ func (r *Repository) Rename(ctx context.Context, employee Employee) (Employee, e
 
 	return employee, nil
 }
+
+// Deactivate persiste o estado escolhido pelo serviço sem excluir o registro.
+func (r *Repository) Deactivate(ctx context.Context, employee Employee) error {
+	const query = `
+		UPDATE employees
+		SET active = $1, deactivated_at = COALESCE(deactivated_at, now())
+		WHERE id = $2 AND user_id = $3
+	`
+	// O filtro protege o dono dos dados. COALESCE preserva a primeira data,
+	// inclusive quando chamadas repetidas ou concorrentes encontram o inativo.
+	// Não filtramos active: um funcionário já inativo também representa sucesso.
+	result, err := r.pool.Exec(ctx, query, employee.Active, employee.ID, employee.UserID)
+	if err != nil {
+		return fmt.Errorf("desativar funcionário: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		// Ausência e registro de outra conta recebem o mesmo erro do domínio.
+		return ErrNotFound
+	}
+	return nil
+}
