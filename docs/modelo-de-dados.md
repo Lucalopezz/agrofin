@@ -8,7 +8,7 @@ Este documento descreve o esquema relacional inicial implementado nas migraçõe
 - `user_id` identifica o gerente dono dos registros de negócio e participa das chaves estrangeiras compostas. Não há uma entidade `accounts` separada.
 - Gerar IDs UUID para registros. Usar `DATE` para datas da operação e `TIMESTAMPTZ` em UTC para horários técnicos; apresentar datas no fuso configurado para a operação, inicialmente `America/Sao_Paulo`.
 - Manter os registros de negócio simples: o cadastro de funcionário pede apenas o nome; o identificador e o estado ativo/inativo são técnicos.
-- Separar o único usuário que entra no sistema dos funcionários cadastrados. A equipe de cada semana é obtida pelos lançamentos do período, sem tabela de escala ou vínculo semanal; ausência de lançamento não altera o cadastro do funcionário.
+- Separar os clientes/gerentes que entram com suas próprias contas dos funcionários cadastrados por cada um. A equipe de cada semana é obtida pelos lançamentos do período, sem tabela de escala ou vínculo semanal; ausência de lançamento não altera o cadastro do funcionário.
 - Guardar o valor monetário aplicado no momento do lançamento para que mudanças de tarifa ou preço não alterem o histórico.
 - Preferir saldos calculados a saldos editáveis. Isso é especialmente importante para pagamentos, recebimentos e estoque.
 
@@ -18,7 +18,7 @@ As 22 tabelas abaixo são criadas pelas oito migrações. O diagrama mostra as c
 
 | tabela | campos e relações principais | responsabilidade |
 | --- | --- | --- |
-| `users` | `id`, `name`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. O nome é de exibição; o login é separado e imutável pela API. A senha usa Argon2id. Um índice único impede cadastrar outro gerente na instalação. |
+| `users` | `id`, `name`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. O nome é de exibição; o login é separado e imutável pela API. A senha usa Argon2id. O nome de acesso é único; vários clientes podem criar contas independentes. |
 | `sessions` | `id`, `user_id`, `token_hash`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis; guarda somente SHA-256 do token aleatório enviado no cookie. A validade é limitada por sete dias de inatividade e trinta dias absolutos. |
 | `employees` | `id`, `user_id`, `name`, `active`, `deactivated_at` | Cadastro mínimo de pessoas que trabalham na produção, sem login. O estado ativo só controla a disponibilidade para novos lançamentos; desativar preserva o histórico e não acontece por ausência em uma semana. |
 | `harvest_rates` | `id`, `user_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas por tipo de caixa e vigência. Funcionário opcional permite representar uma tarifa geral ou uma tarifa individual. |
@@ -43,13 +43,13 @@ As 22 tabelas abaixo são criadas pelas oito migrações. O diagrama mostra as c
 
 ## identidade e sessões
 
-`users` representa o gerente que autentica na API. `employees` representa as pessoas da equipe e não contém credenciais. Não há tabela `accounts`: cada registro de negócio guarda `user_id`, que identifica o gerente dono dos dados. O índice de `00006_single_manager.sql` limita a instalação local a um gerente.
+`users` representa o gerente que autentica na API. `employees` representa as pessoas da equipe e não contém credenciais. Não há tabela `accounts`: cada registro de negócio guarda `user_id`, que identifica o gerente dono dos dados. A migração `00009_public_registration.sql` remove a restrição antiga de `00006_single_manager.sql` e permite várias contas sem alterar os vínculos existentes. A unicidade de `login_name` continua protegida no banco, inclusive sob concorrência.
 
-O cadastro de gerente está disponível em `POST ${API_PREFIX}/auth/register` (por padrão, `POST /api/v1/auth/register`). Ele recebe `name`, `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado no servidor em `AUTH_SETUP_TOKEN` e só funciona antes de existir um usuário. Esse token protege o primeiro cadastro; não há cadastro contínuo. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
+O cadastro de gerente está disponível em `POST ${API_PREFIX}/auth/register` (por padrão, `POST /api/v1/auth/register`). Ele recebe `name`, `login_name` e `password` e é aberto a qualquer cliente, sem token de instalação ou sessão prévia. Cada cadastro cria um novo gerente com dados próprios; nomes de acesso repetidos retornam `409`. A senha é gravada como hash Argon2id, nunca como texto recuperável. A recuperação da senha perdida precisa ser definida antes do deploy.
 
-Login, sessão, middleware e perfil do gerente estão implementados. `GET ${API_PREFIX}/auth/me` retorna `id`, `name`, `login_name` e `active` dentro de `user`. `PATCH ${API_PREFIX}/auth/me` aceita somente `name`; `login_name` não pode ser alterado. `PATCH ${API_PREFIX}/auth/me/status` aceita `active: false`, desativa a conta e revoga todas as sessões na mesma transação. Contas inativas não autenticam. Como há um único gerente, reativar a conta exige intervenção de operador no banco; as sessões antigas já terão sido revogadas, então o gerente precisa fazer login novamente. A API resolve o `user_id` da sessão no servidor e passa esse identificador aos serviços. O cliente não pode escolher `user_id` pelo corpo, query string ou cabeçalho. `API_PREFIX` configura em um único lugar o prefixo das rotas (padrão `/api/v1`). O login usa `login_name`, sem recuperação por e-mail nesta primeira versão.
+Login, sessão, middleware e perfil do gerente estão implementados. `GET ${API_PREFIX}/auth/me` retorna `id`, `name`, `login_name` e `active` dentro de `user`. `PATCH ${API_PREFIX}/auth/me` aceita somente `name`; `login_name` não pode ser alterado. `PATCH ${API_PREFIX}/auth/me/status` aceita `active: false`, desativa a conta e revoga todas as sessões na mesma transação. Contas inativas não autenticam. O fluxo público de reativação ainda não existe; reativar uma conta exige intervenção de operador no banco; as sessões antigas já terão sido revogadas, então o gerente precisa fazer login novamente. A API resolve o `user_id` da sessão no servidor e passa esse identificador aos serviços. O cliente não pode escolher `user_id` pelo corpo, query string ou cabeçalho. `API_PREFIX` configura em um único lugar o prefixo das rotas (padrão `/api/v1`). O login usa `login_name`, sem recuperação por e-mail nesta primeira versão.
 
-Após confirmar a solicitação do gerente, o operador pode reativar a única conta diretamente no banco com `UPDATE users SET active = true WHERE id = '<id-do-gerente>';`. A operação não restaura sessões revogadas: o próximo acesso exige um novo login.
+Após confirmar a solicitação do gerente, o operador pode reativar a conta solicitante diretamente no banco com `UPDATE users SET active = true WHERE id = '<id-do-gerente>';`. A operação não restaura sessões revogadas: o próximo acesso exige um novo login.
 
 | tabela | campos principais | responsabilidade |
 | --- | --- | --- |
@@ -141,7 +141,7 @@ Como a cifra autenticada não permite somas SQL comuns e valores iguais geram te
 
 ## Migrações e conexão
 
-As migrações `00001` a `00008` criam as tabelas em ordem de dependência e adicionam sessão e perfil de gerente. O comando Go em `apps/api/cmd/migrate` usa [goose](https://github.com/pressly/goose) para registrar versões em `goose_db_version`. O `cmd/api` abre um pool [pgx](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool), lê `DATABASE_URL` e confirma a conexão antes de servir HTTP. A API não aplica migrações por conta própria.
+As migrações `00001` a `00009` criam as tabelas em ordem de dependência e adicionam sessão, perfil de gerente e cadastro de várias contas. O comando Go em `apps/api/cmd/migrate` usa [goose](https://github.com/pressly/goose) para registrar versões em `goose_db_version`. O `cmd/api` abre um pool [pgx](https://pkg.go.dev/github.com/jackc/pgx/v5/pgxpool), lê `DATABASE_URL` e confirma a conexão antes de servir HTTP. A API não aplica migrações por conta própria.
 
 No desenvolvimento local, `docker compose up -d --wait` inicia PostgreSQL, aplica as versões pendentes e depois inicia a API. Após adicionar outra migração, execute `docker compose run --rm migrate` para aplicá-la mesmo que o contêiner anterior já tenha terminado. Use `docker compose run --rm migrate go run ./cmd/migrate status` para consultar as versões.
 
@@ -180,7 +180,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente 
 
 ## Ordem sugerida para implementar
 
-1. Banco, migrações, conexão inicial, autenticação do único cliente e cadastro simples de funcionários já entregues.
+1. Banco, migrações, conexão inicial, cadastro público e autenticação dos clientes e cadastro simples de funcionários já entregues.
 2. Implementar tarifas com vigência, lançamento de caixas e resumo semanal.
 3. Implementar diárias, pagamentos parciais e correções de período já pago.
 4. Implementar venda, descontos e recebimentos.

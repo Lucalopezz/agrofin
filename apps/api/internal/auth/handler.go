@@ -2,14 +2,10 @@ package auth
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"errors"
 	"log"
 	"net/http"
 )
-
-const setupTokenHeader = "X-Agrofin-Setup-Token"
 
 // handlerService é o contrato HTTP mínimo; os handlers não conhecem SQL nem
 // implementam as regras de senha e sessão.
@@ -25,34 +21,21 @@ type handlerService interface {
 // HandlerConfig contém valores de configuração já lidos e validados pelo main.
 // O pacote auth não precisa conhecer nomes de variáveis de ambiente.
 type HandlerConfig struct {
-	SetupToken   string
 	CookieSecure bool
 }
 
 // Handler traduz requests/responses HTTP e delega as regras de autenticação ao Service.
 type Handler struct {
 	service      handlerService
-	setupToken   string
 	cookieSecure bool
 }
 
 // NewHandler recebe o serviço e a configuração do cookie sem ler o ambiente diretamente.
 func NewHandler(service handlerService, config HandlerConfig) *Handler {
-	return &Handler{service: service, setupToken: config.SetupToken, cookieSecure: config.CookieSecure}
+	return &Handler{service: service, cookieSecure: config.CookieSecure}
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	// O cadastro é apenas de instalação. Depois de existir o gerente único, a
-	// restrição do banco também impede outro cadastro mesmo que o token vaze.
-	if h.setupToken == "" {
-		writeError(w, http.StatusServiceUnavailable, "cadastro inicial indisponível")
-		return
-	}
-	if !matchesSetupToken(h.setupToken, r.Header.Get(setupTokenHeader)) {
-		writeError(w, http.StatusForbidden, "token de cadastro inválido")
-		return
-	}
-
 	input, ok := decodeRegistrationRequest(w, r)
 	if !ok {
 		return
@@ -60,8 +43,8 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.service.RegisterManager(r.Context(), input.Name, input.LoginName, input.Password); err != nil {
 		switch {
-		case errors.Is(err, ErrManagerAlreadyRegistered):
-			writeError(w, http.StatusConflict, "cadastro do gerente já concluído")
+		case errors.Is(err, ErrLoginNameTaken):
+			writeError(w, http.StatusConflict, "nome de acesso já está em uso")
 		case errors.Is(err, ErrAuthenticationBusy):
 			writeError(w, http.StatusServiceUnavailable, "autenticação temporariamente indisponível")
 		case isValidationError(err):
@@ -184,16 +167,4 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 	// apagado na mesma resposta, evitando que o navegador continue apresentando-o.
 	clearSessionCookie(w, h.cookieSecure)
 	writeJSON(w, http.StatusOK, managerStatusResponse{Active: false})
-}
-
-func matchesSetupToken(expected, provided string) bool {
-	if len(provided) == 0 || len(provided) > 256 {
-		return false
-	}
-
-	// Hashes do mesmo tamanho permitem comparação em tempo constante mesmo se os
-	// tokens tiverem comprimentos diferentes. Isso protege o segredo de bootstrap.
-	expectedHash := sha256.Sum256([]byte(expected))
-	providedHash := sha256.Sum256([]byte(provided))
-	return subtle.ConstantTimeCompare(expectedHash[:], providedHash[:]) == 1
 }

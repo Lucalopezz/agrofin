@@ -23,8 +23,6 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	require.NoError(t, err, "configurar o banco de teste")
 	defer pool.Close()
-	unlockIntegrationDatabase := acquireAuthIntegrationDatabaseLock(t, ctx, pool)
-	defer unlockIntegrationDatabase()
 
 	const loginName = "teste-auth-sessoes"
 	const password = "UmaSenhaForteComMaisDe15Caracteres"
@@ -87,20 +85,4 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	assert.ErrorIs(t, err, ErrInvalidSession)
 	_, err = service.Login(ctx, loginName, password)
 	assert.ErrorIs(t, err, ErrInvalidCredentials)
-}
-
-func acquireAuthIntegrationDatabaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) func() {
-	t.Helper()
-	connection, err := pool.Acquire(ctx)
-	require.NoError(t, err, "reservar conexão para serializar integrações")
-	const lockKey int64 = 2026103001
-	_, err = connection.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey)
-	require.NoError(t, err, "serializar testes que usam o gerente único")
-	return func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, err := connection.Exec(cleanupCtx, "SELECT pg_advisory_unlock($1)", lockKey)
-		assert.NoError(t, err, "liberar trava de integração")
-		connection.Release()
-	}
 }

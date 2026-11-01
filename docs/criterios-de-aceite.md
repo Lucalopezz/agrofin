@@ -2,12 +2,22 @@
 
 Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; não definem tarifas reais.
 
+## Contas e acesso
+
+### HU-17 — cadastro público e isolamento
+
+- Dois clientes podem criar contas com nomes de acesso diferentes sem sessão prévia, convite ou token de instalação, mesmo que tenham o mesmo nome de exibição.
+- Repetir um nome de acesso, inclusive variando maiúsculas e espaços externos, retorna `409` sem alterar a conta existente.
+- Cada cliente entra com suas próprias credenciais e recebe uma sessão vinculada ao seu usuário.
+- Funcionários cadastrados por um gerente não aparecem para outro; enviar `user_id` no corpo ou na query não permite escolher o dono dos registros.
+- Desativar uma conta revoga somente suas sessões; outras contas continuam funcionando.
+
 ## Colheita, diárias e pagamentos
 
 ### HU-01 e HU-02 — funcionários e caixas
 
 - O cadastro pede apenas o nome. O sistema gera o identificador usado para relacionar colheitas e pagamentos, mesmo quando houver nomes iguais.
-- Só o cliente entra no sistema; cadastrar um funcionário não cria usuário, senha ou convite.
+- Cada cliente entra com a própria conta; cadastrar um funcionário não cria usuário, senha ou convite.
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
 - Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição registra quem alterou, quando alterou e os valores anteriores.

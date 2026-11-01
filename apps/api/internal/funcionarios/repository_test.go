@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -29,36 +30,82 @@ func TestEmployeesIntegration(t *testing.T) {
 	pool, err := pgxpool.New(ctx, databaseURL)
 	require.NoError(t, err, "configurar o banco de teste")
 	defer pool.Close()
-	unlockIntegrationDatabase := acquireIntegrationDatabaseLock(t, ctx, pool)
-	defer unlockIntegrationDatabase()
 
-	var userID string
-	err = pool.QueryRow(ctx, "INSERT INTO users (name, login_name, password_hash) VALUES ($1, $2, $3) RETURNING id::text", "Gerente de teste", "teste-funcionarios", "hash-de-teste").Scan(&userID)
-	require.NoError(t, err, "criar o gerente de teste")
+	const origin = "http://localhost:5173"
+	const password = "UmaSenhaForteComMaisDe15Caracteres"
+	logins := []string{"teste-funcionarios", "teste-funcionarios-outro"}
 	defer func() {
-		// A limpeza tem prazo próprio para funcionar mesmo se o teste cancelar
-		// seu contexto. Só removemos registros vinculados ao gerente desta execução.
+		// A limpeza só atinge as contas deste teste e tem prazo próprio, mesmo
+		// quando uma falha interrompe o fluxo antes de todas as contas existirem.
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
-		// assert permite tentar a segunda limpeza mesmo se a primeira falhar.
-		_, err := pool.Exec(cleanupCtx, "DELETE FROM employees WHERE user_id = $1", userID)
-		assert.NoError(t, err, "limpar os funcionários de teste")
-		_, err = pool.Exec(cleanupCtx, "DELETE FROM users WHERE id = $1", userID)
-		assert.NoError(t, err, "limpar o gerente de teste")
+		_, err := pool.Exec(cleanupCtx, "DELETE FROM employees WHERE user_id IN (SELECT id FROM users WHERE login_name = ANY($1))", logins)
+		assert.NoError(t, err, "limpar funcionários de teste")
+		// As sessões são removidas pelo ON DELETE CASCADE do usuário.
+		_, err = pool.Exec(cleanupCtx, "DELETE FROM users WHERE login_name = ANY($1)", logins)
+		assert.NoError(t, err, "limpar gerentes de teste")
 	}()
 
 	service := NewService(NewRepository(pool))
+	authService := auth.NewService(auth.NewRepository(pool))
+	middleware := auth.NewMiddleware(authService, false)
 	mux := http.NewServeMux()
-	RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
-	// Uma conexão HTTP real exercita rota, JSON, serviço e SQL juntos.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestCtx := auth.WithPrincipal(r.Context(), auth.Principal{UserID: userID})
-		mux.ServeHTTP(w, r.WithContext(requestCtx))
-	}))
+	auth.RegisterRoutes(mux, auth.NewHandler(authService, auth.HandlerConfig{}), middleware.RequireSession)
+	RegisterRoutes(mux, NewHandler(service), middleware.RequireSession)
+	// Servidor e cookies reais exercitam cadastro público, sessão e isolamento
+	// juntos: o teste não injeta mais um principal para simular autenticação.
+	server := httptest.NewServer(auth.RequireSameOrigin(origin, mux))
 	defer server.Close()
-	client := server.Client()
-	client.Timeout = 5 * time.Second
-	list := func() []employeeResponse {
+	request := func(client *http.Client, method, path, body string, expectedStatus int) *http.Response {
+		t.Helper()
+		req, err := http.NewRequestWithContext(ctx, method, server.URL+path, strings.NewReader(body))
+		require.NoError(t, err)
+		if method != http.MethodGet {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Origin", origin)
+			req.Header.Set("X-Agrofin-Request", "1")
+		}
+		response, err := client.Do(req)
+		require.NoError(t, err)
+		if response.StatusCode != expectedStatus {
+			response.Body.Close()
+			t.Fatalf("%s %s: status %d, esperado %d", method, path, response.StatusCode, expectedStatus)
+		}
+		return response
+	}
+	newManager := func(loginName string) (*http.Client, string) {
+		t.Helper()
+		jar, err := cookiejar.New(nil)
+		require.NoError(t, err)
+		// Cookie jars separados representam navegadores de clientes diferentes.
+		client := &http.Client{Jar: jar, Timeout: 5 * time.Second}
+		body := `{"name":"Gerente de teste","login_name":"` + loginName + `","password":"` + password + `"}`
+		response := request(client, http.MethodPost, "/auth/register", body, http.StatusCreated)
+		response.Body.Close()
+		response = request(client, http.MethodPost, "/auth/login", `{"login_name":"`+loginName+`","password":"`+password+`"}`, http.StatusOK)
+		response.Body.Close()
+		response = request(client, http.MethodGet, "/auth/me", "", http.StatusOK)
+		defer response.Body.Close()
+		var profile struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		}
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&profile))
+		require.NotEmpty(t, profile.User.ID)
+		return client, profile.User.ID
+	}
+	client, userID := newManager(logins[0])
+	otherClient, otherUserID := newManager(logins[1])
+	assert.NotEqual(t, userID, otherUserID)
+
+	// O login é normalizado antes de persistir: diferenças de maiúsculas e
+	// espaços não podem criar uma segunda conta com a mesma credencial.
+	response := request(otherClient, http.MethodPost, "/auth/register", `{"name":"Outro nome","login_name":" TESTE-FUNCIONARIOS ","password":"`+password+`"}`, http.StatusConflict)
+	response.Body.Close()
+	response = request(server.Client(), http.MethodGet, "/employees", "", http.StatusUnauthorized)
+	response.Body.Close()
+	list := func(client *http.Client) []employeeResponse {
 		t.Helper()
 		response, err := client.Get(server.URL + "/employees")
 		require.NoError(t, err)
@@ -70,11 +117,10 @@ func TestEmployeesIntegration(t *testing.T) {
 		require.NotNil(t, employees)
 		return employees
 	}
-	assert.Empty(t, list())
-	create := func(body string) employeeResponse {
+	assert.Empty(t, list(client))
+	create := func(client *http.Client, body string) employeeResponse {
 		t.Helper()
-		response, err := client.Post(server.URL+"/employees", "application/json", strings.NewReader(body))
-		require.NoError(t, err)
+		response := request(client, http.MethodPost, "/employees", body, http.StatusCreated)
 		defer response.Body.Close()
 		// Só lemos o funcionário quando a criação HTTP terminou com sucesso.
 		require.Equal(t, http.StatusCreated, response.StatusCode)
@@ -82,8 +128,8 @@ func TestEmployeesIntegration(t *testing.T) {
 		require.NoError(t, json.NewDecoder(response.Body).Decode(&employee))
 		return employee
 	}
-	first := create(`{"name":"  João D'Ávila  "}`)
-	second := create(`{"name":"João D'Ávila"}`)
+	first := create(client, `{"name":"  João D'Ávila  "}`)
+	second := create(client, `{"name":"João D'Ávila"}`)
 	assert.NotEmpty(t, first.ID)
 	assert.NotEmpty(t, second.ID)
 	assert.NotEqual(t, first.ID, second.ID)
@@ -103,8 +149,7 @@ func TestEmployeesIntegration(t *testing.T) {
 	assert.True(t, active)
 	assert.False(t, deactivated)
 
-	response, err := client.Post(server.URL+"/employees", "application/json", strings.NewReader(`{"name":"   "}`))
-	require.NoError(t, err)
+	response = request(client, http.MethodPost, "/employees", `{"name":"   "}`, http.StatusBadRequest)
 	response.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, response.StatusCode)
 
@@ -119,7 +164,7 @@ func TestEmployeesIntegration(t *testing.T) {
 	require.NoError(t, err, "contar funcionários após cancelamento")
 	assert.Equal(t, 2, count)
 
-	ana := create(`{"name":"Ana"}`)
+	ana := create(client, `{"name":"Ana"}`)
 	// A listagem do cadastro preserva o estado dos inativos. Excluí-los da seleção
 	// de novos lançamentos pertence ao fluxo de colheita, ainda não implementado.
 	_, err = pool.Exec(ctx, "UPDATE employees SET active = false, deactivated_at = now() WHERE id = $1", second.ID)
@@ -130,30 +175,28 @@ func TestEmployeesIntegration(t *testing.T) {
 	if second.ID < first.ID {
 		expected[1], expected[2] = second, first
 	}
-	assert.Equal(t, expected, list())
+	assert.Equal(t, expected, list(client))
 
-	// A instalação admite só um gerente; um UUID sem registros permite provar
-	// o filtro por dono sem remover a restrição para criar um segundo usuário.
-	otherEmployees, err := service.List(ctx, "00000000-0000-0000-0000-000000000000")
-	require.NoError(t, err)
-	assert.NotNil(t, otherEmployees)
-	assert.Empty(t, otherEmployees)
+	// As duas contas têm funcionários reais. Cada sessão deve enxergar somente
+	// os seus, mesmo quando o cliente tenta escolher outro dono na requisição.
+	assert.Empty(t, list(otherClient))
+	otherEmployee := create(otherClient, `{"name":"Equipe do outro gerente"}`)
+	assert.Equal(t, []employeeResponse{otherEmployee}, list(otherClient))
+	assert.Equal(t, expected, list(client))
+	response = request(client, http.MethodPost, "/employees", `{"name":"Tentativa","user_id":"`+otherUserID+`"}`, http.StatusBadRequest)
+	response.Body.Close()
+	response = request(client, http.MethodGet, "/employees?user_id="+otherUserID, "", http.StatusOK)
+	var filtered []employeeResponse
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&filtered))
+	response.Body.Close()
+	assert.Equal(t, expected, filtered, "a query não pode substituir o dono derivado da sessão")
+
+	// Desativar a própria conta não deve revogar sessões de outros clientes.
+	response = request(client, http.MethodPatch, "/auth/me/status", `{"active":false}`, http.StatusOK)
+	response.Body.Close()
+	response = request(client, http.MethodGet, "/employees", "", http.StatusUnauthorized)
+	response.Body.Close()
+	assert.Len(t, list(otherClient), 1)
 	_, err = service.List(canceledCtx, userID)
 	assert.ErrorIs(t, err, context.Canceled)
-}
-
-func acquireIntegrationDatabaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) func() {
-	t.Helper()
-	connection, err := pool.Acquire(ctx)
-	require.NoError(t, err, "reservar conexão para serializar integrações")
-	const lockKey int64 = 2026103001
-	_, err = connection.Exec(ctx, "SELECT pg_advisory_lock($1)", lockKey)
-	require.NoError(t, err, "serializar testes que usam o gerente único")
-	return func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, err := connection.Exec(cleanupCtx, "SELECT pg_advisory_unlock($1)", lockKey)
-		assert.NoError(t, err, "liberar trava de integração")
-		connection.Release()
-	}
 }

@@ -4,7 +4,7 @@ O agrofin é uma aplicação para ajudar o cliente a administrar a produção de
 
 ## Estado do projeto
 
-O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, a autenticação do gerente e o cadastro e a listagem persistida de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
+O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro e a listagem persistida de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
 
 ## Tecnologias
 
@@ -71,6 +71,10 @@ As portas, o prefixo da API e a origem pública podem ser alterados no `.env`. O
 | Parar serviços, preservando o banco | `docker compose down` |
 
 Para executar os testes Go com a integração PostgreSQL, carregue `.env` no shell e rode `go test ./...` em `apps/api`; o banco separado `agrofin_test` já está configurado em `TEST_DATABASE_URL` e precisa estar migrado. Sem essa variável no ambiente, os testes unitários rodam e a integração é ignorada. O CI também verifica migrações e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
+
+## Testar a API no Bruno
+
+Importe [a coleção da API](apps/api/bruno/agrofin.postman_collection.json) no Bruno como Postman Collection. As [instruções](apps/api/bruno/README.md) explicam as variáveis e a ordem das requisições. O cadastro é público e não exige token de instalação.
 
 ## Documentação
 

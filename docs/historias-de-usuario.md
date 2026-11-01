@@ -1,5 +1,9 @@
 # Histórias de usuário
 
+## Contas e acesso
+
+- **HU-17** — Como cliente, quero criar minha própria conta e entrar com nome de acesso e senha, para gerenciar meus funcionários e minha produção sem compartilhar dados com outros clientes. Funcionários são registros da minha conta e não possuem login.
+
 ## Colheita e pagamentos
 
 - **HU-01** — Como cliente, quero cadastrar funcionários informando apenas o nome, para identificá-los na colheita e nos pagamentos mesmo quando a equipe mudar de uma semana para outra. Os valores por caixa são configurados separadamente.

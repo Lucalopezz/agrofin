@@ -28,12 +28,16 @@
 - **RF-16** Dar baixa no estoque conforme o uso registrado. No cadastro rápido, permitir informar um saldo inicial ou marcar o estoque como pendente de conferência; não inventar uma compra para justificar o uso.
 - **RF-17** Mostrar calendário mensal com pulverizações, fase da Lua em cada dia e datas de transição entre fases, usando o fuso horário local.
 
+### Contas e acesso
+
+- **RF-18** Permitir que qualquer cliente crie sua conta com nome, nome de acesso e senha, sem convite ou token de instalação. O nome de acesso é único; contas distintas mantêm funcionários e lançamentos separados por `user_id`.
+
 ## Requisitos não funcionais
 
 - **RNF-01 — mobile primeiro:** os fluxos de colheita, pagamento e pulverização devem funcionar integralmente em uma tela estreita, com campos e botões grandes e texto legível.
 - **RNF-02 — poucos passos:** permitir repetir um lançamento recente, usar valores padrão editáveis e concluir os lançamentos frequentes em uma única tela sempre que possível.
 - **RNF-03 — clareza:** mostrar prévia do total antes de salvar, confirmação após salvar, erros em linguagem direta e identificação explícita de valores pendentes, pagos, vendidos e recebidos.
-- **RNF-04 — acesso:** autenticar somente o cliente, gerente da plantação. Há um único usuário do sistema. Funcionários cadastrados não possuem login nem acesso às telas.
+- **RNF-04 — acesso:** permitir cadastro público e autenticação de vários clientes, cada um gerente da própria produção. Cada usuário acessa somente os próprios funcionários e lançamentos. Funcionários cadastrados não possuem login nem acesso às telas.
 - **RNF-05 — segurança:** usar HTTPS, controle de acesso no servidor, validação de entradas, backups protegidos e exclusão de dados financeiros dos logs.
 - **RNF-06 — criptografia:** cifrar valores financeiros sensíveis na aplicação antes de persistir, com criptografia autenticada e chaves gerenciadas fora do banco; prever rotação e recuperação das chaves. Senhas devem usar hash próprio para senhas. A proteção cobre vazamento isolado do banco, não comprometimento simultâneo da aplicação e das chaves.
 - **RNF-07 — integridade:** operações de colheita, pagamentos, vendas e estoque devem ser transacionais; correções precisam deixar rastreabilidade.
@@ -55,6 +59,6 @@
 ## Fora do primeiro escopo
 
 - Folha de pagamento formal, controle de ponto e penalização por ausência.
-- Acesso de funcionários ou de outros operadores ao sistema e gestão de múltiplos perfis.
+- Acesso de funcionários ou de operadores adicionais à mesma produção e gestão de permissões compartilhadas. O cadastro de vários clientes com contas independentes faz parte do escopo.
 - Recomendação de produto, dose ou momento de aplicação de defensivos.
 - Integração automática com barracão, banco, medidor de energia ou notas fiscais.

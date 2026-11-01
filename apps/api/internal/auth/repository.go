@@ -21,7 +21,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 }
 
 // CreateManager persiste a entidade validada e preparada pelo Service.
-// O índice único da instalação protege contra cadastros concorrentes.
+// A unicidade do login protege contra cadastros concorrentes com o mesmo acesso.
 func (r *Repository) CreateManager(ctx context.Context, manager Manager) error {
 	// O Repository recebe a entidade já normalizada e com hash; ele não decide
 	// regras de senha nem transforma dados de entrada.
@@ -31,10 +31,10 @@ func (r *Repository) CreateManager(ctx context.Context, manager Manager) error {
 	`, manager.Name, manager.LoginName, manager.PasswordHash, manager.Active)
 	if err != nil {
 		var databaseError *pgconn.PgError
-		if errors.As(err, &databaseError) && databaseError.Code == "23505" {
-			// A unicidade é garantida pelo banco, inclusive se dois cadastros
-			// iniciais chegarem juntos. O SQLSTATE vira um erro do domínio.
-			return ErrManagerAlreadyRegistered
+		if errors.As(err, &databaseError) && databaseError.Code == "23505" && databaseError.ConstraintName == "users_login_name_key" {
+			// Só o conflito do login vira 409; outras restrições não significam
+			// que o nome está ocupado. O banco decide a disputa entre cadastros.
+			return ErrLoginNameTaken
 		}
 		return errors.New("não foi possível cadastrar o gerente")
 	}

@@ -81,7 +81,7 @@ func (s *Service) RegisterManager(ctx context.Context, name, loginName, password
 		Name:         name,
 		LoginName:    loginName,
 		PasswordHash: passwordHash,
-		// O primeiro e único gerente já pode usar a API assim que o cadastro termina.
+		// Cada cliente recebe uma conta ativa; os dados serão vinculados ao seu ID.
 		Active: true,
 	}
 	return s.repo.CreateManager(ctx, manager)
@@ -102,8 +102,8 @@ func (s *Service) UpdateManagerName(ctx context.Context, userID, name string) (M
 	return s.repo.UpdateManagerName(ctx, Manager{ID: userID, Name: name})
 }
 
-// SetManagerActive aceita desativação por uma sessão válida; reativar a única
-// conta exige operador, pois a própria conta não consegue autenticar desativada.
+// SetManagerActive aceita desativação por uma sessão válida; a reativação ainda
+// exige operador, pois a própria conta não consegue autenticar desativada.
 func (s *Service) SetManagerActive(ctx context.Context, userID string, active bool) error {
 	if active {
 		return ErrActivationRequiresOperator

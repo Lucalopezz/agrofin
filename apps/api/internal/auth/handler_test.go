@@ -43,14 +43,11 @@ func (f managerRegistrarFunc) UpdateManagerName(ctx context.Context, userID, nam
 func (managerRegistrarFunc) SetManagerActive(context.Context, string, bool) error { return nil }
 
 func TestRegisterHandler(t *testing.T) {
-	const expectedToken = "token-de-configuracao"
 	const validBody = `{"name":"Gerente da Produção","login_name":"Gerente_1","password":"UmaSenhaForteComMaisDe15Caracteres"}`
 	tests := []struct {
 		name             string
 		body             string
 		contentType      string
-		token            string
-		disableSetup     bool
 		serviceErr       error
 		expectedStatus   int
 		expectedCalls    int
@@ -58,21 +55,18 @@ func TestRegisterHandler(t *testing.T) {
 		expectedLogin    string
 		expectedPassword string
 	}{
-		{name: "cadastro concluído", body: validBody, contentType: "application/json; charset=utf-8", token: expectedToken, expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "Gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
-		{name: "token de configuração ausente no servidor", body: validBody, contentType: "application/json", token: expectedToken, disableSetup: true, expectedStatus: http.StatusServiceUnavailable},
-		{name: "token não enviado", body: validBody, contentType: "application/json", expectedStatus: http.StatusForbidden},
-		{name: "token inválido", body: validBody, contentType: "application/json", token: "outro-token", expectedStatus: http.StatusForbidden},
-		{name: "content type ausente", body: validBody, token: expectedToken, expectedStatus: http.StatusUnsupportedMediaType},
-		{name: "content type não suportado", body: validBody, contentType: "text/plain", token: expectedToken, expectedStatus: http.StatusUnsupportedMediaType},
-		{name: "json inválido", body: `{"login_name":`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusBadRequest},
-		{name: "json nulo", body: `null`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusBadRequest},
-		{name: "campo desconhecido", body: `{"login_name":"gerente","password":"senha","admin":true}`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusBadRequest},
-		{name: "mais de um valor json", body: validBody + ` {}`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusBadRequest},
-		{name: "credenciais ausentes", body: `{"login_name":"","password":""}`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusBadRequest},
-		{name: "corpo grande demais", body: `{"login_name":"gerente","password":"` + strings.Repeat("a", 4100) + `"}`, contentType: "application/json", token: expectedToken, expectedStatus: http.StatusRequestEntityTooLarge},
-		{name: "credenciais recusadas pelo service", body: validBody, contentType: "application/json", token: expectedToken, serviceErr: invalidInput("senha fraca"), expectedStatus: http.StatusBadRequest, expectedCalls: 1},
-		{name: "gerente já cadastrado", body: validBody, contentType: "application/json", token: expectedToken, serviceErr: ErrManagerAlreadyRegistered, expectedStatus: http.StatusConflict, expectedCalls: 1},
-		{name: "erro interno não é exposto", body: validBody, contentType: "application/json", token: expectedToken, serviceErr: errors.New("detalhe privado do banco"), expectedStatus: http.StatusInternalServerError, expectedCalls: 1},
+		{name: "cadastro público sem token", body: validBody, contentType: "application/json; charset=utf-8", expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "Gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
+		{name: "content type ausente", body: validBody, expectedStatus: http.StatusUnsupportedMediaType},
+		{name: "content type não suportado", body: validBody, contentType: "text/plain", expectedStatus: http.StatusUnsupportedMediaType},
+		{name: "json inválido", body: `{"login_name":`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "json nulo", body: `null`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "campo desconhecido", body: `{"login_name":"gerente","password":"senha","admin":true}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "mais de um valor json", body: validBody + ` {}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "credenciais ausentes", body: `{"login_name":"","password":""}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "corpo grande demais", body: `{"login_name":"gerente","password":"` + strings.Repeat("a", 4100) + `"}`, contentType: "application/json", expectedStatus: http.StatusRequestEntityTooLarge},
+		{name: "credenciais recusadas pelo service", body: validBody, contentType: "application/json", serviceErr: invalidInput("senha fraca"), expectedStatus: http.StatusBadRequest, expectedCalls: 1},
+		{name: "login já utilizado", body: validBody, contentType: "application/json", serviceErr: ErrLoginNameTaken, expectedStatus: http.StatusConflict, expectedCalls: 1},
+		{name: "erro interno não é exposto", body: validBody, contentType: "application/json", serviceErr: errors.New("detalhe privado do banco"), expectedStatus: http.StatusInternalServerError, expectedCalls: 1},
 	}
 
 	for _, tt := range tests {
@@ -94,18 +88,11 @@ func TestRegisterHandler(t *testing.T) {
 				return tt.serviceErr
 			})
 
-			setupToken := expectedToken
-			if tt.disableSetup {
-				setupToken = ""
-			}
 			mux := http.NewServeMux()
-			RegisterRoutes(mux, NewHandler(registrar, HandlerConfig{SetupToken: setupToken}), func(next http.Handler) http.Handler { return next })
+			RegisterRoutes(mux, NewHandler(registrar, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
 			request := httptest.NewRequest(http.MethodPost, "/auth/register", strings.NewReader(tt.body)).WithContext(ctx)
 			if tt.contentType != "" {
 				request.Header.Set("Content-Type", tt.contentType)
-			}
-			if tt.token != "" {
-				request.Header.Set(setupTokenHeader, tt.token)
 			}
 			response := httptest.NewRecorder()
 			mux.ServeHTTP(response, request)
@@ -126,24 +113,6 @@ func TestRegisterHandler(t *testing.T) {
 			if tt.serviceErr != nil && tt.expectedStatus == http.StatusInternalServerError {
 				assert.NotContains(t, response.Body.String(), tt.serviceErr.Error())
 			}
-		})
-	}
-}
-
-func TestMatchesSetupToken(t *testing.T) {
-	tests := []struct {
-		name     string
-		provided string
-		want     bool
-	}{
-		{name: "correspondente", provided: "segredo", want: true},
-		{name: "divergente", provided: "outro", want: false},
-		{name: "vazio", provided: "", want: false},
-		{name: "longo demais", provided: strings.Repeat("a", 257), want: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, matchesSetupToken("segredo", tt.provided))
 		})
 	}
 }

@@ -41,7 +41,7 @@ func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (*credenti
 	return input, true
 }
 
-// decodeRegistrationRequest exige nome de exibição e credenciais no cadastro único.
+// decodeRegistrationRequest exige nome de exibição e credenciais no cadastro de conta.
 func decodeRegistrationRequest(w http.ResponseWriter, r *http.Request) (*registrationRequest, bool) {
 	var input *registrationRequest
 	if !decodeJSONRequest(w, r, &input) {

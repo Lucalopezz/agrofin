@@ -4,7 +4,7 @@ import "errors"
 
 // Erros sentinela permitem que o Handler mapeie falhas conhecidas para status
 // HTTP sem depender do texto interno retornado pelo banco ou pelo Service.
-var ErrManagerAlreadyRegistered = errors.New("auth: gerente já cadastrado")
+var ErrLoginNameTaken = errors.New("auth: nome de acesso já está em uso")
 var ErrInvalidCredentials = errors.New("auth: credenciais inválidas")
 var ErrInvalidSession = errors.New("auth: sessão inválida")
 var ErrAuthenticationBusy = errors.New("auth: autenticação temporariamente ocupada")

@@ -93,9 +93,9 @@ Os testes de serviço verificam normalização, bloqueio de nome vazio antes da 
 
 ### identidade e autenticação implementadas
 
-O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. As migrações limitam esta instalação a um único gerente. O cadastro inicial está em `POST /api/v1/auth/register`, recebe `name`, `login_name` e `password`, exige `X-Agrofin-Setup-Token` configurado por `AUTH_SETUP_TOKEN` e só funciona antes de existir usuário.
+O modelo usa `users` para o gerente que autentica e `employees` para as pessoas que trabalham na produção, sem credenciais. Cada tabela de negócio guarda `user_id`; não existe tabela `accounts`. A migração `00009_public_registration.sql` permite várias contas independentes, preservando os dados existentes. O cadastro público está em `POST /api/v1/auth/register`, recebe `name`, `login_name` e `password` e não exige token de instalação. Cada cliente é gerente dos próprios dados; somente o nome de acesso precisa ser único, inclusive sob concorrência.
 
-O cadastro inicial, login, logout, consulta da sessão, perfil, alteração de nome, desativação, cookie e middleware estão implementados. O cadastro recebe `name`, `login_name` e `password`; o nome é exibido no perfil e `login_name` permanece imutável pela API. `GET /auth/me` retorna o perfil autenticado. `PATCH /auth/me` atualiza somente `name`. `PATCH /auth/me/status` aceita desativação, encerra as sessões na mesma transação e limpa o cookie. Uma conta desativada não autentica. Como há apenas um gerente, reativar exige intervenção de operador; sessões antigas são revogadas e não voltam a funcionar. O middleware resolve o token opaco no PostgreSQL e anexa o `user_id` ao contexto; o cliente nunca escolhe esse vínculo. A sessão expira após sete dias sem atividade ou trinta dias desde o login. Cada login ganha um token novo de 32 bytes aleatórios; somente SHA-256 é persistido. Credenciais inexistentes, senha incorreta e usuário inativo recebem a mesma resposta. Verificações Argon2id são limitadas a duas simultâneas por processo; limitar tentativas por IP fica para a borda antes da publicação.
+O cadastro público, login, logout, consulta da sessão, perfil, alteração de nome, desativação, cookie e middleware estão implementados. O cadastro recebe `name`, `login_name` e `password`; o nome é exibido no perfil e `login_name` permanece imutável pela API. `GET /auth/me` retorna o perfil autenticado. `PATCH /auth/me` atualiza somente `name`. `PATCH /auth/me/status` aceita desativação, encerra as sessões na mesma transação e limpa o cookie. Uma conta desativada não autentica. A reativação ainda exige intervenção de operador, pois não há fluxo público para isso; sessões antigas são revogadas e não voltam a funcionar. O middleware resolve o token opaco no PostgreSQL e anexa o `user_id` ao contexto; o cliente nunca escolhe esse vínculo. A sessão expira após sete dias sem atividade ou trinta dias desde o login. Cada login ganha um token novo de 32 bytes aleatórios; somente SHA-256 é persistido. Credenciais inexistentes, senha incorreta e usuário inativo recebem a mesma resposta. Verificações Argon2id são limitadas a duas simultâneas por processo; limitar tentativas por IP fica para a borda antes da publicação.
 
 ```mermaid
 flowchart TD
@@ -126,7 +126,7 @@ Ao verificar o hash, aceitar somente Argon2id e parâmetros dentro de limites r�
 #### rotas e ordem de implementação
 
 ```text
-POST ${API_PREFIX}/auth/register  # cadastro único do gerente; requer token de cadastro
+POST ${API_PREFIX}/auth/register  # cadastro público de uma conta de cliente/gerente
 POST ${API_PREFIX}/auth/login     # credenciais; cria sessão e cookie
 POST ${API_PREFIX}/auth/logout    # revoga sessão e limpa cookie
 GET  ${API_PREFIX}/auth/me        # retorna o perfil autenticado
@@ -134,7 +134,7 @@ PATCH ${API_PREFIX}/auth/me       # altera somente o nome de exibição
 PATCH ${API_PREFIX}/auth/me/status # desativa a conta e revoga sessões; reativação por operador
 ```
 
-Todas as rotas de negócio existentes exigem sessão. Rotas de autenticação devolvem `Cache-Control: no-store`; o cadastro inicial, login e logout também passam pela proteção de origem. Ainda não há interface web para login; clientes HTTP devem enviar o cabeçalho `X-Agrofin-Request: 1` e a origem configurada.
+Todas as rotas de negócio existentes exigem sessão. Rotas de autenticação devolvem `Cache-Control: no-store`; o cadastro público, login e logout também passam pela proteção de origem. Ainda não há interface web para login; clientes HTTP devem enviar o cabeçalho `X-Agrofin-Request: 1` e a origem configurada.
 
 Antes de produção, validar: sessão expirada ou revogada falha; logout invalida o token no servidor; `user_id` forjado é ignorado/rejeitado; cada rota privada obtém o gerente pela sessão; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
 

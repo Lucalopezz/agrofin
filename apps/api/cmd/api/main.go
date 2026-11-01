@@ -74,7 +74,6 @@ func run() error {
 	authRepo := auth.NewRepository(pool)
 	authService := auth.NewService(authRepo)
 	authHandler := auth.NewHandler(authService, auth.HandlerConfig{
-		SetupToken:   os.Getenv("AUTH_SETUP_TOKEN"),
 		CookieSecure: cookieSecure,
 	})
 	sessionMiddleware := auth.NewMiddleware(authService, cookieSecure)
