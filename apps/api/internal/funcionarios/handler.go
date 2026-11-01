@@ -10,6 +10,7 @@ import (
 // O handler depende do caso de uso, sem acessar o banco ou validar o domínio.
 type employeeService interface {
 	Create(ctx context.Context, userID, name string) (Employee, error)
+	List(ctx context.Context, userID string) ([]Employee, error)
 }
 
 type Handler struct {
@@ -18,6 +19,19 @@ type Handler struct {
 
 func NewHandler(service employeeService) *Handler {
 	return &Handler{service: service}
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	// Mesmo sem o middleware, o handler não consulta dados sem identidade.
+	// O vínculo vem da sessão, nunca de um filtro escolhido pelo navegador.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	employees, err := h.service.List(r.Context(), principal.UserID)
+	writeListEmployeesResponse(w, employees, err)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

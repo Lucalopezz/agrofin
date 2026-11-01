@@ -45,3 +45,46 @@ func (r *Repository) Create(ctx context.Context, employee Employee) (Employee, e
 
 	return employee, nil
 }
+
+// List consulta os funcionários vinculados ao gerente informado.
+func (r *Repository) List(ctx context.Context, userID string) ([]Employee, error) {
+	const query = `
+		SELECT id::text, user_id::text, name, active
+		FROM employees
+		WHERE user_id = $1
+		ORDER BY name, id
+	`
+
+	// O filtro limita a consulta ao dono dos dados. O ID desempata nomes iguais,
+	// mantendo a ordem previsível sem confundir pessoas com o mesmo nome.
+	rows, err := r.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listar funcionários: %w", err)
+	}
+	defer rows.Close()
+	// Uma lista sem registros deve ser representada como [], não null.
+	employees := make([]Employee, 0)
+
+	for rows.Next() {
+		var employee Employee
+		err := rows.Scan(
+			&employee.ID,
+			&employee.UserID,
+			&employee.Name,
+			&employee.Active,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("ler funcionário: %w", err)
+		}
+
+		employees = append(employees, employee)
+	}
+
+	// Next também retorna false quando a leitura falha. Distinguir esse caso
+	// do término normal impede devolver uma lista incompleta como sucesso.
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterar funcionários: %w", err)
+	}
+
+	return employees, nil
+}

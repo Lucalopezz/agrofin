@@ -18,6 +18,28 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+func writeListEmployeesResponse(w http.ResponseWriter, employees []Employee, err error) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para listar funcionários esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// O erro do driver pode conter dados da consulta; registramos apenas a operação.
+		log.Print("erro de persistência ao listar funcionários")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível listar os funcionários"})
+	default:
+		// O DTO omite o vínculo técnico UserID e garante [] mesmo com uma slice nil.
+		response := make([]employeeResponse, 0, len(employees))
+		for _, employee := range employees {
+			response = append(response, employeeResponse{
+				ID: employee.ID, Name: employee.Name, Active: employee.Active,
+			})
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
 // A conversão dos erros para status HTTP fica na borda, sem expor detalhes do driver.
 func writeCreateEmployeeResponse(w http.ResponseWriter, employee Employee, err error) {
 	switch {

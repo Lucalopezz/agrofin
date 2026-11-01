@@ -17,7 +17,7 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 )
 
-func TestCreateEmployeeIntegration(t *testing.T) {
+func TestEmployeesIntegration(t *testing.T) {
 	// A integração exige um banco de teste com as migrações aplicadas.
 	// Não usamos DATABASE_URL para evitar gravar no banco de desenvolvimento.
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
@@ -58,6 +58,19 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	defer server.Close()
 	client := server.Client()
 	client.Timeout = 5 * time.Second
+	list := func() []employeeResponse {
+		t.Helper()
+		response, err := client.Get(server.URL + "/employees")
+		require.NoError(t, err)
+		defer response.Body.Close()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		var employees []employeeResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&employees))
+		// Decodificar null não gera erro, mas quebraria o contrato de coleção da API.
+		require.NotNil(t, employees)
+		return employees
+	}
+	assert.Empty(t, list())
 	create := func(body string) employeeResponse {
 		t.Helper()
 		response, err := client.Post(server.URL+"/employees", "application/json", strings.NewReader(body))
@@ -105,6 +118,28 @@ func TestCreateEmployeeIntegration(t *testing.T) {
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM employees WHERE user_id = $1", userID).Scan(&count)
 	require.NoError(t, err, "contar funcionários após cancelamento")
 	assert.Equal(t, 2, count)
+
+	ana := create(`{"name":"Ana"}`)
+	// A listagem do cadastro preserva o estado dos inativos. Excluí-los da seleção
+	// de novos lançamentos pertence ao fluxo de colheita, ainda não implementado.
+	_, err = pool.Exec(ctx, "UPDATE employees SET active = false, deactivated_at = now() WHERE id = $1", second.ID)
+	require.NoError(t, err)
+	second.Active = false
+	expected := []employeeResponse{ana, first, second}
+	// Os dois nomes iguais são desempatados pelo ID, sem deduplicar pessoas.
+	if second.ID < first.ID {
+		expected[1], expected[2] = second, first
+	}
+	assert.Equal(t, expected, list())
+
+	// A instalação admite só um gerente; um UUID sem registros permite provar
+	// o filtro por dono sem remover a restrição para criar um segundo usuário.
+	otherEmployees, err := service.List(ctx, "00000000-0000-0000-0000-000000000000")
+	require.NoError(t, err)
+	assert.NotNil(t, otherEmployees)
+	assert.Empty(t, otherEmployees)
+	_, err = service.List(canceledCtx, userID)
+	assert.ErrorIs(t, err, context.Canceled)
 }
 
 func acquireIntegrationDatabaseLock(t *testing.T, ctx context.Context, pool *pgxpool.Pool) func() {

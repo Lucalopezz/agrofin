@@ -4,7 +4,7 @@ O agrofin é uma aplicação para ajudar o cliente a administrar a produção de
 
 ## Estado do projeto
 
-O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde funciona; a listagem de funcionários ainda retorna uma lista vazia e o cadastro responde `503` até a integração com o login. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
+O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, a autenticação do gerente e o cadastro e a listagem persistida de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
 
 ## Tecnologias
 

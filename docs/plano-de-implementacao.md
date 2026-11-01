@@ -45,21 +45,21 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. Os demais fluxos de escrita, a criptografia de valores financeiros na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a listagem de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. Os demais fluxos de escrita, a criptografia de valores financeiros na aplicação e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ### Organização interna do cadastro de funcionários
 
-O caminho de criação HTTP está implementado em `internal/funcionarios`, com todos os arquivos no mesmo pacote:
+Os caminhos HTTP de criação e listagem estão implementados em `internal/funcionarios`, com todos os arquivos no mesmo pacote:
 
 | arquivo | responsabilidade implementada |
 | --- | --- |
-| `employee.go` | Define `Employee` e normaliza o nome, removendo espaços das extremidades e rejeitando resultado vazio. Preserva acentos, grafia e espaços internos. |
-| `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com o ID do gerente e estado ativo inicial antes de chamar a persistência. |
-| `repository.go` | `Repository.Create` recebe um `Employee` validado, executa o `INSERT` parametrizado e devolve a entidade com o ID gerado pelo banco. |
-| `handler.go` | Compõe o fluxo HTTP: verifica a disponibilidade, chama o serviço com o contexto da requisição e delega a entrada e a resposta às funções auxiliares. |
+| `entity.go` | Define `Employee` e normaliza o nome, removendo espaços das extremidades e rejeitando resultado vazio. Preserva acentos, grafia e espaços internos. |
+| `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com o ID do gerente e estado ativo inicial antes de chamar a persistência. `Service.List` delega a consulta com o ID do gerente e o contexto recebidos. |
+| `repository.go` | `Repository.Create` recebe um `Employee` validado, executa o `INSERT` parametrizado e devolve a entidade com o ID gerado pelo banco. `Repository.List` filtra por gerente e ordena por nome e ID. |
+| `handler.go` | Compõe o fluxo HTTP: obtém o principal autenticado, chama o serviço com o contexto da requisição e delega a entrada e a resposta às funções auxiliares. |
 | `handler_request.go` | Define o DTO de entrada e valida o tipo de mídia, o tamanho e o formato do JSON. A validação aqui é do protocolo; regras do cadastro ficam no serviço. |
 | `handler_response.go` | Define os DTOs de saída, converte erros da aplicação em status HTTP e serializa as respostas JSON. |
-| `routes.go` | Registra o POST de cadastro e mantém o GET provisório que retorna uma lista vazia. |
+| `routes.go` | Registra o POST de cadastro e o GET de listagem, ambos protegidos pelo middleware de sessão. |
 
 Os arquivos permanecem no pacote `funcionarios`: a separação por arquivo organiza responsabilidades sem criar camadas ou pacotes artificiais. Como convenção para a API Go, mantenha em `handler.go` a coordenação do fluxo; coloque decodificação e validação do protocolo de entrada em `handler_request.go`; e deixe DTOs, serialização e tradução para respostas HTTP em `handler_response.go`. Essas funções continuam privadas ao pacote, e uma função auxiliar sem necessidade do estado de `Handler` deve ser uma função de pacote, não um método com receiver artificial. O service não deve depender de tipos ou status HTTP. Crie esses arquivos quando houver conteúdo real para a responsabilidade, sem arquivos vazios nem um pacote genérico `helpers`.
 
@@ -68,24 +68,28 @@ A composição no `cmd/api/main.go` é:
 ```go
 repo := funcionarios.NewRepository(pool)
 service := funcionarios.NewService(repo)
-// O handler lê o principal do contexto; o middleware ainda será integrado.
+// O middleware confirma a sessão antes de o handler ler o principal.
 handler := funcionarios.NewHandler(service)
-funcionarios.RegisterRoutes(mux, handler)
+authService := auth.NewService(auth.NewRepository(pool))
+sessionMiddleware := auth.NewMiddleware(authService, cookieSecure)
+funcionarios.RegisterRoutes(apiMux, handler, sessionMiddleware.RequireSession)
 ```
 
-O pool é aberto e fechado pela aplicação; o repositório apenas o utiliza. A interface privada `employeeCreator`, declarada junto do serviço que a consome, permite testar a validação sem PostgreSQL. Ela descreve a única operação necessária, sem criar um repositório genérico ou interfaces antecipadas para outros domínios. Cada funcionalidade pode ter seu próprio repositório usando o mesmo pool.
+O pool é aberto e fechado pela aplicação; o repositório apenas o utiliza. A interface privada `employeeRepository`, declarada junto do serviço que a consome, permite testar a validação sem PostgreSQL. Ela descreve somente as operações `Create` e `List`, sem criar um repositório genérico ou interfaces antecipadas para outros domínios. Cada funcionalidade pode ter seu próprio repositório usando o mesmo pool.
 
 O serviço recebe o ID do gerente e o nome, normaliza e valida o nome e monta `Employee{UserID: userID, Name: name, Active: true}`. Em seguida chama `repo.Create(ctx, employee)`. O repositório recebe a struct de domínio por valor, persiste gerente, nome e estado e devolve a entidade com ID gerado pelo banco. Receber por valor evita alterar a struct do chamador implicitamente; o resultado persistido é explícito no retorno. O ID fica vazio somente antes da inserção. `UserID` é um vínculo técnico do domínio, não um campo do formulário HTTP. Nomes iguais continuam permitidos. O repositório não repete a normalização nem escolhe o estado inicial; as restrições SQL continuam protegendo a integridade. Como os campos de `Employee` são exportados, a struct sozinha não comprova validação: o serviço é a entrada das operações de cadastro. A inserção atual é uma única instrução atômica, sem necessidade de transação explícita.
 
-`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `userID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco, sem ser reaproveitado nas requisições.
+`ctx context.Context` vem de `r.Context()` no handler e é passado como primeiro argumento do serviço até `QueryRow` ou `Query`, propagando cancelamento e prazo. Não é guardado nas structs nem substituído por um novo `context.Background()`. O nome e o `userID` continuam sendo argumentos explícitos; contexto não substitui os dados do cadastro. O contexto de inicialização do `main` serve apenas para abrir o banco, sem ser reaproveitado nas requisições.
 
 O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive `user_id`, são rejeitados. O corpo é limitado a 4 KiB. As respostas são JSON: `201` com `id`, `name` e `active`; `400` para JSON ou nome inválido; `413` para corpo excessivo; `415` para tipo diferente de `application/json`; `500` para falha interna sem detalhes do driver; `408` para cancelamento e `504` para prazo esgotado. Os erros usam `{"error":"mensagem em português"}`. Nomes iguais criam funcionários distintos; não há deduplicação por nome nem idempotência do cadastro nesta etapa.
 
+O GET retorna `200` com uma lista de objetos `id`, `name` e `active`, incluindo ativos e inativos. A consulta filtra pelo gerente da sessão e ordena por nome e ID, preservando pessoas com nomes iguais. Sem registros, retorna `[]`, nunca `null`. Não há paginação nem filtro de estado nesta etapa; a seleção de ativos para novos lançamentos pertence ao futuro fluxo de colheita. Falhas retornam `500` sem detalhes internos, cancelamento retorna `408` e prazo esgotado retorna `504`.
+
 O middleware de sessão valida o cookie e anexa o `user_id` confirmado ao contexto por requisição. As rotas `GET /employees` e `POST /employees` exigem sessão; o handler também responde `401` se for usado sem o middleware. Esse identificador nunca é aceito no corpo ou cabeçalho do cadastro. Os testes de handler fornecem um principal controlado e os testes de integração passam pelo fluxo HTTP com o vínculo do gerente.
 
-**Ainda pendente:** listagem persistida, renomeação e desativação. O tipo `auth.Principal` transporta a identidade validada pelo middleware; as regras permanecem no serviço e o SQL no repositório.
+**Ainda pendente:** renomeação e desativação. O tipo `auth.Principal` transporta a identidade validada pelo middleware; as regras permanecem no serviço e o SQL no repositório.
 
-Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e `user_id` e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com o gerente, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria seu gerente de teste e remove somente os registros criados por ele ao terminar.
+Os testes de serviço verificam normalização, bloqueio de nome vazio antes da persistência, propagação de contexto e `user_id` e preservação de erros. Os testes de handler verificam o contrato HTTP e os caminhos de erro sem banco. Para executar também o teste de integração, use um banco exclusivo de teste com as migrações aplicadas e forneça `TEST_DATABASE_URL` ao executar `go test ./...` em `apps/api`. Esse teste envia requisições HTTP reais para um servidor temporário e verifica gravação, vínculo com o gerente, IDs distintos para nomes iguais, estado ativo inicial, nome inválido sem gravação, listagem vazia, ordenação com nomes iguais, retorno de inativos, filtro por gerente e cancelamento. Sem essa variável, a integração é explicitamente pulada; os demais testes continuam executando. A fixture cria seu gerente de teste e remove somente os registros criados por ele ao terminar.
 
 ### identidade e autenticação implementadas
 

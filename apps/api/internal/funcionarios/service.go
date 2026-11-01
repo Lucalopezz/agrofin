@@ -2,20 +2,21 @@ package funcionarios
 
 import "context"
 
-// A interface descreve somente a persistência usada pelo serviço. Ela permite
-// testar as regras sem PostgreSQL, mantendo o SQL no Repository concreto.
-type employeeCreator interface {
+// A interface descreve as operações de persistência usadas pelo serviço.
+// Ela permite testar o serviço sem depender do PostgreSQL.
+type employeeRepository interface {
 	Create(ctx context.Context, employee Employee) (Employee, error)
+	List(ctx context.Context, userID string) ([]Employee, error)
 }
 
-// Service coordena o cadastro e aplica suas regras antes da persistência.
+// Service coordena os casos de uso do cadastro de funcionários.
 type Service struct {
-	repo employeeCreator
+	repo employeeRepository
 }
 
 // NewService recebe a persistência sem abrir conexões nem guardar um contexto:
-// cada chamada de Create tem seu próprio prazo e cancelamento.
-func NewService(repo employeeCreator) *Service {
+// cada operação recebe o prazo e o cancelamento do seu chamador.
+func NewService(repo employeeRepository) *Service {
 	return &Service{repo: repo}
 }
 
@@ -39,4 +40,9 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Employee, er
 
 	// A persistência recebe a entidade pronta e o contexto da operação original.
 	return s.repo.Create(ctx, employee)
+}
+
+// List consulta os funcionários do gerente identificado pelo chamador confiável.
+func (s *Service) List(ctx context.Context, userID string) ([]Employee, error) {
+	return s.repo.List(ctx, userID)
 }
