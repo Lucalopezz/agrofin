@@ -1,0 +1,224 @@
+{
+  "info": {
+    "name": "Agrofin - API local",
+    "description": "Rotas implementadas da API. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; a pasta Manual desativa a conta autenticada. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080/api/v1"
+    },
+    {
+      "key": "origin",
+      "value": "http://localhost:5173"
+    },
+    {
+      "key": "login_name",
+      "value": "gerente.teste"
+    },
+    {
+      "key": "password",
+      "value": "Limoes-Verdes!Teste2026"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Verificar API",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      }
+    },
+    {
+      "name": "02 - Criar conta de cliente/gerente",
+      "request": {
+        "description": "Cadastro público sem sessão ou token de instalação. Use um login_name diferente para cada conta; nomes de acesso repetidos retornam 409. Depois do cadastro, execute Entrar.",
+        "method": "POST",
+        "url": "{{base_url}}/auth/register",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Cliente de teste\",\"login_name\":\"{{login_name}}\",\"password\":\"{{password}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "03 - Entrar",
+      "request": {
+        "description": "A sessão vem no cookie da resposta, sem token no JSON. Mantenha os cookies habilitados e use o mesmo host nas próximas requisições.",
+        "method": "POST",
+        "url": "{{base_url}}/auth/login",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"login_name\":\"{{login_name}}\",\"password\":\"{{password}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "04 - Consultar meu perfil",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/auth/me"
+      }
+    },
+    {
+      "name": "05 - Alterar meu nome",
+      "request": {
+        "method": "PATCH",
+        "url": "{{base_url}}/auth/me",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Cliente atualizado\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "06 - Cadastrar funcionário",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/employees",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"name\":\"Funcionário de teste\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "07 - Listar funcionários",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/employees"
+      }
+    },
+    {
+      "name": "08 - Sair",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/auth/logout",
+        "header": [
+          {
+            "key": "Origin",
+            "value": "{{origin}}"
+          },
+          {
+            "key": "X-Agrofin-Request",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Manual - Desativar conta",
+      "description": "Execute somente se quiser desativar a conta. A separação em pasta não impede a execução pelo runner da coleção.",
+      "item": [
+        {
+          "name": "Desativar gerente (Impede novos logins)",
+          "request": {
+            "description": "Exige sessão ativa: entre novamente caso tenha executado Sair. Desativa a conta e revoga suas sessões. A reativação exige intervenção de operador.",
+            "method": "PATCH",
+            "url": "{{base_url}}/auth/me/status",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"active\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
