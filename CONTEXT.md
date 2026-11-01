@@ -24,6 +24,8 @@ O handler de funcionários recebe somente `name` no JSON e lê `user_id` de um p
 
 ## Direção técnica
 
+Antes de tarifas, as próximas etapas são reativar funcionários e, após revisão, filtrar a listagem por estado ativo/inativo. Ambas ainda estão pendentes. O [plano de implementação](docs/plano-de-implementacao.md#funcionários-colheitas-e-agregados) detalha a separação entre cadastro, agregado de colheita e DTOs de resumo: colheitas referenciam o funcionário por ID e têm seus próprios itens; o cadastro não carrega todo o histórico.
+
 - Monorepo: `apps/api` em Go e `apps/web` em React + TypeScript.
 - Backend Go com estrutura idiomática, sem impor camadas vazias. Frontend organizado por `features/<domínio>`.
 - Um projeto Vercel para frontend e API, a validar com um protótipo de Vercel Services e runtime Go antes de investir na implementação completa.

@@ -12,7 +12,7 @@ agrofin/
       cmd/api/                 # entrada local
       cmd/migrate/             # aplicar e consultar migrações
       internal/
-        colheita/
+        colheitas/             # proposta: lançamentos e seus itens
         funcionarios/          # cadastro simples e rotas da feature
         pagamentos/
         vendas/
@@ -144,7 +144,91 @@ Todas as rotas de negócio existentes exigem sessão. Rotas de autenticação de
 
 Antes de produção, validar: sessão expirada ou revogada falha; logout invalida o token no servidor; `user_id` forjado é ignorado/rejeitado; cada rota privada obtém o gerente pela sessão; origens cruzadas não alteram dados; atributos do cookie aparecem corretamente sob HTTPS; e o banco não contém senha em texto claro nem token de sessão reutilizável.
 
+## Funcionários, colheitas e agregados
+
+As caixas colhidas ficam vinculadas ao funcionário, mas cada lançamento de colheita forma um agregado próprio. Essa é uma escolha do domínio que pode ser aplicada tanto em Java quanto em Go. O retorno atual de `/employees` contém somente o cadastro porque os lançamentos ainda não estão implementados na API; suas tabelas já existem nas migrações.
+
+### Relacionamento e agregado
+
+Um funcionário pode ter várias colheitas ao longo do tempo. Esse relacionamento não exige que todo o histórico faça parte de uma única unidade de gravação. Um agregado reúne objetos que precisam ser tratados como uma unidade de consistência, com uma raiz responsável pela integridade do conjunto. [Referência: Martin Fowler](https://martinfowler.com/bliki/DDD_Aggregate.html).
+
+| Unidade | Responsabilidade |
+| --- | --- |
+| Funcionário | Nome, identificação, dono e estado ativo/inativo. |
+| Colheita | Funcionário, data e itens daquele lançamento. É a raiz do agregado de colheita. |
+| Item da colheita | Tipo de caixa, quantidade e tarifa aplicada no lançamento. Pertence à colheita. |
+
+Para registrar uma colheita, cabeçalho e itens precisam ser gravados juntos em uma transação. Para renomear um funcionário, basta alterar seu cadastro; não é necessário carregar todas as colheitas ou pagamentos dele. Diárias e pagamentos também têm operações e ciclos de vida próprios e não precisam ser coleções carregadas dentro de `Employee`.
+
+### Organização proposta em Go
+
+```text
+internal/
+  funcionarios/              # Implementado: cadastro e rotas do funcionário
+    entity.go
+    service.go
+    repository.go
+    ...
+  colheitas/                 # A implementar: lançamentos e regras de colheita
+    entity.go
+    service.go
+    repository.go
+    ...
+```
+
+`colheitas` será um pacote irmão de `funcionarios`, com serviço e repositório próprios quando houver conteúdo real. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
+
+O exemplo abaixo mostra somente a relação por ID e a composição dos itens; não é a entidade completa nem código já implementado:
+
+```go
+// Os itens pertencem ao lançamento e são persistidos junto com ele.
+type Harvest struct {
+	ID         string
+	UserID     string
+	EmployeeID string
+	Items      []Item
+}
+
+type Item struct {
+	BoxType  string
+	Quantity int
+}
+```
+
+O modelo completo também precisará da data e da tarifa aplicada, com validação e proteção dos valores financeiros. O serviço de colheitas coordenará o lançamento: funcionário ativo e pertencente ao gerente da sessão, data válida, quantidades inteiras positivas, tipos normal ou moagem e tarifa vigente fotografada em cada item. A verificação do estado do funcionário deve ser consistente com a gravação, inclusive diante de desativação concorrente. A colheita não cria uma nova diária nem um pagamento automaticamente.
+
+Se o serviço de colheitas precisar de uma operação do cadastro, a dependência deve ser explícita. Uma interface pequena, declarada junto do consumidor em `colheitas`, pode ser conectada na composição da aplicação. Não criar a interface antes de conhecer a operação necessária nem fazer o cadastro depender de todo o histórico de colheitas.
+
+### Respostas para a tela
+
+A entidade de domínio e o DTO de resposta HTTP têm responsabilidades diferentes. Uma consulta pode reunir dados de vários agregados sem transformá-los em um único agregado de escrita.
+
+Por exemplo, um resumo de funcionário por período poderá retornar:
+
+```json
+{
+  "employee": {
+    "id": "...",
+    "name": "João"
+  },
+  "normal_boxes": 30,
+  "milling_boxes": 5
+}
+```
+
+Esse é um exemplo de DTO proposto, não uma resposta disponível hoje. Os totais devem ser calculados a partir dos lançamentos do período autorizado, sem criar contadores editáveis no cadastro. Ao incluir valores, distinguir devido de pago e aplicar a proteção financeira prevista no projeto.
+
+`/employees` continua responsável pelo cadastro. As rotas propostas de `/harvest-entries` atenderão os lançamentos; `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. A forma final dos filtros e dos DTOs ainda será detalhada. O início da semana permanece pendente de confirmação com o cliente.
+
 ## Sequência sugerida
+
+Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
+
+1. **Reativação de funcionário — próxima implementação:** adicionar `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
+2. **Filtro de estado — etapa posterior, ainda não implementada:** permitir buscar somente ativos ou somente inativos na listagem. A proposta é `GET /employees?active=true` e `GET /employees?active=false`; sem o parâmetro, preservar o retorno atual com ambos. O filtro não pode substituir o dono derivado da sessão. Detalhar validação e testes na implementação dessa etapa.
+3. **Tarifas e colheitas — depois do cadastro:** implementar valores protegidos, lançamentos com itens e consultas por período, seguindo a separação de agregados descrita acima.
+
+Cada etapa deve ser revisada antes de avançar à seguinte. Os itens acima são o plano aprovado; não indicam que reativação, filtro ou colheitas já estejam entregues.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -164,6 +248,7 @@ Manter respostas JSON. `API_PREFIX` configura uma vez o prefixo das rotas (padr�
 GET/POST       ${API_PREFIX}/employees
 PATCH          ${API_PREFIX}/employees/{id}       # renomear
 DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histórico
+PATCH          ${API_PREFIX}/employees/{id}/reactivate # próxima etapa: reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates
 GET/POST       ${API_PREFIX}/harvest-entries
 PATCH          ${API_PREFIX}/harvest-entries/{id}
@@ -172,6 +257,8 @@ POST           ${API_PREFIX}/employee-payments
 ```
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
+
+O filtro `active` na listagem está planejado para depois da reativação; ainda não faz parte do contrato implementado.
 
 ## Verificações que importam
 
