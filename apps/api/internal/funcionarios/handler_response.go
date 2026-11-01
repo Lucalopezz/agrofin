@@ -59,6 +59,25 @@ func writeCreateEmployeeResponse(w http.ResponseWriter, employee Employee, err e
 	}
 }
 
+func writeRenameEmployeeResponse(w http.ResponseWriter, employee Employee, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidName):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Nome obrigatório"})
+	case errors.Is(err, ErrNotFound):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Funcionário não encontrado"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para renomear funcionário esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// Erros do driver podem incluir dados privados; só a operação vai ao log.
+		log.Print("erro de persistência ao renomear funcionário")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível renomear o funcionário"})
+	default:
+		writeJSON(w, http.StatusOK, employeeResponse{ID: employee.ID, Name: employee.Name, Active: employee.Active})
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

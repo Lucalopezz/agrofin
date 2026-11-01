@@ -14,6 +14,7 @@ import (
 type employeeRepositoryStub struct {
 	create func(context.Context, Employee) (Employee, error)
 	list   func(context.Context, string) ([]Employee, error)
+	rename func(context.Context, Employee) (Employee, error)
 }
 
 func (r employeeRepositoryStub) Create(ctx context.Context, employee Employee) (Employee, error) {
@@ -22,6 +23,10 @@ func (r employeeRepositoryStub) Create(ctx context.Context, employee Employee) (
 
 func (r employeeRepositoryStub) List(ctx context.Context, userID string) ([]Employee, error) {
 	return r.list(ctx, userID)
+}
+
+func (r employeeRepositoryStub) Rename(ctx context.Context, employee Employee) (Employee, error) {
+	return r.rename(ctx, employee)
 }
 
 func TestServiceCreate(t *testing.T) {
@@ -67,4 +72,49 @@ func TestServiceCreate(t *testing.T) {
 		_, err := NewService(repo).Create(context.Background(), "user-id", "Ana")
 		assert.ErrorIs(t, err, expectedErr)
 	})
+}
+
+func TestServiceRename(t *testing.T) {
+	t.Run("normaliza nome e preserva identificação contexto e estado retornado", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		expectedInput := Employee{ID: "employee-id", UserID: "user-id", Name: "João  D'Ávila"}
+		// A renomeação também deve funcionar para um funcionário inativo.
+		expected := expectedInput
+		expected.Active = false
+		called := false
+		repo := employeeRepositoryStub{rename: func(gotCtx context.Context, employee Employee) (Employee, error) {
+			called = true
+			assert.Same(t, ctx, gotCtx)
+			assert.Equal(t, expectedInput, employee)
+			return expected, nil
+		}}
+		got, err := NewService(repo).Rename(ctx, "user-id", "employee-id", " \tJoão  D'Ávila\n")
+		require.NoError(t, err)
+		assert.True(t, called)
+		assert.Equal(t, expected, got)
+	})
+
+	for _, name := range []string{"", " \t\n"} {
+		t.Run("nome inválido não chega à persistência "+name, func(t *testing.T) {
+			repo := employeeRepositoryStub{rename: func(context.Context, Employee) (Employee, error) {
+				// A regra precisa bloquear o UPDATE, não apenas devolver um erro depois dele.
+				t.Fatal("persistência chamada com nome inválido")
+				return Employee{}, nil
+			}}
+			got, err := NewService(repo).Rename(context.Background(), "user-id", "employee-id", name)
+			assert.ErrorIs(t, err, ErrInvalidName)
+			assert.Equal(t, Employee{}, got)
+		})
+	}
+
+	for _, expectedErr := range []error{ErrNotFound, context.Canceled, context.DeadlineExceeded, errors.New("falha de persistência")} {
+		t.Run("preserva erro "+expectedErr.Error(), func(t *testing.T) {
+			repo := employeeRepositoryStub{rename: func(context.Context, Employee) (Employee, error) {
+				return Employee{}, expectedErr
+			}}
+			_, err := NewService(repo).Rename(context.Background(), "user-id", "employee-id", "Ana")
+			assert.ErrorIs(t, err, expectedErr)
+		})
+	}
 }

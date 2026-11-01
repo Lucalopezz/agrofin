@@ -2,7 +2,7 @@
 
 ## contexto e estado atual
 
-Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, uma API Go com conexão ao PostgreSQL e migrações do esquema; o cadastro e a listagem persistida de funcionários exigem sessão. O frontend React tem uma landing page e telas demonstrativas com dados mockados; elas não implementam nem persistem os fluxos de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
+Leia [CONTEXT.md](CONTEXT.md) antes de planejar alterações. Este repositório contém documentação de produto, uma API Go com conexão ao PostgreSQL e migrações do esquema; o cadastro, a listagem persistida e a renomeação de funcionários exigem sessão. O frontend React tem uma landing page e telas demonstrativas com dados mockados; elas não implementam nem persistem os fluxos de negócio. Trate os demais fluxos dos documentos como proposta até que o código e o deploy sejam validados.
 
 Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/requisitos.md) e [critérios de aceite](docs/criterios-de-aceite.md) para entender o comportamento. Consulte o [modelo de dados](docs/modelo-de-dados.md), os [fluxos mobile](docs/fluxos-mobile.md) e o [plano de implementação](docs/plano-de-implementacao.md) conforme a tarefa. Não transforme uma decisão pendente em regra definitiva sem evidência ou resposta do usuário.
 
@@ -71,3 +71,11 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 - Sempre adicione comentários próximos de toda lógica não óbvia e das escolhas cuja razão não seja evidente para outro desenvolvedor. Explique **por que** o código foi feito daquela forma, a regra ou invariante que protege e os trade-offs relevantes.
 - Aplique a regra em Go, React, testes e configurações quando houver comportamento que precise de contexto. Escreva comentários em português e mantenha-os atualizados quando o código mudar.
 - Não use comentários que apenas repitam a instrução visível na linha; eles devem acrescentar o contexto necessário para entender e manter o código.
+
+## entrega de funcionalidades
+
+- Na resposta final de uma funcionalidade, comece pelo resultado entregue e pelo comportamento disponível.
+- Apresente uma lista numerada dos arquivos relevantes em ordem útil para revisão, com links clicáveis e, quando ajudar, a linha da alteração. Explique o que mudou em cada arquivo e por quê, agrupando arquivos relacionados quando isso facilitar a leitura.
+- Explique as decisões importantes e seus trade-offs, especialmente em Go, com linguagem simples e detalhe proporcional à mudança.
+- Quando aplicável, descreva o contrato da rota, a entrada, a resposta e os erros relevantes, e indique como conferir o fluxo manualmente, inclusive pela coleção Bruno.
+- Informe os testes e verificações realmente executados, seus resultados e eventuais limitações ou pendências. Distinga trabalho implementado de próximos passos.

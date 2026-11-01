@@ -18,6 +18,8 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 - O cadastro pede apenas o nome. O sistema gera o identificador usado para relacionar colheitas e pagamentos, mesmo quando houver nomes iguais.
 - Cada cliente entra com a própria conta; cadastrar um funcionário não cria usuário, senha ou convite.
+- Renomear um funcionário remove espaços das extremidades, rejeita nome vazio e preserva ID, dono, estado ativo/inativo e data de desativação. Nomes iguais são permitidos.
+- Uma conta não pode renomear funcionários de outra; a resposta é a mesma de um funcionário inexistente e nenhum registro é alterado.
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
 - Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição registra quem alterou, quando alterou e os valores anteriores.

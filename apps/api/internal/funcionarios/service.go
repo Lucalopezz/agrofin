@@ -7,6 +7,7 @@ import "context"
 type employeeRepository interface {
 	Create(ctx context.Context, employee Employee) (Employee, error)
 	List(ctx context.Context, userID string) ([]Employee, error)
+	Rename(ctx context.Context, employee Employee) (Employee, error)
 }
 
 // Service coordena os casos de uso do cadastro de funcionários.
@@ -45,4 +46,18 @@ func (s *Service) Create(ctx context.Context, userID, name string) (Employee, er
 // List consulta os funcionários do gerente identificado pelo chamador confiável.
 func (s *Service) List(ctx context.Context, userID string) ([]Employee, error) {
 	return s.repo.List(ctx, userID)
+}
+
+// Rename valida o novo nome antes da persistência; userID vem do chamador
+// confiável e employeeID identifica o registro que ele deseja alterar.
+func (s *Service) Rename(ctx context.Context, userID, employeeID, name string) (Employee, error) {
+	name, err := normalizeName(name)
+	if err != nil {
+		return Employee{}, err
+	}
+
+	// A operação usa somente identificação e nome. O UPDATE não grava Active:
+	// o estado atual é preservado e devolvido pelo RETURNING do banco.
+	employee := Employee{ID: employeeID, UserID: userID, Name: name}
+	return s.repo.Rename(ctx, employee)
 }

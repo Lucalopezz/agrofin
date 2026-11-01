@@ -191,6 +191,79 @@ func TestEmployeesIntegration(t *testing.T) {
 	response.Body.Close()
 	assert.Equal(t, expected, filtered, "a query não pode substituir o dono derivado da sessão")
 
+	rename := func(employee employeeResponse, newName string) employeeResponse {
+		t.Helper()
+		body, err := json.Marshal(employeeNameRequest{Name: newName})
+		require.NoError(t, err)
+		response := request(client, http.MethodPatch, "/employees/"+employee.ID, string(body), http.StatusOK)
+		defer response.Body.Close()
+		var renamed employeeResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&renamed))
+		assert.Equal(t, employee.ID, renamed.ID)
+		assert.Equal(t, employee.Active, renamed.Active)
+		return renamed
+	}
+	response = request(server.Client(), http.MethodPatch, "/employees/"+first.ID, `{"name":"Tentativa"}`, http.StatusUnauthorized)
+	response.Body.Close()
+
+	// A rota herda a proteção de escrita: nem cookie válido dispensa origem e marcador.
+	for _, missingHeader := range []string{"Origin", "X-Agrofin-Request"} {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, server.URL+"/employees/"+first.ID, strings.NewReader(`{"name":"Tentativa"}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", origin)
+		req.Header.Set("X-Agrofin-Request", "1")
+		req.Header.Del(missingHeader)
+		response, err := client.Do(req)
+		require.NoError(t, err)
+		response.Body.Close()
+		assert.Equal(t, http.StatusForbidden, response.StatusCode, missingHeader)
+	}
+	renamed := rename(first, " \tJoão  D'Ávila atualizado\n")
+	assert.Equal(t, "João  D'Ávila atualizado", renamed.Name)
+	assert.Equal(t, renamed, rename(renamed, renamed.Name), "repetir o mesmo nome continua sendo sucesso")
+	// Nomes não são identificadores: renomear para um nome já usado é permitido.
+	first = rename(first, ana.Name)
+	assert.Equal(t, ana.Name, first.Name)
+
+	var deactivatedAt time.Time
+	err = pool.QueryRow(ctx, "SELECT deactivated_at FROM employees WHERE id = $1", second.ID).Scan(&deactivatedAt)
+	require.NoError(t, err)
+	second = rename(second, "  Funcionário inativo renomeado  ")
+	assert.Equal(t, "Funcionário inativo renomeado", second.Name)
+	var persistedName, persistedUserID string
+	var persistedDeactivatedAt time.Time
+	err = pool.QueryRow(ctx, "SELECT name, user_id::text, active, deactivated_at FROM employees WHERE id = $1", second.ID).
+		Scan(&persistedName, &persistedUserID, &active, &persistedDeactivatedAt)
+	require.NoError(t, err)
+	assert.Equal(t, second.Name, persistedName)
+	assert.Equal(t, userID, persistedUserID)
+	assert.False(t, active)
+	assert.True(t, deactivatedAt.Equal(persistedDeactivatedAt), "renomear preserva a data de desativação")
+
+	// O mesmo 404 cobre ausência e registro alheio, inclusive com user_id forjado.
+	for _, path := range []string{
+		"/employees/00000000-0000-0000-0000-000000000001",
+		"/employees/" + otherEmployee.ID + "?user_id=" + otherUserID,
+	} {
+		response = request(client, http.MethodPatch, path, `{"name":"Tentativa"}`, http.StatusNotFound)
+		var body errorResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
+		response.Body.Close()
+		assert.Equal(t, "Funcionário não encontrado", body.Error)
+	}
+	assert.Equal(t, []employeeResponse{otherEmployee}, list(otherClient))
+	response = request(client, http.MethodPatch, "/employees/nao-e-uuid", `{"name":"Tentativa"}`, http.StatusBadRequest)
+	response.Body.Close()
+	response = request(client, http.MethodPatch, "/employees/"+first.ID, `{"name":"   "}`, http.StatusBadRequest)
+	response.Body.Close()
+	response = request(client, http.MethodPatch, "/employees/"+first.ID, `{"name":"Tentativa","user_id":"`+otherUserID+`"}`, http.StatusBadRequest)
+	response.Body.Close()
+	_, err = service.Rename(canceledCtx, userID, first.ID, "Tentativa cancelada")
+	assert.ErrorIs(t, err, context.Canceled)
+	// Ler novamente comprova persistência e que as tentativas rejeitadas não gravaram.
+	assert.ElementsMatch(t, []employeeResponse{ana, first, second}, list(client))
+
 	// Desativar a própria conta não deve revogar sessões de outros clientes.
 	response = request(client, http.MethodPatch, "/auth/me/status", `{"active":false}`, http.StatusOK)
 	response.Body.Close()

@@ -8,4 +8,5 @@ func RegisterRoutes(mux *http.ServeMux, handler *Handler, requireSession func(ht
 	// ler o principal e chamar o Service de funcionários.
 	mux.Handle("GET /employees", requireSession(http.HandlerFunc(handler.list)))
 	mux.Handle("POST /employees", requireSession(http.HandlerFunc(handler.create)))
+	mux.Handle("PATCH /employees/{id}", requireSession(http.HandlerFunc(handler.rename)))
 }

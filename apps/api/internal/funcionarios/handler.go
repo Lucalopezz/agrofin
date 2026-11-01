@@ -11,6 +11,7 @@ import (
 type employeeService interface {
 	Create(ctx context.Context, userID, name string) (Employee, error)
 	List(ctx context.Context, userID string) ([]Employee, error)
+	Rename(ctx context.Context, userID, employeeID, name string) (Employee, error)
 }
 
 type Handler struct {
@@ -44,7 +45,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	// O corpo contém só dados do funcionário. O dono do registro vem da sessão,
 	// assim o cliente não consegue criar alguém em nome de outro user_id.
-	input, ok := decodeCreateEmployeeRequest(w, r)
+	input, ok := decodeEmployeeNameRequest(w, r)
 	if !ok {
 		return
 	}
@@ -54,4 +55,26 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	// e só então chama o Repository.
 	employee, err := h.service.Create(r.Context(), principal.UserID, input.Name)
 	writeCreateEmployeeResponse(w, employee, err)
+}
+
+func (h *Handler) rename(w http.ResponseWriter, r *http.Request) {
+	// A identidade deve existir mesmo se o handler for usado sem o middleware;
+	// o cliente não escolhe o dono por JSON, query ou cabeçalho.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	employeeID, ok := decodeEmployeeID(w, r)
+	if !ok {
+		return
+	}
+	input, ok := decodeEmployeeNameRequest(w, r)
+	if !ok {
+		return
+	}
+
+	employee, err := h.service.Rename(r.Context(), principal.UserID, employeeID, input.Name)
+	writeRenameEmployeeResponse(w, employee, err)
 }

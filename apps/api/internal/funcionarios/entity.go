@@ -2,7 +2,6 @@
 package funcionarios
 
 import (
-	"errors"
 	"strings"
 )
 
@@ -14,8 +13,6 @@ type Employee struct {
 	Name   string
 	Active bool
 }
-
-var ErrInvalidName = errors.New("funcionarios: nome obrigatório")
 
 func normalizeName(name string) (string, error) {
 	// Remove espaços apenas das extremidades para evitar nomes vazios ou

@@ -2,8 +2,10 @@ package funcionarios
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -87,4 +89,39 @@ func (r *Repository) List(ctx context.Context, userID string) ([]Employee, error
 	}
 
 	return employees, nil
+}
+
+// Rename altera somente o nome validado pelo serviço, sob o gerente informado.
+func (r *Repository) Rename(ctx context.Context, employee Employee) (Employee, error) {
+	const query = `
+		UPDATE employees
+		SET name = $1
+		WHERE id = $2 AND user_id = $3
+		RETURNING id::text, user_id::text, name, active
+	`
+	// Alteramos somente o nome: renomear não pode mudar o dono
+	// nem reativar um funcionário desativado.
+	err := r.pool.QueryRow(
+		ctx,
+		query,
+		employee.Name,
+		employee.ID,
+		employee.UserID,
+	).Scan(
+		&employee.ID,
+		&employee.UserID,
+		&employee.Name,
+		&employee.Active,
+	)
+
+	// Um ID inexistente e um funcionário de outra conta produzem
+	// o mesmo resultado, sem revelar registros de outros clientes.
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Employee{}, ErrNotFound
+	}
+	if err != nil {
+		return Employee{}, fmt.Errorf("renomear funcionário: %w", err)
+	}
+
+	return employee, nil
 }
