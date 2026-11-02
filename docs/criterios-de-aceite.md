@@ -30,7 +30,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 ### HU-01 e HU-02 — núcleo local de tarifas
 
-Estes critérios verificam o domínio em memória, já implementado. O serviço e a proteção local também estão testados; PostgreSQL, configuração de chaves no runtime e HTTP continuam pendentes.
+Estes critérios verificam o domínio em memória, já implementado. O serviço, a proteção local e o repositório PostgreSQL também estão testados; configuração de chaves no runtime e HTTP continuam pendentes.
 
 - Normal e moagem são tipos válidos. Tipo vazio, desconhecido ou classificação de venda é rejeitado.
 - O valor é um inteiro de centavos maior que zero; `1` centavo é válido e valores zero ou negativos são rejeitados.
@@ -41,15 +41,25 @@ Estes critérios verificam o domínio em memória, já implementado. O serviço 
 
 ### HU-01 e HU-02 — serviço e proteção local de tarifas
 
-Estes critérios são verificados com dependências controladas e cifra real, sem afirmar que a integração PostgreSQL ou HTTP esteja entregue.
+Estes critérios são verificados com dependências controladas e cifra real. A integração PostgreSQL está detalhada na seção seguinte; HTTP continua pendente.
 
-- O serviço valida antes de consultar ou cifrar, usa o gerente do chamador confiável e rejeita sobreposição antes da escrita. A persistência concreta deverá reforçar essa regra sob concorrência.
+- O serviço valida antes de consultar ou cifrar, usa o gerente do chamador confiável e rejeita sobreposição antes da escrita. A persistência concreta reforça essa regra sob concorrência.
 - O ID vem da interface de persistência antes da cifra; o serviço entrega uma `ProtectedRate` sem centavos em claro. Falhas e cancelamento não devolvem uma entidade parcialmente cadastrada nem avançam para escrita indevida.
 - A cifra autenticada recupera valores positivos em todo o intervalo de `int64`, incluindo um centavo. Valores iguais recebem nonces novos.
 - Conta ou registro diferentes, envelope alterado, versão desconhecida e material de chave incorreto falham sem devolver centavos ou incluir dados privados no erro.
 - Versões antigas podem ser recuperadas quando sua chave é fornecida; novas cifras usam a versão ativa. A ausência da chave antiga falha sem tentar outra versão silenciosamente.
 - Chaves e centavos não fazem parte do envelope persistível. Configuração inválida ou repetição de material sob versões diferentes é rejeitada.
 - Provisionamento e controle global dos limites por chave ainda precisam ser integrados antes de habilitar escrita em produção.
+
+### HU-01 e HU-02 — persistência PostgreSQL de tarifas
+
+Estes critérios estão cobertos por integração com banco migrado, serviço e cifra reais. A composição no runtime e as rotas HTTP de tarifas continuam pendentes.
+
+- O ID é gerado no PostgreSQL antes da cifra, sem criar linha parcial. A gravação usa o mesmo ID e persiste somente envelope e metadados, com `employee_id` nulo.
+- O envelope lido do banco é recuperável com a chave histórica correspondente e o mesmo gerente/registro; chave incorreta ou gerente trocado falham.
+- A sobreposição considera somente conta, tipo e escopo geral. Períodos adjacentes são permitidos e uma vigência sem fim bloqueia intervalos posteriores sobrepostos do mesmo escopo.
+- Duas criações que passaram pela consulta de sobreposição disputam a restrição real: somente uma persiste e a outra recebe `ErrRateOverlap`.
+- Outros erros de integridade, como ID duplicado, não são traduzidos como sobreposição. Cancelamento e prazo esgotado continuam identificáveis nos três métodos do repositório.
 
 ### HU-01 — reativação e filtro implementados
 

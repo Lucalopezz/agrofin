@@ -45,7 +45,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro, a listagem, a renomeação, a desativação e a reativação de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. O serviço de tarifas e o componente local de cifra estão implementados, mas sua integração com PostgreSQL e HTTP, os demais fluxos de escrita e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro, a listagem, a renomeação, a desativação e a reativação de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. O serviço de tarifas e o componente local de cifra estão implementados, mas a composição das chaves no runtime e sua integração HTTP, os demais fluxos de escrita e o protótipo de deploy unificado ainda pertencem às próximas etapas.
 
 ### Organização interna do cadastro de funcionários
 
@@ -175,11 +175,12 @@ internal/
     rate.go
     rate_cipher.go
     service.go
+    repository.go
     errors.go
-    ...                        # Testes; PostgreSQL, HTTP e lançamentos pendentes
+    ...                        # Testes; runtime, HTTP e lançamentos pendentes
 ```
 
-`colheitas` é um pacote irmão de `funcionarios`, iniciado pelo núcleo local de tarifas, com serviço próprio já implementado e repositório concreto a implementar. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
+`colheitas` é um pacote irmão de `funcionarios`, iniciado pelo núcleo local de tarifas, com serviço e repositório próprios já implementados. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
 
 O exemplo abaixo mostra somente a relação por ID e a composição dos itens; não é a entidade completa nem código já implementado:
 
@@ -204,7 +205,7 @@ Se o serviço de colheitas precisar de uma operação do cadastro, a dependênci
 
 ### Núcleo local de tarifas implementado
 
-O pacote `internal/colheitas` contém o domínio em `rate.go`, erros de domínio e testes, além do serviço e da cifra detalhados na próxima seção. Ainda não cadastra tarifas pela API nem grava no banco.
+O pacote `internal/colheitas` contém o domínio em `rate.go`, erros de domínio e testes, além do serviço e da cifra detalhados na próxima seção. O repositório já grava envelopes no PostgreSQL; ainda não há cadastro de tarifas pela API.
 
 `BoxType` aceita normal e moagem para pagamento da colheita. É um tipo próprio, mas uma conversão explícita ainda pode criar um valor desconhecido; por isso a validação rejeita o valor vazio e outros tipos, inclusive exportação e mercado, que pertencem à venda.
 
@@ -216,11 +217,11 @@ As datas representam dias, não instantes com horário. A normalização extrai 
 
 Os testes cobrem os dois tipos, menor valor positivo, valores inválidos, início ausente, fim zero, fim anterior ou igual ao início, horários no mesmo dia e preservação dos dias entre fusos. Também verificam que a entrada e seu ponteiro não são alterados nem compartilhados com o resultado.
 
-`AmountCents` continua somente em memória: o serviço protege o valor antes de encaminhar a entidade à interface de persistência. A decisão de tarifa geral foi confirmada, enquanto repositório concreto, consulta real de sobreposição, gerenciamento de chaves no runtime e HTTP continuam pendentes.
+`AmountCents` continua somente em memória: o serviço protege o valor antes de encaminhar a entidade à interface de persistência. A decisão de tarifa geral foi confirmada, e a persistência PostgreSQL está implementada, enquanto gerenciamento de chaves no runtime e HTTP continuam pendentes.
 
 ### Serviço de tarifas gerais e proteção do valor
 
-A regra confirmada é uma tarifa geral por conta e tipo de caixa, igual para todos os funcionários da conta durante a mesma vigência. Não há exceção individual ou precedência a resolver. A coluna opcional `employee_id` continua no esquema, mas o futuro repositório deste fluxo deverá usar `NULL`; isso não habilita cadastro de tarifa individual.
+A regra confirmada é uma tarifa geral por conta e tipo de caixa, igual para todos os funcionários da conta durante a mesma vigência. Não há exceção individual ou precedência a resolver. A coluna opcional `employee_id` continua no esquema, e o repositório deste fluxo usa `NULL`; isso não habilita cadastro de tarifa individual.
 
 O serviço `CreateRate` já está implementado e testado com dependências controladas. Ele recebe `context.Context`, o gerente do chamador confiável e `CreateRateInput`, que não contém ID, gerente ou funcionário escolhidos pelo cliente. O fluxo é:
 
@@ -235,7 +236,7 @@ Entrada de tarifa geral
 
 As interfaces privadas ficam junto do serviço que as consome. `RatePeriod` delimita a consulta sem transmitir valor financeiro; `ProtectedRate` contém somente metadados e `ProtectedRateAmount`, sem campo de centavos em claro. O retorno `Rate` mantém os centavos em memória para o chamador autorizado. O serviço preserva o contexto em todas as chamadas de persistência e interrompe o fluxo em erros, sobreposição ou cancelamento, sem solicitar uma escrita parcial.
 
-`NextRateID` ainda depende do repositório concreto. A implementação deverá obter `gen_random_uuid()` do PostgreSQL antes da cifra e usar esse ID no `INSERT` final, preservando a geração técnica no banco sem inserir uma tarifa incompleta. O ID precisa existir antes da cifra porque é autenticado junto com a conta. A consulta de sobreposição no serviço deverá ser complementada pela exclusão já existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório deverá traduzir a restrição para `ErrRateOverlap`. A implementação e os testes dessa concorrência no PostgreSQL pertencem ao próximo recorte.
+`NextRateID` obtém `gen_random_uuid()` do PostgreSQL antes da cifra e usa esse ID no `INSERT` final, preservando a geração técnica no banco sem inserir uma tarifa incompleta. O ID precisa existir antes da cifra porque é autenticado junto com a conta. A consulta de sobreposição no serviço é complementada pela exclusão existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório traduz a restrição para `ErrRateOverlap`. A integração já testa essa concorrência com o banco real.
 
 `RateCipher`, no próprio pacote `colheitas`, usa AES-256-GCM da biblioteca padrão, com chaves de 32 bytes e nonce aleatório de 96 bits gerado por `cipher.NewGCMWithRandomNonce`. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave, conforme as colunas existentes. O formato do campo, versão, gerente e ID da tarifa formam dados adicionais autenticados; trocar esses identificadores, a cifra ou o nonce faz a leitura falhar. A composição usa um array JSON para não concatenar identificadores de forma ambígua. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
 
@@ -243,7 +244,27 @@ As chaves são fornecidas em memória pela composição. O construtor prepara se
 
 Antes de habilitar escrita em produção, o provisionamento, rotação e recuperação das chaves e o controle de uso por material devem ser definidos entre todas as instâncias e reinícios. A biblioteca limita AES-GCM com nonce aleatório a no máximo `2^32` cifras por chave; a rotação precisa ocorrer antes desse limite, que não é reiniciado apenas por mudar o nome da versão. Esse controle operacional global não está implementado neste recorte. As chaves devem permanecer fora do banco e de seu backup. [Documentação de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce) e [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 
-Os testes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. Ainda não existe repositório PostgreSQL de tarifas, integração com a composição em `cmd/api`, HTTP ou coleção Bruno para esse fluxo; os endpoints de tarifas seguem propostos.
+Os testes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. O repositório PostgreSQL já está implementado; ainda não há integração com a composição em `cmd/api`, HTTP ou coleção Bruno para esse fluxo; os endpoints de tarifas seguem propostos.
+
+### Persistência PostgreSQL de tarifas gerais
+
+O `Repository` de `internal/colheitas` já implementa as três operações consumidas pelo serviço e utiliza o pool compartilhado da aplicação. Ele não valida entradas, gera cifra ou abre outro pool: recebe o período ou a entidade protegida já preparados pelo serviço.
+
+| Operação | Comportamento implementado |
+| --- | --- |
+| `HasRateOverlap` | Consulta `EXISTS` por gerente, tipo e escopo geral, usando interseção de `daterange` com início inclusivo e fim exclusivo. Fim ausente representa período aberto. Não lê valores financeiros. |
+| `NextRateID` | Executa `SELECT gen_random_uuid()::text` antes da cifra, sem inserir uma linha parcial ou gerar ID na aplicação. |
+| `CreateRate` | Insere ID, gerente, tipo, ciphertext, nonce, versão e vigência em uma única instrução, fixando `employee_id = NULL`. Não recebe centavos em claro. |
+
+Períodos adjacentes são permitidos: uma tarifa que termina em 10/11 não impede outra de começar em 10/11. Sobreposição só existe dentro da mesma conta e tipo; tarifas de normal e moagem ou contas distintas não disputam o mesmo intervalo.
+
+A consulta do serviço ajuda a detectar o conflito antes da cifra, mas duas requisições podem consultar antes de qualquer uma inserir. A exclusão `harvest_rates_general_no_overlap` resolve essa disputa no banco. O repositório traduz somente o SQLSTATE `23P01` dessa restrição para `ErrRateOverlap`; chave primária duplicada e outros erros não viram sobreposição. Os demais erros são envolvidos com `%w`, preservando a identificação de cancelamento e prazo esgotado, sem registrar detalhes do driver em logs.
+
+Não foi necessária migração. A única instrução de inserção grava metadados e envelope juntos; as consultas anteriores não inserem estado parcial e não exigem uma transação explícita neste caso de uso.
+
+Os testes de integração usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado também são verificados nos três métodos.
+
+O repositório foi implementado e testado fora da composição HTTP. Configuração das chaves no runtime, controles operacionais de rotação e uso e rotas de tarifas continuam pendentes. Nenhum endpoint ou requisição Bruno de tarifa foi adicionado neste recorte.
 
 ### Respostas para a tela
 
@@ -272,9 +293,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — serviço e proteção local implementados:** tarifas são gerais por conta e tipo; domínio, serviço e cifra estão testados em memória. Seguem pendentes repositório PostgreSQL, gerenciamento de chaves no runtime, HTTP, lançamentos com itens e consultas por período.
+3. **Tarifas e colheitas — serviço e proteção local implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra e repositório PostgreSQL estão implementados e testados. Seguem pendentes gerenciamento de chaves no runtime, HTTP, lançamentos com itens e consultas por período.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; domínio, serviço e proteção local das tarifas também estão disponíveis, enquanto seus fluxos persistidos, colheitas e consultas continuam como próximas entregas.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; domínio, serviço e proteção local das tarifas também estão disponíveis, com persistência PostgreSQL testada, enquanto integração no runtime, HTTP, colheitas e consultas continuam como próximas entregas.
 
 | etapa | entrega verificável |
 | --- | --- |

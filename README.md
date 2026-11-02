@@ -4,7 +4,7 @@ O agrofin é uma aplicação para ajudar o cliente a administrar a produção de
 
 ## Estado do projeto
 
-O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. A listagem aceita o filtro opcional `active=true` ou `active=false`; sem filtro, retorna ambos os estados. Há domínio e serviço de tarifas gerais com proteção local do valor, testados em memória, ainda sem repositório PostgreSQL ou rotas de tarifas. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
+O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. A listagem aceita o filtro opcional `active=true` ou `active=false`; sem filtro, retorna ambos os estados. Há domínio, serviço e persistência PostgreSQL de tarifas gerais com valor cifrado e testes de integração, ainda sem configuração de chaves no runtime ou rotas de tarifas. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
 
 ## Tecnologias
 

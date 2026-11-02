@@ -35,8 +35,8 @@ type ProtectedRate struct {
 }
 
 // As interfaces ficam junto do consumidor e não exigem PostgreSQL nos testes.
-// O Repository concreto ainda será implementado; ele deverá manter a restrição
-// de sobreposição e traduzir a disputa concorrente para ErrRateOverlap.
+// O Repository concreto mantém a restrição de sobreposição no PostgreSQL e
+// traduz a disputa concorrente para ErrRateOverlap.
 type rateRepository interface {
 	HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error)
 	NextRateID(ctx context.Context) (string, error)
@@ -86,9 +86,9 @@ func (s *Service) CreateRate(ctx context.Context, userID string, input CreateRat
 	if overlaps {
 		return Rate{}, ErrRateOverlap
 	}
-	// O ID deve existir antes da cifra para autenticar também o registro. A futura
-	// implementação obterá gen_random_uuid() do PostgreSQL sem inserir uma tarifa
-	// parcial; a gravação usará esse mesmo ID depois de o valor estar protegido.
+	// O ID deve existir antes da cifra para autenticar também o registro. A
+	// persistência obtém gen_random_uuid() do PostgreSQL sem inserir uma tarifa
+	// parcial; a gravação usa esse mesmo ID depois de o valor estar protegido.
 	rate.ID, err = s.repo.NextRateID(ctx)
 	if err != nil {
 		return Rate{}, err

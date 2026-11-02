@@ -1,6 +1,6 @@
 # Modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas já têm componente local de criptografia autenticada; sua integração com PostgreSQL e rotas e a gravação dos demais fluxos continuam pendentes.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas já têm criptografia autenticada e persistência PostgreSQL testadas; composição das chaves no runtime, rotas de tarifas e gravação dos demais fluxos continuam pendentes.
 
 ## Princípios do modelo
 
@@ -128,7 +128,7 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 
 ## Proteção dos valores financeiros
 
-O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. O componente local RateCipher já protege tarifas com AES-256-GCM; repositório concreto, provisionamento de chaves no runtime e rotas ainda precisam ser integrados antes de habilitar as escritas.
+O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. O componente local RateCipher já protege tarifas com AES-256-GCM; o repositório concreto já persiste envelopes, mas provisionamento de chaves no runtime e rotas ainda precisam ser integrados antes de habilitar as escritas HTTP.
 
 - Durante os cálculos, representar dinheiro em centavos inteiros (`int64`), sem ponto flutuante. Cifrar a representação antes de gravar; no banco, guardar bytes cifrados, nonce e versão/identificador da chave conforme o formato escolhido.
 - Usar criptografia autenticada de uma biblioteca mantida, como AES-GCM quando adequado ao ambiente. A OWASP recomenda algoritmos estabelecidos, modos seguros e separação entre as chaves e os dados cifrados; a implementação também precisa respeitar a unicidade de nonce e os limites do modo escolhido. [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html)
@@ -137,7 +137,7 @@ O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia nã
 - Senhas usam hash próprio para senhas, não a criptografia reversível usada para valores financeiros.
 - Datas, quantidades, classificações, IDs e categorias ainda podem ficar visíveis. Essa exposição de metadados é uma limitação deliberada do modelo inicial e deve ser considerada na avaliação de privacidade.
 
-Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro pelo `user_id` autenticado e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. Os testes atuais verificam cifra local e recuperação do envelope com a chave correspondente. A integração futura deverá testar também a confidencialidade do banco de teste e a recuperação dos registros persistidos.
+Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro pelo `user_id` autenticado e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. Os testes atuais verificam cifra local e recuperação dos envelopes persistidos no PostgreSQL com a chave histórica correspondente, além de rejeitar chave incorreta. Provisionamento e recuperação operacional de chaves para produção continuam pendentes.
 
 ## Migrações e conexão
 
