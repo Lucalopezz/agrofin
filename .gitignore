@@ -1,3 +1,6 @@
 /.env
 # Também ignora o binário temporário se o Air for executado fora do Docker.
 /apps/api/tmp/
+
+# Anotações de ideias do projeto
+notes.md

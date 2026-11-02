@@ -28,6 +28,29 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
 - Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 
+### HU-01 e HU-02 — núcleo local de tarifas
+
+Estes critérios verificam o domínio em memória, já implementado. O serviço e a proteção local também estão testados; PostgreSQL, configuração de chaves no runtime e HTTP continuam pendentes.
+
+- Normal e moagem são tipos válidos. Tipo vazio, desconhecido ou classificação de venda é rejeitado.
+- O valor é um inteiro de centavos maior que zero; `1` centavo é válido e valores zero ou negativos são rejeitados.
+- A data inicial é obrigatória. Fim ausente representa vigência aberta; fim informado como data zero é inválido.
+- As datas são tratadas como dias de calendário, preservando o dia no fuso recebido. Horários são removidos antes da comparação; o fim deve estar em um dia posterior ao início, com limite final exclusivo.
+- Normalizar não altera a entrada nem compartilha o ponteiro da data final. Uma mudança posterior nesse ponteiro não modifica o resultado validado.
+- A validação local preserva os identificadores técnicos. O cadastro usa tarifa geral por conta e tipo, igual para todos os funcionários na mesma vigência; não recebe funcionário ou dono no input.
+
+### HU-01 e HU-02 — serviço e proteção local de tarifas
+
+Estes critérios são verificados com dependências controladas e cifra real, sem afirmar que a integração PostgreSQL ou HTTP esteja entregue.
+
+- O serviço valida antes de consultar ou cifrar, usa o gerente do chamador confiável e rejeita sobreposição antes da escrita. A persistência concreta deverá reforçar essa regra sob concorrência.
+- O ID vem da interface de persistência antes da cifra; o serviço entrega uma `ProtectedRate` sem centavos em claro. Falhas e cancelamento não devolvem uma entidade parcialmente cadastrada nem avançam para escrita indevida.
+- A cifra autenticada recupera valores positivos em todo o intervalo de `int64`, incluindo um centavo. Valores iguais recebem nonces novos.
+- Conta ou registro diferentes, envelope alterado, versão desconhecida e material de chave incorreto falham sem devolver centavos ou incluir dados privados no erro.
+- Versões antigas podem ser recuperadas quando sua chave é fornecida; novas cifras usam a versão ativa. A ausência da chave antiga falha sem tentar outra versão silenciosamente.
+- Chaves e centavos não fazem parte do envelope persistível. Configuração inválida ou repetição de material sob versões diferentes é rejeitada.
+- Provisionamento e controle global dos limites por chave ainda precisam ser integrados antes de habilitar escrita em produção.
+
 ### HU-01 — reativação e filtro implementados
 
 A reativação e o filtro de estado estão implementados na API; sua integração com a interface continua pendente.

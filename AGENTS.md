@@ -12,6 +12,7 @@ Use [histórias de usuário](docs/historias-de-usuario.md), [requisitos](docs/re
 - Monorepo planejado com `apps/api` em Go e `apps/web` em React + TypeScript. No Go, seguir convenções da linguagem, com entrada em `cmd` e código interno em `internal` quando fizer sentido. No React, organizar código de domínio por `src/features/<feature>`.
 - Separar a classificação usada para pagar a colheita (normal e moagem) da classificação de venda ao barracão (exportação, mercado e moagem).
 - O cadastro de funcionários recebe apenas nome; o identificador e o estado ativo/inativo são técnicos. Tarifas e pagamentos pertencem a fluxos separados. O pacote `internal/funcionarios` é dono desse cadastro e de suas rotas.
+- As tarifas de colheita são gerais por conta e tipo de caixa, iguais para todos os funcionários da conta na mesma vigência. Não implementar exceções individuais.
 - Qualquer cliente pode criar uma conta e ser o gerente dos próprios dados. O sistema aceita vários clientes; cada usuário gerencia apenas seus funcionários e lançamentos, vinculados por `user_id`. Funcionários não possuem login. A equipe de cada semana resulta dos lançamentos daquela semana; não criar cadastro semanal nem desativar automaticamente quem não trabalhou em uma semana.
 - Ausência de lançamento em um dia não representa falta nem gera penalidade.
 - Valores financeiros exigem proteção contra vazamento isolado do banco. Não introduzir persistência em texto claro de tarifas, preços, pagamentos, recebimentos ou despesas. Consultar a skill de dados financeiros antes de alterar essa área.

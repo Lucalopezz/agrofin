@@ -1,6 +1,6 @@
 # Modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Criptografia de valores e gravação dos demais fluxos de negócio continuam pendentes.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas já têm componente local de criptografia autenticada; sua integração com PostgreSQL e rotas e a gravação dos demais fluxos continuam pendentes.
 
 ## Princípios do modelo
 
@@ -21,7 +21,7 @@ As 22 tabelas abaixo são criadas pelas oito migrações. O diagrama mostra as c
 | `users` | `id`, `name`, `login_name`, `password_hash`, `timezone`, `active` | Identidade e credencial do gerente que usa a API, com o fuso da produção. O nome é de exibição; o login é separado e imutável pela API. A senha usa Argon2id. O nome de acesso é único; vários clientes podem criar contas independentes. |
 | `sessions` | `id`, `user_id`, `token_hash`, `created_at`, `last_seen_at`, `expires_at`, `revoked_at` | Sessões revogáveis; guarda somente SHA-256 do token aleatório enviado no cookie. A validade é limitada por sete dias de inatividade e trinta dias absolutos. |
 | `employees` | `id`, `user_id`, `name`, `active`, `deactivated_at` | Cadastro mínimo de pessoas que trabalham na produção, sem login. O estado ativo só controla a disponibilidade para novos lançamentos; desativar preserva o histórico e não acontece por ausência em uma semana. |
-| `harvest_rates` | `id`, `user_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas por tipo de caixa e vigência. Funcionário opcional permite representar uma tarifa geral ou uma tarifa individual. |
+| `harvest_rates` | `id`, `user_id`, `employee_id` opcional, `box_type`, valor cifrado, `valid_from`, `valid_until` | Tarifas gerais por conta, tipo de caixa e vigência. A regra atual usa employee_id nulo; a coluna opcional admite relações individuais no esquema, mas esse fluxo não faz parte do produto atual. |
 | `harvests` | `id`, `user_id`, `employee_id`, `harvest_date`, `created_by` | Cabeçalho de um lançamento de colheita para uma pessoa e uma data. Não restringir a um único cabeçalho por dia; isso permite correções e mais de um lançamento sem sobrescrever dados. |
 | `harvest_items` | `id`, `user_id`, `harvest_id`, `box_type`, `quantity`, tarifa unitária aplicada cifrada | Uma linha por tipo de caixa (`normal` ou `moagem`). A quantidade é inteira e positiva. A tarifa aplicada fica fotografada na linha. O total pode ser calculado no Go a partir da quantidade e da tarifa. |
 | `daily_work` | `id`, `user_id`, `employee_id`, `work_date`, valor cifrado, observação | Registra uma diária separada da produção por caixas; não cria caixas fictícias. |
@@ -111,7 +111,7 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 
 - Colheita usa apenas `normal` e `moagem`; venda usa apenas `exportação`, `mercado` e `moagem`. São classificações de etapas distintas.
 - Um dia sem colheita não cria falta, penalidade ou desconto.
-- Uma tarifa tem vigência. Uma alteração não recalcula colheitas anteriores. A tabela permite tarifa geral e individual; qual delas prevalece se ambas existirem ainda precisa ser confirmado.
+- Uma tarifa tem vigência. Uma alteração não recalcula colheitas anteriores. A regra confirmada usa tarifa geral por conta e tipo, igual para todos os funcionários. A possibilidade técnica de employee_id no esquema não habilita tarifas individuais.
 - Pagamento semanal é calculado por funcionário e período: caixas + diárias − pagamentos + ajustes aplicáveis. O início da semana ainda precisa ser escolhido.
 - O servidor deve bloquear pagamento acima do saldo devido, salvo ajuste explícito. Correção em período já pago deve destacar a diferença e deixar registro rastreável.
 - Venda bruta é a soma das linhas; venda líquida é o bruto menos descontos; a receber é o líquido menos recebimentos. Valores vendidos e recebidos aparecem separadamente.
@@ -123,12 +123,12 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 - Fase lunar não precisa de tabela própria no primeiro escopo: pode ser calculada ou consultada por data. A fonte e a necessidade de guardar uma fotografia histórica continuam em aberto.
 - Movimentações financeiras, estoque e ajustes precisam ser transacionais. Quantidades e valores devem ser validados no servidor, mesmo quando a interface mostra uma prévia.
 - Restringir linhas de colheita a uma linha por tipo em cada cabeçalho e exigir quantidade positiva. Aplicar validações equivalentes de quantidade nas linhas de venda e pulverização.
-- O banco impede sobreposição de vigências para a mesma combinação de tipo e escopo da tarifa. Tarifa geral e individual podem coexistir; a precedência entre elas continua pendente.
+- O banco impede sobreposição de vigências para a mesma combinação de tipo e escopo da tarifa. O serviço atual trabalha somente com o escopo geral, para o qual employee_id deve permanecer nulo. A restrição de escopo individual permanece apenas como possibilidade técnica do esquema, sem fluxo implementado.
 - Validar pagamentos e descontos junto com o saldo correspondente dentro de transação; duas gravações concorrentes não podem ultrapassar o saldo devido ou o valor bruto.
 
 ## Proteção dos valores financeiros
 
-O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. A criptografia na aplicação Go ainda precisa ser implementada antes de habilitar as escritas desses fluxos.
+O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. O componente local RateCipher já protege tarifas com AES-256-GCM; repositório concreto, provisionamento de chaves no runtime e rotas ainda precisam ser integrados antes de habilitar as escritas.
 
 - Durante os cálculos, representar dinheiro em centavos inteiros (`int64`), sem ponto flutuante. Cifrar a representação antes de gravar; no banco, guardar bytes cifrados, nonce e versão/identificador da chave conforme o formato escolhido.
 - Usar criptografia autenticada de uma biblioteca mantida, como AES-GCM quando adequado ao ambiente. A OWASP recomenda algoritmos estabelecidos, modos seguros e separação entre as chaves e os dados cifrados; a implementação também precisa respeitar a unicidade de nonce e os limites do modo escolhido. [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html)
@@ -137,7 +137,7 @@ O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia nã
 - Senhas usam hash próprio para senhas, não a criptografia reversível usada para valores financeiros.
 - Datas, quantidades, classificações, IDs e categorias ainda podem ficar visíveis. Essa exposição de metadados é uma limitação deliberada do modelo inicial e deve ser considerada na avaliação de privacidade.
 
-Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro pelo `user_id` autenticado e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. A implementação futura deve testar confidencialidade do banco de teste e restauração com a chave correta.
+Como a cifra autenticada não permite somas SQL comuns e valores iguais geram textos cifrados diferentes, a API deve filtrar primeiro pelo `user_id` autenticado e intervalo de datas, decifrar apenas o necessário e calcular os relatórios no servidor. Não persistir cópias em texto claro para facilitar `SUM`, busca ou ordenação por valor. O banco não consegue verificar se um valor cifrado é positivo ou se um pagamento ultrapassa o devido; essas validações exigem transação e código de domínio. Os testes atuais verificam cifra local e recuperação do envelope com a chave correspondente. A integração futura deverá testar também a confidencialidade do banco de teste e a recuperação dos registros persistidos.
 
 ## Migrações e conexão
 
@@ -169,7 +169,6 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente 
 ### Decisões que continuam pendentes
 
 - Qual dia inicia a semana de pagamento.
-- Se tarifas variam por funcionário e como resolver a precedência entre tarifa geral e individual.
 - Se o barracão informa diretamente a classificação da venda e se há mais de um comprador.
 - Se compras a prazo ou pagamentos parciais de compra acontecem na prática.
 - Quais unidades são usadas no estoque e se serão necessárias conversões.
