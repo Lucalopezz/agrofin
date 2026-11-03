@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,12 +13,9 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
+	"github.com/lucalopezz/agrofin/apps/api/internal/health"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
-
-type healthResponse struct {
-	Status string `json:"status"`
-}
 
 const defaultAPIPrefix = "/api/v1"
 
@@ -64,8 +60,7 @@ func run() error {
 
 	// Os pacotes registram caminhos locais; somente este ponto aplica o prefixo público comum.
 	apiMux := http.NewServeMux()
-
-	apiMux.HandleFunc("GET /health", health)
+	health.RegisterRoutes(apiMux)
 
 	// O main é o ponto de composição: constrói dependências concretas e as conecta.
 	// HTTP, regras de domínio e SQL continuam nos pacotes de suas funcionalidades.
@@ -82,7 +77,7 @@ func run() error {
 	})
 	sessionMiddleware := auth.NewMiddleware(authService, cookieSecure)
 	// Os pacotes declaram caminhos sem prefixo público; aqui o mesmo middleware de
-	// sessão é entregue às rotas privadas de auth e funcionários.
+	// sessão é entregue às rotas privadas de auth, funcionários e tarifas.
 	auth.RegisterRoutes(apiMux, authHandler, sessionMiddleware.RequireSession)
 	funcionarios.RegisterRoutes(apiMux, handler, sessionMiddleware.RequireSession)
 
@@ -109,14 +104,4 @@ func run() error {
 		MaxHeaderBytes:    1 << 20,
 	}
 	return server.ListenAndServe()
-}
-
-func health(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	// Esta rota indica que o processo HTTP responde; ela não consulta tabelas nem
-	// comprova que cada fluxo de negócio está saudável.
-	if err := json.NewEncoder(w).Encode(healthResponse{Status: "ok"}); err != nil {
-		log.Printf("erro ao escrever resposta: %v", err)
-	}
 }
