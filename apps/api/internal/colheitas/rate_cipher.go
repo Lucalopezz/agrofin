@@ -156,33 +156,46 @@ func (c *RateCipher) encryptAmount(amountCents int64, aad []byte) (ProtectedRate
 // Decrypt só devolve centavos após autenticar envelope, conta e registro.
 // Versão ausente, material incorreto e adulteração não expõem detalhes privados.
 func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) (int64, error) {
+	aead, err := c.aeadForProtectedAmount(amount)
+	if err != nil {
+		return 0, err
+	}
 	aad, err := rateAdditionalData(amount.KeyVersion, userID, rateID)
 	if err != nil {
 		return 0, err
 	}
-	return c.decryptAmount(amount, aad)
+	return c.decryptAmount(amount, aad, aead)
 }
 
 // DecryptHarvestItemRate autentica o envelope com os mesmos campos usados na criação.
 func (c *RateCipher) DecryptHarvestItemRate(userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32, amount ProtectedRateAmount) (int64, error) {
+	aead, err := c.aeadForProtectedAmount(amount)
+	if err != nil {
+		return 0, err
+	}
 	aad, err := harvestItemRateAdditionalData(amount.KeyVersion, userID, harvestID, employeeID, harvestDate, boxType, quantity)
 	if err != nil {
 		return 0, err
 	}
-	return c.decryptAmount(amount, aad)
+	return c.decryptAmount(amount, aad, aead)
 }
 
-func (c *RateCipher) decryptAmount(amount ProtectedRateAmount, aad []byte) (int64, error) {
+// aeadForProtectedAmount valida o envelope antes de montar o AAD, pois uma
+// versão vazia faz o validador do contexto retornar outro erro de domínio.
+func (c *RateCipher) aeadForProtectedAmount(amount ProtectedRateAmount) (cipher.AEAD, error) {
 	if c == nil || len(c.keys) == 0 {
-		return 0, ErrInvalidRateCipherConfig
+		return nil, ErrInvalidRateCipherConfig
 	}
-	// Recupera a cifra correspondente à versão do envelope. A versão ativa não é obrigatória
+	// Recupera a cifra correspondente à versão do envelope; versões antigas seguem válidas.
 	aead, ok := c.keys[amount.KeyVersion]
-	// Validações de integridade do envelope: versão, nonce e tamanho do ciphertext 8 + 28 - 12 = 24 bytes
+	// O formato AES-GCM exige nonce de 12 bytes e 24 bytes para 8 bytes de valor mais a tag.
 	if !ok || len(amount.Nonce) != rateNonceSize || len(amount.Ciphertext) != ratePlaintextSize+aead.Overhead()-rateNonceSize {
-		return 0, ErrInvalidProtectedRateAmount
+		return nil, ErrInvalidProtectedRateAmount
 	}
+	return aead, nil
+}
 
+func (c *RateCipher) decryptAmount(amount ProtectedRateAmount, aad []byte, aead cipher.AEAD) (int64, error) {
 	// Na encriptaçao, foi separado o nonce do ciphertext, temos que juntar
 	sealed := make([]byte, 0, len(amount.Nonce)+len(amount.Ciphertext))
 	sealed = append(sealed, amount.Nonce...)
