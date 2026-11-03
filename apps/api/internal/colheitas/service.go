@@ -23,8 +23,8 @@ type RatePeriod struct {
 	ValidUntil *time.Time
 }
 
-// ProtectedRate é a entidade pronta para persistir. Não contém AmountCents:
-// o Repository recebe somente o envelope e os metadados já validados.
+// ProtectedRate é a representação protegida usada na fronteira do Repository.
+// Não contém AmountCents: persistência e leitura trafegam somente envelope e metadados.
 type ProtectedRate struct {
 	ID         string
 	UserID     string
@@ -41,14 +41,16 @@ type rateRepository interface {
 	HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error)
 	NextRateID(ctx context.Context) (string, error)
 	CreateRate(ctx context.Context, rate ProtectedRate) error
+	ListRates(ctx context.Context, userID string) ([]ProtectedRate, error)
 }
 
 type rateAmountProtector interface {
 	Encrypt(userID, rateID string, amountCents int64) (ProtectedRateAmount, error)
+	Decrypt(userID, rateID string, amount ProtectedRateAmount) (int64, error)
 }
 
-// Service coordena o cadastro de tarifas gerais da conta; funcionários da mesma
-// conta usam a tarifa vigente do tipo, sem exceções individuais nesta etapa.
+// Service coordena o cadastro e a consulta de tarifas gerais da conta;
+// funcionários da mesma conta usam a tarifa vigente do tipo, sem exceções individuais.
 type Service struct {
 	repo      rateRepository
 	protector rateAmountProtector
@@ -113,4 +115,43 @@ func (s *Service) CreateRate(ctx context.Context, userID string, input CreateRat
 		return Rate{}, err
 	}
 	return rate, nil
+}
+
+// ListRates recupera somente a conta pedida e devolve a lista inteira ou erro.
+// Se qualquer envelope falhar na autenticação, descarta o resultado parcial.
+func (s *Service) ListRates(ctx context.Context, userID string) ([]Rate, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if userID == "" || strings.TrimSpace(userID) != userID {
+		return nil, ErrInvalidRateOwner
+	}
+	protectedRates, err := s.repo.ListRates(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	rates := make([]Rate, 0, len(protectedRates))
+	for _, protected := range protectedRates {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		// AAD usa o dono autenticado, não um valor que veio da linha do banco.
+		amountCents, err := s.protector.Decrypt(userID, protected.ID, protected.Amount)
+		if err != nil {
+			return nil, err
+		}
+		rates = append(rates, Rate{
+			ID: protected.ID, UserID: userID, BoxType: protected.BoxType,
+			AmountCents: amountCents, ValidFrom: protected.ValidFrom,
+			ValidUntil: protected.ValidUntil,
+		})
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return rates, nil
 }

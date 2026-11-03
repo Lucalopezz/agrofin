@@ -192,6 +192,14 @@
       }
     },
     {
+      "name": "07.3 - Listar tarifas",
+      "request": {
+        "description": "Exige sessão e retorna o histórico de tarifas gerais da conta autenticada, com valores descriptografados para essa sessão. A ordem é por início de vigência mais recente, depois tipo e ID. Sem tarifas, retorna [].",
+        "method": "GET",
+        "url": "{{base_url}}/harvest-rates"
+      }
+    },
+    {
       "name": "08 - Renomear funcionário",
       "request": {
         "description": "Exige sessão ativa. Copie o id do cadastro ou da listagem para a variável employee_id. Altera somente o nome e preserva o estado ativo/inativo. Funcionário inexistente ou de outra conta retorna 404; UUID malformado retorna 400.",

@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository persiste tarifas gerais usando o pool compartilhado da aplicação.
-// Ele recebe os metadados validados e o valor já protegido pelo Service.
+// Repository persiste e lê tarifas gerais usando o pool compartilhado da aplicação.
+// Na escrita, recebe os metadados validados e o valor já protegido pelo Service.
 type Repository struct {
 	pool *pgxpool.Pool
 }
@@ -78,4 +78,46 @@ func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
 		return fmt.Errorf("criar tarifa protegida: %w", err)
 	}
 	return nil
+}
+
+// ListRates lê somente tarifas gerais da conta, mantendo os valores cifrados
+// até que o Service autentique e descriptografe cada envelope.
+func (r *Repository) ListRates(ctx context.Context, userID string) ([]ProtectedRate, error) {
+	const query = `
+		SELECT id::text, box_type,
+		       rate_ciphertext, rate_nonce, rate_key_version,
+		       valid_from, valid_until
+		FROM harvest_rates
+		WHERE user_id = $1
+		  AND employee_id IS NULL
+		ORDER BY valid_from DESC, box_type ASC, id ASC
+	`
+	rows, err := r.pool.Query(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listar tarifas protegidas: %w", err)
+	}
+	defer rows.Close()
+
+	rates := make([]ProtectedRate, 0)
+	for rows.Next() {
+		var rate ProtectedRate
+		var boxType string
+		err := rows.Scan(
+			&rate.ID, &boxType,
+			&rate.Amount.Ciphertext, &rate.Amount.Nonce, &rate.Amount.KeyVersion,
+			&rate.ValidFrom, &rate.ValidUntil,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("ler tarifa protegida: %w", err)
+		}
+		// O filtro do SQL usa o dono recebido do Service; o mesmo valor confiável
+		// será usado depois pela cifra, sem depender de user_id vindo da linha.
+		rate.UserID = userID
+		rate.BoxType = BoxType(boxType)
+		rates = append(rates, rate)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listar tarifas protegidas: %w", err)
+	}
+	return rates, nil
 }

@@ -53,13 +53,13 @@ Estes critérios são verificados com dependências controladas e cifra real. A 
 
 ### HU-01 e HU-02 — persistência PostgreSQL de tarifas
 
-Estes critérios estão cobertos por integração com banco migrado, serviço e cifra reais. A composição no runtime e a rota HTTP `POST /harvest-rates` estão implementadas; listagem de tarifas continua pendente.
+Estes critérios estão cobertos por integração com banco migrado, serviço e cifra reais. A composição no runtime e as rotas HTTP `GET` e `POST /harvest-rates` estão implementadas.
 
 - O ID é gerado no PostgreSQL antes da cifra, sem criar linha parcial. A gravação usa o mesmo ID e persiste somente envelope e metadados, com `employee_id` nulo.
 - O envelope lido do banco é recuperável com a chave histórica correspondente e o mesmo gerente/registro; chave incorreta ou gerente trocado falham.
 - A sobreposição considera somente conta, tipo e escopo geral. Períodos adjacentes são permitidos e uma vigência sem fim bloqueia intervalos posteriores sobrepostos do mesmo escopo.
 - Duas criações que passaram pela consulta de sobreposição disputam a restrição real: somente uma persiste e a outra recebe `ErrRateOverlap`.
-- Outros erros de integridade, como ID duplicado, não são traduzidos como sobreposição. Cancelamento e prazo esgotado continuam identificáveis nos três métodos do repositório.
+- Outros erros de integridade, como ID duplicado, não são traduzidos como sobreposição. Cancelamento e prazo esgotado continuam identificáveis nos métodos do repositório.
 
 ### HU-01 e HU-02 — criação HTTP de tarifas
 
@@ -69,7 +69,15 @@ Estes critérios estão cobertos por integração com banco migrado, serviço e 
 - Uma tarifa válida retorna `201` com ID e os dados da tarifa para a sessão autenticada. `amount_cents` é persistido somente cifrado.
 - Tipo, centavos, vigência, JSON ou data inválidos retornam `400`; sobreposição do mesmo tipo e conta retorna `409`.
 - Se a configuração das chaves AES-256 estiver ausente ou inválida, a API encerra a inicialização sem disponibilizar a rota de escrita.
-- A pasta Manual correspondente na coleção Bruno permite conferir a requisição após entrar. A listagem de tarifas ainda não faz parte deste recorte.
+- A pasta Manual correspondente na coleção Bruno permite conferir a criação após entrar. A listagem retorna todas as tarifas da própria conta, com valores descriptografados somente para a sessão autenticada.
+
+### HU-01 e HU-02 — listagem HTTP de tarifas
+
+- `GET /api/v1/harvest-rates` exige sessão válida e retorna apenas tarifas gerais da conta autenticada, sem aceitar um `user_id` fornecido pelo cliente.
+- A consulta inclui o histórico e ordena por início de vigência mais recente, tipo e ID. Uma conta sem tarifas recebe `200` com `[]`.
+- O serviço descriptografa cada valor usando o gerente autenticado e o ID do registro. Se um envelope não puder ser autenticado, não devolve uma lista parcial nem registra valores financeiros; responde `500` com mensagem genérica.
+- A resposta contém ID, tipo, centavos e datas. `Cache-Control: no-store` evita armazenar valores financeiros no navegador ou em proxies.
+- **07.3 - Listar tarifas** na coleção Bruno permite conferir o fluxo com sessão ativa; a requisição Manual de criação permite criar uma tarifa para visualizar na listagem.
 
 ### HU-01 — reativação e filtro implementados
 

@@ -181,7 +181,7 @@ internal/
     handler_response.go
     routes.go
     errors.go
-    ...                        # Testes; leitura de tarifas e lançamentos pendentes
+    ...                        # Testes; lançamentos de colheita pendentes
 ```
 
 `colheitas` é um pacote irmão de `funcionarios`, iniciado pelo núcleo local de tarifas, com serviço e repositório próprios já implementados. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
@@ -209,7 +209,7 @@ Se o serviço de colheitas precisar de uma operação do cadastro, a dependênci
 
 ### Núcleo local de tarifas implementado
 
-O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e a rota HTTP de criação de tarifa. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências; a leitura/listagem de tarifas ainda não está disponível.
+O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e as rotas HTTP de criação e consulta de tarifas. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências.
 
 `BoxType` aceita normal e moagem para pagamento da colheita. É um tipo próprio, mas uma conversão explícita ainda pode criar um valor desconhecido; por isso a validação rejeita o valor vazio e outros tipos, inclusive exportação e mercado, que pertencem à venda.
 
@@ -248,7 +248,7 @@ O runtime lê `HARVEST_RATE_ACTIVE_KEY_VERSION` e `HARVEST_RATE_KEYS_HEX_JSON`, 
 
 Antes de habilitar escrita em produção, o provisionamento, rotação e recuperação das chaves e o controle de uso por material devem ser definidos entre todas as instâncias e reinícios. A biblioteca limita AES-GCM com nonce aleatório a no máximo `2^32` cifras por chave; a rotação precisa ocorrer antes desse limite, que não é reiniciado apenas por mudar o nome da versão. Esse controle operacional global não está implementado neste recorte. As chaves devem permanecer fora do banco e de seu backup. [Documentação de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce) e [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 
-Os testes existentes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. A rota de criação foi conectada à composição em `cmd/api` e incluída na coleção Bruno; ainda não há listagem de tarifas. O controle operacional do limite global de uso por chave também continua pendente.
+Os testes existentes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. As rotas de criação e consulta foram conectadas à composição em `cmd/api` e incluídas na coleção Bruno. O controle operacional do limite global de uso por chave também continua pendente.
 
 ### Persistência PostgreSQL de tarifas gerais
 
@@ -266,9 +266,9 @@ A consulta do serviço ajuda a detectar o conflito antes da cifra, mas duas requ
 
 Não foi necessária migração. A única instrução de inserção grava metadados e envelope juntos; as consultas anteriores não inserem estado parcial e não exigem uma transação explícita neste caso de uso.
 
-Os testes de integração usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado também são verificados nos três métodos.
+Os testes de integração existentes usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado foram verificados nos três métodos originais de escrita. `ListRates` foi acrescentado neste recorte e ainda não tem cobertura automatizada dedicada.
 
-O repositório foi testado com PostgreSQL real e agora é usado pela rota HTTP protegida `POST /harvest-rates`. A requisição Bruno correspondente fica em uma pasta manual por criar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
+O repositório foi testado com PostgreSQL real e agora é usado pelas rotas HTTP protegidas `GET` e `POST /harvest-rates`. A criação fica em uma pasta manual Bruno por gravar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
 
 ### Rota de criação de tarifas gerais
 
@@ -285,7 +285,13 @@ Exemplo:
 }
 ```
 
-Uma criação retorna `201` com ID, tipo, centavos e vigência. Formato inválido ou regra de domínio inválida retorna `400`; sobreposição para a mesma conta e tipo retorna `409`; sessão ausente retorna `401`. O valor aparece em claro apenas na resposta à sessão autorizada e é persistido somente no envelope cifrado. A consulta/listagem ainda não está implementada.
+Uma criação retorna `201` com ID, tipo, centavos e vigência. Formato inválido ou regra de domínio inválida retorna `400`; sobreposição para a mesma conta e tipo retorna `409`; sessão ausente retorna `401`. O valor aparece em claro apenas na resposta à sessão autorizada e é persistido somente no envelope cifrado.
+
+### Rota de consulta de tarifas gerais
+
+`GET /api/v1/harvest-rates` exige sessão e retorna todas as tarifas gerais da conta autenticada, incluindo histórico, sem filtros por query. O repositório busca somente linhas com `user_id` da sessão e `employee_id IS NULL`, ordenando por `valid_from` decrescente, `box_type` e ID. O serviço descriptografa os envelopes com o `user_id` autenticado e o ID de cada registro; se algum envelope falhar, descarta a resposta inteira para não apresentar lista parcial. A resposta `200` é um array dos mesmos DTOs usados na criação e retorna `[]` quando a conta não tem tarifas. As respostas usam `Cache-Control: no-store`.
+
+A lista descriptografada é entregue somente à sessão proprietária. Falhas de banco ou de autenticação do envelope retornam `500` com mensagem genérica; os detalhes não são enviados ao cliente nem registrados nos logs. A coleção Bruno inclui **07.3 - Listar tarifas**.
 
 ### Respostas para a tela
 
@@ -314,9 +320,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — criação de tarifa implementada:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL e `POST /harvest-rates` estão implementados. Seguem pendentes listagem, controles globais de uso/rotação das chaves, lançamentos com itens e consultas por período.
+3. **Tarifas e colheitas — cadastro e consulta de tarifas implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, lançamentos com itens e consultas por período.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; a criação de tarifas gerais já funciona pela API com sessão e cifra. Listagem de tarifas e lançamentos de colheita continuam como próximas entregas.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais funcionam com sessão e cifra. Lançamentos de colheita continuam como próxima entrega.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -337,7 +343,7 @@ GET/POST       ${API_PREFIX}/employees
 PATCH          ${API_PREFIX}/employees/{id}       # renomear
 DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histórico
 PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
-GET/POST       ${API_PREFIX}/harvest-rates
+GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
 GET/POST       ${API_PREFIX}/harvest-entries
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
@@ -346,7 +352,7 @@ POST           ${API_PREFIX}/employee-payments
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
 
-O filtro opcional `active` na listagem faz parte do contrato implementado: `true` para ativos, `false` para inativos e ausência para ambos. O decodificador usa `url.ParseQuery` para rejeitar query malformada e múltiplas ocorrências antes de chamar o serviço. Um `*bool` representa os três casos: `nil` é ausência; ponteiros para `true` e `false` são filtros explícitos. Serviço e repositório recebem esse critério separado do ID do gerente. No SQL, `user_id = $1 AND ($2::boolean IS NULL OR active = $2)` mantém o dono obrigatório em todos os casos e parametriza o filtro, sem montar SQL com texto do cliente. Não é necessária migração. A coleção Bruno mantém a consulta sem filtro e adiciona exemplos de ativos e inativos.
+O filtro opcional `active` na listagem faz parte do contrato implementado: `true` para ativos, `false` para inativos e ausência para ambos. O decodificador usa `url.ParseQuery` para rejeitar query malformada e múltiplas ocorrências antes de chamar o serviço. Um `*bool` representa os três casos: `nil` é ausência; ponteiros para `true` e `false` são filtros explícitos. Serviço e repositório recebem esse critério separado do ID do gerente. No SQL, `user_id = $1 AND ($2::boolean IS NULL OR active = $2)` mantém o dono obrigatório em todos os casos e parametriza o filtro, sem montar SQL com texto do cliente. Não é necessária migração. A coleção Bruno mantém a consulta sem filtro, adiciona exemplos de ativos e inativos e inclui a listagem de tarifas em `07.3`.
 
 ## Verificações que importam
 

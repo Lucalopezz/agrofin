@@ -7,17 +7,30 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 )
 
-type rateCreator interface {
+type rateService interface {
 	CreateRate(ctx context.Context, userID string, input CreateRateInput) (Rate, error)
+	ListRates(ctx context.Context, userID string) ([]Rate, error)
 }
 
-// Handler adapta o cadastro de tarifas ao protocolo HTTP sem assumir a persistência.
+// Handler adapta as operações de tarifa ao protocolo HTTP sem assumir a persistência.
 type Handler struct {
-	service rateCreator
+	service rateService
 }
 
-func NewHandler(service rateCreator) *Handler {
+func NewHandler(service rateService) *Handler {
 	return &Handler{service: service}
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	// A sessão é a única fonte do dono. A query não pode trocar a conta consultada.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	rates, err := h.service.ListRates(r.Context(), principal.UserID)
+	writeListRatesResponse(w, rates, err)
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {

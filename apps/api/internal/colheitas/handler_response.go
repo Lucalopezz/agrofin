@@ -39,16 +39,39 @@ func writeCreateRateResponse(w http.ResponseWriter, rate Rate, err error) {
 		log.Print("erro ao persistir tarifa protegida")
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível cadastrar a tarifa"})
 	default:
-		response := rateResponse{
-			ID: rate.ID, BoxType: rate.BoxType, AmountCents: rate.AmountCents,
-			ValidFrom: rate.ValidFrom.Format(rateDateLayout),
-		}
-		if rate.ValidUntil != nil {
-			validUntil := rate.ValidUntil.Format(rateDateLayout)
-			response.ValidUntil = &validUntil
-		}
-		writeJSON(w, http.StatusCreated, response)
+		writeJSON(w, http.StatusCreated, newRateResponse(rate))
 	}
+}
+
+func writeListRatesResponse(w http.ResponseWriter, rates []Rate, err error) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para listar tarifas esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// O erro pode conter metadados do banco ou detalhes da falha de autenticação da cifra.
+		log.Print("erro ao listar tarifas protegidas")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível listar as tarifas"})
+	default:
+		response := make([]rateResponse, 0, len(rates))
+		for _, rate := range rates {
+			response = append(response, newRateResponse(rate))
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func newRateResponse(rate Rate) rateResponse {
+	response := rateResponse{
+		ID: rate.ID, BoxType: rate.BoxType, AmountCents: rate.AmountCents,
+		ValidFrom: rate.ValidFrom.Format(rateDateLayout),
+	}
+	if rate.ValidUntil != nil {
+		validUntil := rate.ValidUntil.Format(rateDateLayout)
+		response.ValidUntil = &validUntil
+	}
+	return response
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

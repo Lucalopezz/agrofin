@@ -10,12 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Cada teste configura somente as etapas esperadas. Uma chamada extra a uma
-// função nil falha e revela que o serviço avançou além de uma validação ou erro.
+// Cada teste configura somente as etapas esperadas. Uma chamada extra falha ou
+// retorna um erro explícito, revelando que o serviço avançou além do esperado.
 type rateRepositoryStub struct {
 	overlap func(context.Context, RatePeriod) (bool, error)
 	nextID  func(context.Context) (string, error)
 	create  func(context.Context, ProtectedRate) error
+	list    func(context.Context, string) ([]ProtectedRate, error)
 }
 
 func (r rateRepositoryStub) HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error) {
@@ -30,10 +31,22 @@ func (r rateRepositoryStub) CreateRate(ctx context.Context, rate ProtectedRate) 
 	return r.create(ctx, rate)
 }
 
+func (r rateRepositoryStub) ListRates(ctx context.Context, userID string) ([]ProtectedRate, error) {
+	if r.list == nil {
+		return nil, errors.New("listagem de tarifas não configurada no stub")
+	}
+	return r.list(ctx, userID)
+}
+
 type rateAmountProtectorFunc func(string, string, int64) (ProtectedRateAmount, error)
 
 func (f rateAmountProtectorFunc) Encrypt(userID, rateID string, cents int64) (ProtectedRateAmount, error) {
 	return f(userID, rateID, cents)
+}
+
+func (f rateAmountProtectorFunc) Decrypt(string, string, ProtectedRateAmount) (int64, error) {
+	// Este fake cobre somente criação; um teste de leitura deve usar uma cifra real.
+	return 0, ErrInvalidProtectedRateAmount
 }
 
 func TestServiceCreateRate(t *testing.T) {
