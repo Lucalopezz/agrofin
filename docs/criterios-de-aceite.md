@@ -30,7 +30,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 ### HU-01 e HU-02 — núcleo local de tarifas
 
-Estes critérios verificam o domínio em memória, já implementado. O serviço, a proteção local e o repositório PostgreSQL também estão testados; configuração de chaves no runtime e HTTP continuam pendentes.
+Estes critérios verificam o domínio em memória, já implementado. O serviço, a proteção local e o repositório PostgreSQL também estão testados; configuração de chaves no runtime e a rota HTTP de criação estão implementadas.
 
 - Normal e moagem são tipos válidos. Tipo vazio, desconhecido ou classificação de venda é rejeitado.
 - O valor é um inteiro de centavos maior que zero; `1` centavo é válido e valores zero ou negativos são rejeitados.
@@ -41,7 +41,7 @@ Estes critérios verificam o domínio em memória, já implementado. O serviço,
 
 ### HU-01 e HU-02 — serviço e proteção local de tarifas
 
-Estes critérios são verificados com dependências controladas e cifra real. A integração PostgreSQL está detalhada na seção seguinte; HTTP continua pendente.
+Estes critérios são verificados com dependências controladas e cifra real. A integração PostgreSQL está detalhada na seção seguinte; o cadastro HTTP usa a sessão para obter o dono e não aceita campos de identidade do cliente.
 
 - O serviço valida antes de consultar ou cifrar, usa o gerente do chamador confiável e rejeita sobreposição antes da escrita. A persistência concreta reforça essa regra sob concorrência.
 - O ID vem da interface de persistência antes da cifra; o serviço entrega uma `ProtectedRate` sem centavos em claro. Falhas e cancelamento não devolvem uma entidade parcialmente cadastrada nem avançam para escrita indevida.
@@ -53,13 +53,23 @@ Estes critérios são verificados com dependências controladas e cifra real. A 
 
 ### HU-01 e HU-02 — persistência PostgreSQL de tarifas
 
-Estes critérios estão cobertos por integração com banco migrado, serviço e cifra reais. A composição no runtime e as rotas HTTP de tarifas continuam pendentes.
+Estes critérios estão cobertos por integração com banco migrado, serviço e cifra reais. A composição no runtime e a rota HTTP `POST /harvest-rates` estão implementadas; listagem de tarifas continua pendente.
 
 - O ID é gerado no PostgreSQL antes da cifra, sem criar linha parcial. A gravação usa o mesmo ID e persiste somente envelope e metadados, com `employee_id` nulo.
 - O envelope lido do banco é recuperável com a chave histórica correspondente e o mesmo gerente/registro; chave incorreta ou gerente trocado falham.
 - A sobreposição considera somente conta, tipo e escopo geral. Períodos adjacentes são permitidos e uma vigência sem fim bloqueia intervalos posteriores sobrepostos do mesmo escopo.
 - Duas criações que passaram pela consulta de sobreposição disputam a restrição real: somente uma persiste e a outra recebe `ErrRateOverlap`.
 - Outros erros de integridade, como ID duplicado, não são traduzidos como sobreposição. Cancelamento e prazo esgotado continuam identificáveis nos três métodos do repositório.
+
+### HU-01 e HU-02 — criação HTTP de tarifas
+
+- `POST /api/v1/harvest-rates` exige sessão válida, origem permitida e `X-Agrofin-Request: 1`; sem sessão, responde `401`.
+- O corpo contém somente `box_type`, `amount_cents`, `valid_from` e `valid_until`; rejeita campos extras como `user_id` e `employee_id`. Datas usam `AAAA-MM-DD`, e `valid_until: null` representa vigência aberta.
+- O serviço usa o gerente da sessão. Não é possível criar uma tarifa em outra conta escolhendo um identificador no corpo.
+- Uma tarifa válida retorna `201` com ID e os dados da tarifa para a sessão autenticada. `amount_cents` é persistido somente cifrado.
+- Tipo, centavos, vigência, JSON ou data inválidos retornam `400`; sobreposição do mesmo tipo e conta retorna `409`.
+- Se a configuração das chaves AES-256 estiver ausente ou inválida, a API encerra a inicialização sem disponibilizar a rota de escrita.
+- A pasta Manual correspondente na coleção Bruno permite conferir a requisição após entrar. A listagem de tarifas ainda não faz parte deste recorte.
 
 ### HU-01 — reativação e filtro implementados
 

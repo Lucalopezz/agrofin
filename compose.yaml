@@ -51,6 +51,8 @@ services:
       API_PREFIX: ${API_PREFIX:-/api/v1}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Defina PUBLIC_ORIGIN no .env}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:?Defina SESSION_COOKIE_SECURE no .env}
+      HARVEST_RATE_ACTIVE_KEY_VERSION: ${HARVEST_RATE_ACTIVE_KEY_VERSION:?Defina HARVEST_RATE_ACTIVE_KEY_VERSION no .env}
+      HARVEST_RATE_KEYS_HEX_JSON: '${HARVEST_RATE_KEYS_HEX_JSON:?Defina HARVEST_RATE_KEYS_HEX_JSON no .env}'
     ports:
       # Publica na rede local; use 127.0.0.1 no .env para restringir ao host.
       - "${API_BIND_ADDRESS:-0.0.0.0}:${API_PORT:-8080}:8080"

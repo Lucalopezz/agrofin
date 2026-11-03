@@ -75,12 +75,18 @@ jobs:
       - uses: actions/checkout@v6
       - name: Criar configuração descartável do Compose
         run: |
-          printf '%s\n' \
+          {
+            printf '%s\n' \
             'POSTGRES_DB=agrofin' \
             'POSTGRES_USER=agrofin' \
             'POSTGRES_PASSWORD=agrofin-ci' \
             'PUBLIC_ORIGIN=http://localhost:5173' \
-            'SESSION_COOKIE_SECURE=false' > .env
+            'SESSION_COOKIE_SECURE=false' \
+            'HARVEST_RATE_ACTIVE_KEY_VERSION=v1' \
+            'HARVEST_RATE_KEYS_HEX_JSON={"v1":"'
+            openssl rand -hex 32 | tr -d '\n'
+            printf '%s\n' '"}'
+          } > .env
       - name: Subir e aguardar os serviços
         run: docker compose up --build --detach --wait --wait-timeout 300
       - name: Verificar a API e o proxy do frontend

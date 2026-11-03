@@ -7,12 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
+	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
@@ -44,6 +44,10 @@ func run() error {
 	// A origem é uma allowlist única para o navegador. Não inferimos isso de
 	// Host nem de X-Forwarded-* porque esses cabeçalhos dependem da borda confiável.
 	if err := auth.ValidateSessionConfig(publicOrigin, cookieSecure); err != nil {
+		return err
+	}
+	rateCipher, err := rateCipherFromEnv()
+	if err != nil {
 		return err
 	}
 
@@ -82,6 +86,11 @@ func run() error {
 	auth.RegisterRoutes(apiMux, authHandler, sessionMiddleware.RequireSession)
 	funcionarios.RegisterRoutes(apiMux, handler, sessionMiddleware.RequireSession)
 
+	rateRepository := colheitas.NewRepository(pool)
+	rateService := colheitas.NewService(rateRepository, rateCipher)
+	rateHandler := colheitas.NewHandler(rateService)
+	colheitas.RegisterRoutes(apiMux, rateHandler, sessionMiddleware.RequireSession)
+
 	mux := http.NewServeMux()
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))
 
@@ -100,24 +109,6 @@ func run() error {
 		MaxHeaderBytes:    1 << 20,
 	}
 	return server.ListenAndServe()
-}
-
-func apiPrefixFromEnv() (string, error) {
-	apiPrefix := strings.TrimSpace(os.Getenv("API_PREFIX"))
-	if apiPrefix == "" {
-		apiPrefix = defaultAPIPrefix
-	}
-	// O prefixo é usado como caminho e também passado ao StripPrefix; rejeitar
-	// caminhos ambíguos evita que a rota pública e a rota interna se desencontrem.
-	if !strings.HasPrefix(apiPrefix, "/") || strings.Contains(apiPrefix, "//") || strings.ContainsAny(apiPrefix, "?# \t\r\n") {
-		return "", fmt.Errorf("API_PREFIX inválido: use um caminho absoluto como %s", defaultAPIPrefix)
-	}
-
-	apiPrefix = strings.TrimSuffix(apiPrefix, "/")
-	if apiPrefix == "" || path.Clean(apiPrefix) != apiPrefix {
-		return "", fmt.Errorf("API_PREFIX inválido: use um caminho absoluto como %s", defaultAPIPrefix)
-	}
-	return apiPrefix, nil
 }
 
 func health(w http.ResponseWriter, _ *http.Request) {

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Rotas implementadas da API. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; a pasta Manual desativa a conta autenticada. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Rotas implementadas da API. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -339,6 +339,43 @@
             "body": {
               "mode": "raw",
               "raw": "{\"active\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Criar tarifa",
+      "description": "Cria uma tarifa geral persistente e cifrada para a conta autenticada. Configure as chaves no ambiente da API e não execute esta pasta pelo runner. Ajuste tipo e vigência antes de repetir para não colidir com uma tarifa existente.",
+      "item": [
+        {
+          "name": "Cadastrar tarifa geral",
+          "request": {
+            "description": "Exige sessão ativa e cabeçalhos Origin e X-Agrofin-Request. O valor é enviado em centavos inteiros. A resposta 201 retorna os metadados e o valor para a sessão autenticada; 409 indica vigência sobreposta para o mesmo tipo na conta.",
+            "method": "POST",
+            "url": "{{base_url}}/harvest-rates",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"box_type\":\"normal\",\"amount_cents\":500,\"valid_from\":\"2026-01-01\",\"valid_until\":null}",
               "options": {
                 "raw": {
                   "language": "json"

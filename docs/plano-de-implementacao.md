@@ -176,8 +176,12 @@ internal/
     rate_cipher.go
     service.go
     repository.go
+    handler.go
+    handler_request.go
+    handler_response.go
+    routes.go
     errors.go
-    ...                        # Testes; runtime, HTTP e lançamentos pendentes
+    ...                        # Testes; leitura de tarifas e lançamentos pendentes
 ```
 
 `colheitas` é um pacote irmão de `funcionarios`, iniciado pelo núcleo local de tarifas, com serviço e repositório próprios já implementados. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
@@ -205,19 +209,19 @@ Se o serviço de colheitas precisar de uma operação do cadastro, a dependênci
 
 ### Núcleo local de tarifas implementado
 
-O pacote `internal/colheitas` contém o domínio em `rate.go`, erros de domínio e testes, além do serviço e da cifra detalhados na próxima seção. O repositório já grava envelopes no PostgreSQL; ainda não há cadastro de tarifas pela API.
+O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e a rota HTTP de criação de tarifa. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências; a leitura/listagem de tarifas ainda não está disponível.
 
 `BoxType` aceita normal e moagem para pagamento da colheita. É um tipo próprio, mas uma conversão explícita ainda pode criar um valor desconhecido; por isso a validação rejeita o valor vazio e outros tipos, inclusive exportação e mercado, que pertencem à venda.
 
 `Rate` contém identificação, dono, tipo de caixa, `AmountCents int64`, `ValidFrom time.Time` e `ValidUntil *time.Time`. O valor é representado em centavos inteiros, estritamente positivos: `500` representa R$ 5,00. `ValidUntil == nil` significa ausência de fim, enquanto um ponteiro para a data zero é inválido. O início deve ser informado e o fim, quando presente, deve ser posterior ao início. A vigência mantém início inclusivo e fim exclusivo, seguindo o esquema já migrado.
 
-A função privada `normalizeRate` é usada por `Service.CreateRate`, seguindo o padrão de `normalizeName` no cadastro de funcionários. Ela não autentica o dono, consulta outras tarifas ou persiste dados. Os campos exportados de `Rate` não garantem validação por si só; o serviço é a entrada do caso de uso, ainda sem adaptador HTTP.
+A função privada `normalizeRate` é usada por `Service.CreateRate`, seguindo o padrão de `normalizeName` no cadastro de funcionários. Ela não autentica o dono, consulta outras tarifas ou persiste dados. Os campos exportados de `Rate` não garantem validação por si só; o serviço é a entrada do caso de uso e o handler limita o protocolo HTTP a tipo, centavos e datas.
 
 As datas representam dias, não instantes com horário. A normalização extrai ano, mês e dia no fuso recebido e cria uma representação à meia-noite UTC, sem converter primeiro o instante para UTC e deslocar o dia. A comparação ocorre depois dessa normalização; horários diferentes no mesmo dia não criam uma vigência válida. A função devolve uma cópia da tarifa e uma nova cópia da data final, para uma alteração posterior no ponteiro do chamador não modificar a vigência já validada.
 
 Os testes cobrem os dois tipos, menor valor positivo, valores inválidos, início ausente, fim zero, fim anterior ou igual ao início, horários no mesmo dia e preservação dos dias entre fusos. Também verificam que a entrada e seu ponteiro não são alterados nem compartilhados com o resultado.
 
-`AmountCents` continua somente em memória: o serviço protege o valor antes de encaminhar a entidade à interface de persistência. A decisão de tarifa geral foi confirmada, e a persistência PostgreSQL está implementada, enquanto gerenciamento de chaves no runtime e HTTP continuam pendentes.
+`AmountCents` continua somente em memória e na resposta da requisição autorizada: o serviço protege o valor antes de encaminhar a entidade à interface de persistência. A decisão de tarifa geral foi confirmada, e a rota protegida de criação usa essa sequência completa.
 
 ### Serviço de tarifas gerais e proteção do valor
 
@@ -240,11 +244,11 @@ As interfaces privadas ficam junto do serviço que as consome. `RatePeriod` deli
 
 `RateCipher`, no próprio pacote `colheitas`, usa AES-256-GCM da biblioteca padrão, com chaves de 32 bytes e nonce aleatório de 96 bits gerado por `cipher.NewGCMWithRandomNonce`. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave, conforme as colunas existentes. O formato do campo, versão, gerente e ID da tarifa formam dados adicionais autenticados; trocar esses identificadores, a cifra ou o nonce faz a leitura falhar. A composição usa um array JSON para não concatenar identificadores de forma ambígua. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
 
-As chaves são fornecidas em memória pela composição. O construtor prepara seu próprio mapa de cifras, exige uma versão ativa conhecida e aceita versões antigas para recuperação de envelopes anteriores. A versão ativa pode ser trocada reconstruindo a instância com uma chave nova e mantendo as antigas necessárias. Repetir material sob duas versões na mesma configuração é rejeitado: renomear uma chave não é rotacioná-la. Não há leitura de chave do banco, configuração de segredo no runtime ou escolha de provedor nesta etapa. Nonces não são chaves e acompanham o envelope.
+O runtime lê `HARVEST_RATE_ACTIVE_KEY_VERSION` e `HARVEST_RATE_KEYS_HEX_JSON`, um objeto JSON que mapeia versões para chaves hexadecimais de 32 bytes. A inicialização valida a configuração antes de abrir o servidor e falha sem registrar os valores quando faltam chaves, a versão ativa não existe ou o material é inválido. O construtor prepara seu próprio mapa de cifras e aceita versões antigas para recuperação. Para uma rotação manual, configure material novo sob nova versão como ativa e mantenha as antigas necessárias. Repetir material sob duas versões é rejeitado: renomear uma chave não é rotacioná-la. A configuração por ambiente é uma composição inicial; o provedor operacional para produção continua por escolher. Nonces não são chaves e acompanham o envelope.
 
 Antes de habilitar escrita em produção, o provisionamento, rotação e recuperação das chaves e o controle de uso por material devem ser definidos entre todas as instâncias e reinícios. A biblioteca limita AES-GCM com nonce aleatório a no máximo `2^32` cifras por chave; a rotação precisa ocorrer antes desse limite, que não é reiniciado apenas por mudar o nome da versão. Esse controle operacional global não está implementado neste recorte. As chaves devem permanecer fora do banco e de seu backup. [Documentação de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce) e [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 
-Os testes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. O repositório PostgreSQL já está implementado; ainda não há integração com a composição em `cmd/api`, HTTP ou coleção Bruno para esse fluxo; os endpoints de tarifas seguem propostos.
+Os testes existentes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. A rota de criação foi conectada à composição em `cmd/api` e incluída na coleção Bruno; ainda não há listagem de tarifas. O controle operacional do limite global de uso por chave também continua pendente.
 
 ### Persistência PostgreSQL de tarifas gerais
 
@@ -264,7 +268,24 @@ Não foi necessária migração. A única instrução de inserção grava metada
 
 Os testes de integração usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado também são verificados nos três métodos.
 
-O repositório foi implementado e testado fora da composição HTTP. Configuração das chaves no runtime, controles operacionais de rotação e uso e rotas de tarifas continuam pendentes. Nenhum endpoint ou requisição Bruno de tarifa foi adicionado neste recorte.
+O repositório foi testado com PostgreSQL real e agora é usado pela rota HTTP protegida `POST /harvest-rates`. A requisição Bruno correspondente fica em uma pasta manual por criar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
+
+### Rota de criação de tarifas gerais
+
+`POST /api/v1/harvest-rates` exige sessão, `Content-Type: application/json`, `Origin` permitido e `X-Agrofin-Request: 1`. O corpo aceita somente `box_type`, `amount_cents`, `valid_from` e `valid_until`; não recebe `user_id`, ID da tarifa ou funcionário. As datas usam `AAAA-MM-DD`, e `valid_until: null` representa vigência aberta. O usuário dono vem do principal autenticado.
+
+Exemplo:
+
+```json
+{
+  "box_type": "normal",
+  "amount_cents": 500,
+  "valid_from": "2026-11-03",
+  "valid_until": null
+}
+```
+
+Uma criação retorna `201` com ID, tipo, centavos e vigência. Formato inválido ou regra de domínio inválida retorna `400`; sobreposição para a mesma conta e tipo retorna `409`; sessão ausente retorna `401`. O valor aparece em claro apenas na resposta à sessão autorizada e é persistido somente no envelope cifrado. A consulta/listagem ainda não está implementada.
 
 ### Respostas para a tela
 
@@ -293,9 +314,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — serviço e proteção local implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra e repositório PostgreSQL estão implementados e testados. Seguem pendentes gerenciamento de chaves no runtime, HTTP, lançamentos com itens e consultas por período.
+3. **Tarifas e colheitas — criação de tarifa implementada:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL e `POST /harvest-rates` estão implementados. Seguem pendentes listagem, controles globais de uso/rotação das chaves, lançamentos com itens e consultas por período.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; domínio, serviço e proteção local das tarifas também estão disponíveis, com persistência PostgreSQL testada, enquanto integração no runtime, HTTP, colheitas e consultas continuam como próximas entregas.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; a criação de tarifas gerais já funciona pela API com sessão e cifra. Listagem de tarifas e lançamentos de colheita continuam como próximas entregas.
 
 | etapa | entrega verificável |
 | --- | --- |

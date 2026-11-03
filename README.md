@@ -4,7 +4,7 @@ O agrofin é uma aplicação para ajudar o cliente a administrar a produção de
 
 ## Estado do projeto
 
-O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. A listagem aceita o filtro opcional `active=true` ou `active=false`; sem filtro, retorna ambos os estados. Há domínio, serviço e persistência PostgreSQL de tarifas gerais com valor cifrado e testes de integração, ainda sem configuração de chaves no runtime ou rotas de tarifas. Os demais fluxos, a proteção dos valores financeiros e o deploy ainda não estão prontos.
+O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. A listagem aceita o filtro opcional `active=true` ou `active=false`; sem filtro, retorna ambos os estados. O cadastro de tarifas gerais está disponível em `POST /api/v1/harvest-rates`, exige sessão e cifra o valor antes de persistir. As chaves são fornecidas pelo ambiente; listagem de tarifas, lançamentos de colheita, controles operacionais de rotação e a integração financeira completa ainda estão pendentes.
 
 ## Tecnologias
 
@@ -43,7 +43,7 @@ compose.yaml           serviços para desenvolvimento local
    cp .env.example .env
    ```
 
-   No `.env`, substitua `POSTGRES_PASSWORD` por uma senha hexadecimal longa e atualize a mesma senha em `TEST_DATABASE_URL`. Se já tiver um `.env`, preserve as credenciais existentes. `PUBLIC_ORIGIN` e `SESSION_COOKIE_SECURE=false` vêm ajustados para o frontend local em HTTP; em produção, configure a origem HTTPS e `SESSION_COOKIE_SECURE=true`.
+   No `.env`, substitua `POSTGRES_PASSWORD` por uma senha hexadecimal longa e atualize a mesma senha em `TEST_DATABASE_URL`. Se já tiver um `.env`, preserve as credenciais existentes e acrescente as variáveis de tarifa: gere uma chave com `openssl rand -hex 32`, mantenha `HARVEST_RATE_ACTIVE_KEY_VERSION=v1` e configure `HARVEST_RATE_KEYS_HEX_JSON={"v1":"<chave-gerada>"}`. Não compartilhe nem versione essa chave; sem ela a API não inicia. `PUBLIC_ORIGIN` e `SESSION_COOKIE_SECURE=false` vêm ajustados para o frontend local em HTTP; em produção, configure a origem HTTPS e `SESSION_COOKIE_SECURE=true`.
 
 3. Inicie os serviços:
 
