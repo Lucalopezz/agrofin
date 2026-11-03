@@ -19,6 +19,17 @@ type createRateRequest struct {
 	ValidUntil  *string `json:"valid_until"`
 }
 
+type createHarvestEntryRequest struct {
+	EmployeeID  string                     `json:"employee_id"`
+	HarvestDate string                     `json:"harvest_date"`
+	Items       []createHarvestItemRequest `json:"items"`
+}
+
+type createHarvestItemRequest struct {
+	BoxType  BoxType `json:"box_type"`
+	Quantity int32   `json:"quantity"`
+}
+
 func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRateInput, bool) {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
@@ -71,6 +82,58 @@ func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRate
 	return CreateRateInput{
 		BoxType: request.BoxType, AmountCents: request.AmountCents,
 		ValidFrom: validFrom, ValidUntil: validUntil,
+	}, true
+}
+
+func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateHarvestInput, bool) {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
+		return CreateHarvestInput{}, false
+	}
+
+	// Até dois tipos de caixa formam um lançamento pequeno; o limite evita que
+	// um corpo excessivo ocupe memória antes da validação dos itens.
+	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request *createHarvestEntryRequest
+	err = decoder.Decode(&request)
+	if err == nil && request != nil {
+		var extra any
+		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
+			if trailingErr == nil {
+				err = errors.New("mais de um valor JSON")
+			} else {
+				err = trailingErr
+			}
+		}
+	}
+	var sizeErr *http.MaxBytesError
+	if errors.As(err, &sizeErr) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "Corpo da requisição excede 4 KiB"})
+		return CreateHarvestInput{}, false
+	}
+	if err != nil || request == nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Envie um único objeto JSON com os campos do lançamento"})
+		return CreateHarvestInput{}, false
+	}
+	employeeID, err := normalizeHarvestEmployeeID(request.EmployeeID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "employee_id deve ser um UUID válido"})
+		return CreateHarvestInput{}, false
+	}
+	harvestDate, err := parseRateDate(request.HarvestDate)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "harvest_date deve usar o formato AAAA-MM-DD"})
+		return CreateHarvestInput{}, false
+	}
+	items := make([]HarvestItemInput, 0, len(request.Items))
+	for _, item := range request.Items {
+		items = append(items, HarvestItemInput{BoxType: item.BoxType, Quantity: item.Quantity})
+	}
+	return CreateHarvestInput{
+		EmployeeID: employeeID, HarvestDate: harvestDate, Items: items,
 	}, true
 }
 

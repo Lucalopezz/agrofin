@@ -6,7 +6,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"math"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -16,8 +18,8 @@ const (
 	ratePlaintextSize = 8
 )
 
-// ProtectedRateAmount corresponde ao resultado da criptografia armazenado
-// Somente estes bytes e a versão, nunca os centavos em claro, poderão ir ao banco.
+// ProtectedRateAmount é o envelope persistível de uma tarifa ou de sua fotografia
+// em um lançamento. Centavos em claro nunca atravessam a fronteira do Repository.
 type ProtectedRateAmount struct {
 	// contém o valor criptografado e sua tag de autenticação.
 	// Ciphertext: []byte{0x91, 0xAF, 0x23, ...}
@@ -28,8 +30,8 @@ type ProtectedRateAmount struct {
 	KeyVersion string // v1
 }
 
-// RateCipher protege valores de tarifa com AES-256-GCM. As chaves chegam em
-// memória pela composição; o componente não as gera, lê do banco ou persiste.
+// RateCipher protege tarifas e fotografias aplicadas com AES-256-GCM. As chaves
+// chegam em memória pela composição; o componente não as gera, lê do banco ou persiste.
 type RateCipher struct {
 	// Qual chave será usada para novas cifras, v1, v2
 	activeVersion string
@@ -91,18 +93,45 @@ func (c *RateCipher) Encrypt(userID, rateID string, amountCents int64) (Protecte
 	if c == nil || len(c.keys) == 0 {
 		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
 	}
-	aead, ok := c.keys[c.activeVersion]
-	if !ok {
+	if _, ok := c.keys[c.activeVersion]; !ok {
 		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
-	}
-	if amountCents <= 0 {
-		return ProtectedRateAmount{}, ErrInvalidRateAmount
 	}
 	// AAD autentica a versão, a conta e o registro, sem cifrar. O envelope não pode
 	// ser transplantado para outra conta, registro ou versão sem falhar na autenticação.
 	aad, err := rateAdditionalData(c.activeVersion, userID, rateID)
 	if err != nil {
 		return ProtectedRateAmount{}, err
+	}
+	return c.encryptAmount(amountCents, aad)
+}
+
+// EncryptHarvestItemRate cria a fotografia cifrada da tarifa aplicada. Os dados
+// autenticados ligam o valor ao lançamento, funcionário, data, tipo e quantidade,
+// para que trocar esses campos na linha não transforme a fotografia em outra.
+func (c *RateCipher) EncryptHarvestItemRate(userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32, amountCents int64) (ProtectedRateAmount, error) {
+	if c == nil || len(c.keys) == 0 {
+		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	}
+	if _, ok := c.keys[c.activeVersion]; !ok {
+		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	}
+	aad, err := harvestItemRateAdditionalData(c.activeVersion, userID, harvestID, employeeID, harvestDate, boxType, quantity)
+	if err != nil {
+		return ProtectedRateAmount{}, err
+	}
+	return c.encryptAmount(amountCents, aad)
+}
+
+func (c *RateCipher) encryptAmount(amountCents int64, aad []byte) (ProtectedRateAmount, error) {
+	if c == nil || len(c.keys) == 0 {
+		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	}
+	aead, ok := c.keys[c.activeVersion]
+	if !ok {
+		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	}
+	if amountCents <= 0 {
+		return ProtectedRateAmount{}, ErrInvalidRateAmount
 	}
 	// O domínio já usa centavos inteiros positivos; oito bytes preservam int64
 	// sem conversões decimais, ponto flutuante ou cópias de valor em texto.
@@ -127,6 +156,23 @@ func (c *RateCipher) Encrypt(userID, rateID string, amountCents int64) (Protecte
 // Decrypt só devolve centavos após autenticar envelope, conta e registro.
 // Versão ausente, material incorreto e adulteração não expõem detalhes privados.
 func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) (int64, error) {
+	aad, err := rateAdditionalData(amount.KeyVersion, userID, rateID)
+	if err != nil {
+		return 0, err
+	}
+	return c.decryptAmount(amount, aad)
+}
+
+// DecryptHarvestItemRate autentica o envelope com os mesmos campos usados na criação.
+func (c *RateCipher) DecryptHarvestItemRate(userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32, amount ProtectedRateAmount) (int64, error) {
+	aad, err := harvestItemRateAdditionalData(amount.KeyVersion, userID, harvestID, employeeID, harvestDate, boxType, quantity)
+	if err != nil {
+		return 0, err
+	}
+	return c.decryptAmount(amount, aad)
+}
+
+func (c *RateCipher) decryptAmount(amount ProtectedRateAmount, aad []byte) (int64, error) {
 	if c == nil || len(c.keys) == 0 {
 		return 0, ErrInvalidRateCipherConfig
 	}
@@ -137,10 +183,6 @@ func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) 
 		return 0, ErrInvalidProtectedRateAmount
 	}
 
-	aad, err := rateAdditionalData(amount.KeyVersion, userID, rateID)
-	if err != nil {
-		return 0, err
-	}
 	// Na encriptaçao, foi separado o nonce do ciphertext, temos que juntar
 	sealed := make([]byte, 0, len(amount.Nonce)+len(amount.Ciphertext))
 	sealed = append(sealed, amount.Nonce...)
@@ -160,12 +202,31 @@ func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) 
 }
 
 func rateAdditionalData(version, userID, rateID string) ([]byte, error) {
-	if userID == "" || rateID == "" || strings.TrimSpace(userID) != userID || strings.TrimSpace(rateID) != rateID || !utf8.ValidString(userID) || !utf8.ValidString(rateID) {
+	if version == "" || userID == "" || rateID == "" || strings.TrimSpace(version) != version || strings.TrimSpace(userID) != userID || strings.TrimSpace(rateID) != rateID || !utf8.ValidString(version) || !utf8.ValidString(userID) || !utf8.ValidString(rateID) {
 		return nil, ErrInvalidRateCipherContext
 	}
 	// JSON torna a composição inequívoca. Conta, registro, campo/formato e versão
 	// são autenticados sem serem cifrados, impedindo transplantar um valor entre eles.
 	data, err := json.Marshal([4]string{"agrofin.harvest-rate.amount.v1", version, userID, rateID})
+	if err != nil {
+		return nil, ErrInvalidRateCipherContext
+	}
+	return data, nil
+}
+
+func harvestItemRateAdditionalData(version, userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32) ([]byte, error) {
+	if version == "" || userID == "" || harvestID == "" || employeeID == "" || strings.TrimSpace(version) != version || strings.TrimSpace(userID) != userID || strings.TrimSpace(harvestID) != harvestID || strings.TrimSpace(employeeID) != employeeID || !utf8.ValidString(version) || !utf8.ValidString(userID) || !utf8.ValidString(harvestID) || !utf8.ValidString(employeeID) || harvestDate.IsZero() || quantity <= 0 {
+		return nil, ErrInvalidRateCipherContext
+	}
+	if boxType != BoxTypeNormal && boxType != BoxTypeMoagem {
+		return nil, ErrInvalidBoxType
+	}
+	// JSON evita ambiguidades entre campos concatenados. Tipo e quantidade também
+	// são autenticados para que um valor aplicado não seja deslocado para outro item.
+	data, err := json.Marshal([8]string{
+		"agrofin.harvest-entry.applied-rate.v1", version, userID, harvestID,
+		employeeID, rateDate(harvestDate).Format("2006-01-02"), string(boxType), strconv.FormatInt(int64(quantity), 10),
+	})
 	if err != nil {
 		return nil, ErrInvalidRateCipherContext
 	}

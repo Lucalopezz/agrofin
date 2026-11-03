@@ -20,6 +20,19 @@ type rateResponse struct {
 	ValidUntil  *string `json:"valid_until"`
 }
 
+type harvestResponse struct {
+	ID          string                `json:"id"`
+	EmployeeID  string                `json:"employee_id"`
+	HarvestDate string                `json:"harvest_date"`
+	Items       []harvestItemResponse `json:"items"`
+}
+
+type harvestItemResponse struct {
+	BoxType          BoxType `json:"box_type"`
+	Quantity         int32   `json:"quantity"`
+	AppliedRateCents int64   `json:"applied_rate_cents"`
+}
+
 func writeCreateRateResponse(w http.ResponseWriter, rate Rate, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidBoxType):
@@ -62,6 +75,33 @@ func writeListRatesResponse(w http.ResponseWriter, rates []Rate, err error) {
 	}
 }
 
+func writeCreateHarvestResponse(w http.ResponseWriter, harvest Harvest, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidHarvestOwner), errors.Is(err, ErrInvalidHarvestEmployee),
+		errors.Is(err, ErrInvalidHarvestDate), errors.Is(err, ErrInvalidHarvestItems),
+		errors.Is(err, ErrInvalidHarvestQuantity), errors.Is(err, ErrDuplicateHarvestItem),
+		errors.Is(err, ErrInvalidBoxType):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira funcionário, data, tipos e quantidades do lançamento"})
+	case errors.Is(err, ErrRateNotFound):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "Não há tarifa vigente para um dos tipos de caixa na data informada"})
+	case errors.Is(err, ErrEmployeeNotFound):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Funcionário não encontrado"})
+	case errors.Is(err, ErrEmployeeInactive):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "Não é possível registrar colheita para funcionário inativo"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para registrar colheita esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// O erro pode conter dados do banco ou detalhe de cifra; só registramos o fluxo.
+		log.Print("erro ao persistir lançamento de colheita")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível registrar a colheita"})
+	default:
+		response := newHarvestResponse(harvest)
+		writeJSON(w, http.StatusCreated, response)
+	}
+}
+
 func newRateResponse(rate Rate) rateResponse {
 	response := rateResponse{
 		ID: rate.ID, BoxType: rate.BoxType, AmountCents: rate.AmountCents,
@@ -74,9 +114,23 @@ func newRateResponse(rate Rate) rateResponse {
 	return response
 }
 
+func newHarvestResponse(harvest Harvest) harvestResponse {
+	items := make([]harvestItemResponse, 0, len(harvest.Items))
+	for _, item := range harvest.Items {
+		items = append(items, harvestItemResponse{
+			BoxType: item.BoxType, Quantity: item.Quantity,
+			AppliedRateCents: item.AppliedRateCents,
+		})
+	}
+	return harvestResponse{
+		ID: harvest.ID, EmployeeID: harvest.EmployeeID,
+		HarvestDate: harvest.HarvestDate.Format(rateDateLayout), Items: items,
+	}
+}
+
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	// Tarifas contêm valores financeiros; não permitimos que navegador ou proxy os armazene.
+	// Respostas de tarifas e lançamentos contêm dados financeiros; não os armazenamos em cache.
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {

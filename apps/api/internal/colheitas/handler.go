@@ -12,13 +12,18 @@ type rateService interface {
 	ListRates(ctx context.Context, userID string) ([]Rate, error)
 }
 
-// Handler adapta as operações de tarifa ao protocolo HTTP sem assumir a persistência.
-type Handler struct {
-	service rateService
+type harvestCreator interface {
+	Create(ctx context.Context, userID string, input CreateHarvestInput) (Harvest, error)
 }
 
-func NewHandler(service rateService) *Handler {
-	return &Handler{service: service}
+// Handler adapta as operações de colheita e tarifa ao protocolo HTTP, sem persistência.
+type Handler struct {
+	service        rateService
+	harvestCreator harvestCreator
+}
+
+func NewHandler(service rateService, harvestCreator harvestCreator) *Handler {
+	return &Handler{service: service, harvestCreator: harvestCreator}
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -49,4 +54,22 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	rate, err := h.service.CreateRate(r.Context(), principal.UserID, input)
 	writeCreateRateResponse(w, rate, err)
+}
+
+func (h *Handler) createHarvest(w http.ResponseWriter, r *http.Request) {
+	// O lançamento sempre pertence ao principal autenticado, nunca a um user_id
+	// enviado no corpo junto com os dados da colheita.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	input, ok := decodeCreateHarvestRequest(w, r)
+	if !ok {
+		return
+	}
+
+	harvest, err := h.harvestCreator.Create(r.Context(), principal.UserID, input)
+	writeCreateHarvestResponse(w, harvest, err)
 }

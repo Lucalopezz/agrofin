@@ -83,7 +83,8 @@ func run() error {
 
 	rateRepository := colheitas.NewRepository(pool)
 	rateService := colheitas.NewService(rateRepository, rateCipher)
-	rateHandler := colheitas.NewHandler(rateService)
+	harvestService := colheitas.NewHarvestService(rateRepository, rateCipher)
+	rateHandler := colheitas.NewHandler(rateService, harvestService)
 	colheitas.RegisterRoutes(apiMux, rateHandler, sessionMiddleware.RequireSession)
 
 	mux := http.NewServeMux()

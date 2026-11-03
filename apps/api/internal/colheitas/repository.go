@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -120,4 +122,123 @@ func (r *Repository) ListRates(ctx context.Context, userID string) ([]ProtectedR
 		return nil, fmt.Errorf("listar tarifas protegidas: %w", err)
 	}
 	return rates, nil
+}
+
+// NextHarvestID reserva o identificador usado para autenticar a fotografia da tarifa.
+// TODO: Já existe uma função que faz a mesma coisa, da para criar uma função genérica para gerar UUIDs no banco e usar nos dois lugares.
+func (r *Repository) NextHarvestID(ctx context.Context) (string, error) {
+	var id string
+	err := r.pool.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("gerar identificador da colheita: %w", err)
+	}
+	return id, nil
+}
+
+// CheckActiveEmployee dá erro de domínio antes de consultar tarifas. A verificação
+// é repetida com bloqueio em CreateHarvest para continuar correta sob concorrência.
+func (r *Repository) CheckActiveEmployee(ctx context.Context, userID, employeeID string) error {
+	var active bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT active
+		FROM employees
+		WHERE user_id = $1 AND id = $2
+	`, userID, employeeID).Scan(&active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEmployeeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("consultar funcionário da colheita: %w", err)
+	}
+	if !active {
+		return ErrEmployeeInactive
+	}
+	return nil
+}
+
+// RateForDate lê apenas a tarifa geral vigente na data, mantendo o envelope
+// cifrado até o serviço autenticá-lo com o dono da sessão e o ID da tarifa.
+func (r *Repository) RateForDate(ctx context.Context, userID string, boxType BoxType, date time.Time) (ProtectedRate, error) {
+	const query = `
+		SELECT id::text, rate_ciphertext, rate_nonce, rate_key_version,
+		       valid_from, valid_until
+		FROM harvest_rates
+		WHERE user_id = $1
+		  AND employee_id IS NULL
+		  AND box_type = $2
+		  AND valid_from <= $3::date
+		  AND (valid_until IS NULL OR valid_until > $3::date)
+	`
+	var rate ProtectedRate
+	rate.UserID = userID
+	rate.BoxType = boxType
+	err := r.pool.QueryRow(ctx, query, userID, string(boxType), date).Scan(
+		&rate.ID, &rate.Amount.Ciphertext, &rate.Amount.Nonce,
+		&rate.Amount.KeyVersion, &rate.ValidFrom, &rate.ValidUntil,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ProtectedRate{}, ErrRateNotFound
+	}
+	if err != nil {
+		return ProtectedRate{}, fmt.Errorf("consultar tarifa vigente: %w", err)
+	}
+	return rate, nil
+}
+
+// CreateHarvest grava o agregado em uma única transação. O bloqueio compartilhado
+// mantém a leitura de active estável até que cabeçalho e itens estejam persistidos.
+func (r *Repository) CreateHarvest(ctx context.Context, harvest ProtectedHarvest) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("iniciar gravação da colheita: %w", err)
+	}
+	defer func() {
+		// Mesmo se a conexão HTTP for cancelada, tentamos liberar a transação aberta.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+
+	var active bool
+	err = tx.QueryRow(ctx, `
+		SELECT active
+		FROM employees
+		WHERE user_id = $1 AND id = $2
+		FOR SHARE
+	`, harvest.UserID, harvest.EmployeeID).Scan(&active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEmployeeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("validar funcionário da colheita: %w", err)
+	}
+	if !active {
+		return ErrEmployeeInactive
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO harvests (id, user_id, employee_id, harvest_date, created_by)
+		VALUES ($1, $2, $3, $4, $2)
+	`, harvest.ID, harvest.UserID, harvest.EmployeeID, harvest.HarvestDate)
+	if err != nil {
+		return fmt.Errorf("gravar cabeçalho da colheita: %w", err)
+	}
+	for _, item := range harvest.Items {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO harvest_items (
+				user_id, harvest_id, box_type, quantity,
+				applied_rate_ciphertext, applied_rate_nonce, applied_rate_key_version
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`, harvest.UserID, harvest.ID, string(item.BoxType), item.Quantity,
+			item.AppliedAmount.Ciphertext, item.AppliedAmount.Nonce, item.AppliedAmount.KeyVersion,
+		)
+		if err != nil {
+			return fmt.Errorf("gravar item da colheita: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("confirmar colheita: %w", err)
+	}
+	return nil
 }
