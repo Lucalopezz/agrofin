@@ -82,11 +82,10 @@ jobs:
             'POSTGRES_PASSWORD=agrofin-ci' \
             'PUBLIC_ORIGIN=http://localhost:5173' \
             'SESSION_COOKIE_SECURE=false' \
-            'HARVEST_RATE_ACTIVE_KEY_VERSION=v1' \
-            'HARVEST_RATE_KEYS_HEX_JSON={"v1":"'
-            openssl rand -hex 32 | tr -d '\n'
-            printf '%s\n' '"}'
-          } > .env
+            'HARVEST_RATE_ACTIVE_KEY_VERSION=v1' > .env
+          rate_key_hex="$(openssl rand -hex 32)"
+          # O Compose precisa ler o objeto JSON completo na mesma linha do .env.
+          printf 'HARVEST_RATE_KEYS_HEX_JSON={"v1":"%s"}\n' "$rate_key_hex" >> .env
       - name: Subir e aguardar os serviços
         run: docker compose up --build --detach --wait --wait-timeout 300
       - name: Verificar a API e o proxy do frontend
