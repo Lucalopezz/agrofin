@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Rotas implementadas da API. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas e criação inicial de colheitas. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -384,6 +384,43 @@
             "body": {
               "mode": "raw",
               "raw": "{\"box_type\":\"normal\",\"amount_cents\":500,\"valid_from\":\"2026-01-01\",\"valid_until\":null}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Registrar colheita",
+      "description": "Cria um lançamento persistente para um funcionário ativo. Configure uma tarifa válida para cada tipo informado e não execute esta pasta pelo runner.",
+      "item": [
+        {
+          "name": "Registrar caixas do funcionário",
+          "request": {
+            "description": "Exige sessão ativa e cabeçalhos Origin e X-Agrofin-Request. O funcionário deve pertencer à conta e estar ativo; a tarifa é escolhida pela data e tipo. Um lançamento aceita um item de normal, moagem ou ambos. A resposta 201 inclui a tarifa unitária aplicada em centavos.",
+            "method": "POST",
+            "url": "{{base_url}}/harvest-entries",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"employee_id\":\"{{employee_id}}\",\"harvest_date\":\"2026-11-03\",\"items\":[{\"box_type\":\"normal\",\"quantity\":10},{\"box_type\":\"moagem\",\"quantity\":2}]}",
               "options": {
                 "raw": {
                   "language": "json"

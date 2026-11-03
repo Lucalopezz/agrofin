@@ -72,9 +72,9 @@ As portas, o prefixo da API e a origem pública podem ser alterados no `.env`. O
 
 Para executar os testes Go com a integração PostgreSQL, carregue `.env` no shell e rode `go test ./...` em `apps/api`; o banco separado `agrofin_test` já está configurado em `TEST_DATABASE_URL` e precisa estar migrado. Sem essa variável no ambiente, os testes unitários rodam e a integração é ignorada. O CI também verifica migrações e a stack Docker. Após alterar dependências do frontend, reinicie o serviço com `docker compose restart web`; mudanças nos Dockerfiles exigem `docker compose up -d --build --wait`.
 
-## Testar a API no Bruno
+## Testar a API com Postman, Bruno ou Insomnia
 
-Importe [a coleção da API](apps/api/bruno/agrofin.postman_collection.json) no Bruno como Postman Collection. As [instruções](apps/api/bruno/README.md) explicam as variáveis e a ordem das requisições. O cadastro é público e não exige token de instalação.
+O arquivo [agrofin.postman_collection.json](apps/api/bruno/agrofin.postman_collection.json) usa o formato Postman Collection v2.1. Pode ser aberto no Postman ou importado no Bruno; o Insomnia também declara suporte à importação de coleções Postman v2.1. As [instruções](apps/api/bruno/README.md) mostram como importar e usar as variáveis. O cadastro é público e não exige token de instalação. Em qualquer cliente, confira as variáveis e o armazenamento de cookies depois da importação.
 
 ## Documentação
 

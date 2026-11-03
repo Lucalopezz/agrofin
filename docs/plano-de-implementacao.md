@@ -86,9 +86,9 @@ O POST aceita um único objeto JSON com `name`. Campos desconhecidos, inclusive 
 
 O GET retorna `200` com uma lista de objetos `id`, `name` e `active`, incluindo ativos e inativos. A consulta filtra pelo gerente da sessão e ordena por nome e ID, preservando pessoas com nomes iguais. Sem registros, retorna `[]`, nunca `null`. O filtro opcional `active` aceita uma única ocorrência com `true` ou `false` em minúsculas; ausente retorna ambos os estados. Valores vazios, diferentes, repetidos ou query malformada retornam `400`. Não há paginação nesta etapa; a integração da seleção de ativos no formulário de novos lançamentos pertence ao futuro fluxo de colheita. Falhas retornam `500` sem detalhes internos, cancelamento retorna `408` e prazo esgotado retorna `504`.
 
-O PATCH `/employees/{id}` exige sessão e um UUID de 36 caracteres no caminho, com hífens nas posições padrão e dígitos hexadecimais; aceita letras maiúsculas ou minúsculas, sem impor versão de UUID. Essa validação pertence ao protocolo e ocorre antes de chamar o serviço. O corpo aceita somente `name` e compartilha o decodificador do cadastro, com limite de 4 KiB e rejeição de campos extras. O serviço remove espaços das extremidades e rejeita nome vazio. O SQL usa `WHERE id = $2 AND user_id = $3` e altera apenas `name`, preservando dono, estado e data de desativação. A única instrução `UPDATE ... RETURNING` é atômica e dispensa consulta prévia ou transação explícita. Retorna `200` com `id`, `name` e `active`; `400` para entrada inválida; `401` sem sessão; `404` tanto para ID inexistente quanto para funcionário de outra conta, sem revelar sua existência; `413` para corpo excessivo; `415` para tipo de mídia incorreto; `408`, `504` e `500` para cancelamento, prazo esgotado e falha interna. Repetir o nome ou usar um nome já existente é permitido. A coleção Bruno inclui a requisição e a variável `employee_id`.
+O PATCH `/employees/{id}` exige sessão e um UUID de 36 caracteres no caminho, com hífens nas posições padrão e dígitos hexadecimais; aceita letras maiúsculas ou minúsculas, sem impor versão de UUID. Essa validação pertence ao protocolo e ocorre antes de chamar o serviço. O corpo aceita somente `name` e compartilha o decodificador do cadastro, com limite de 4 KiB e rejeição de campos extras. O serviço remove espaços das extremidades e rejeita nome vazio. O SQL usa `WHERE id = $2 AND user_id = $3` e altera apenas `name`, preservando dono, estado e data de desativação. A única instrução `UPDATE ... RETURNING` é atômica e dispensa consulta prévia ou transação explícita. Retorna `200` com `id`, `name` e `active`; `400` para entrada inválida; `401` sem sessão; `404` tanto para ID inexistente quanto para funcionário de outra conta, sem revelar sua existência; `413` para corpo excessivo; `415` para tipo de mídia incorreto; `408`, `504` e `500` para cancelamento, prazo esgotado e falha interna. Repetir o nome ou usar um nome já existente é permitido. A coleção de requisições em formato Postman v2.1 inclui a operação e a variável `employee_id`; pode ser usada no Postman ou importada no Bruno.
 
-O DELETE `/employees/{id}` desativa o funcionário sem apagar o cadastro nem seus vínculos históricos. Exige sessão, UUID no caminho, `Origin` e `X-Agrofin-Request: 1`, sem corpo ou exigência de `Content-Type`. Qualquer corpo é rejeitado com `400`; a leitura limitada a um byte também cobre tamanho desconhecido sem carregar o conteúdo inteiro. O serviço monta `Employee{ID: employeeID, UserID: userID, Active: false}`. O repositório recebe essa entidade e executa um único `UPDATE` filtrado por ID e gerente, alterando somente `active` e `deactivated_at`. `COALESCE(deactivated_at, now())` registra a primeira data e a preserva em repetições, inclusive concorrentes. Não há filtro por estado no WHERE: um registro já inativo também retorna sucesso; zero linhas afetadas vira `ErrNotFound`. Não é necessária migração nem transação explícita. Retorna `204` sem corpo, inclusive na repetição; `400` para UUID ou corpo inválido; `401` sem sessão; `403` quando origem ou marcador de escrita forem inválidos; `404` tanto para registro inexistente quanto de outra conta; `408`, `504` e `500` para cancelamento, prazo esgotado e falha interna. O funcionário continua na listagem com `active=false`. A coleção Bruno inclui a requisição sem corpo, usando a variável `employee_id`.
+O DELETE `/employees/{id}` desativa o funcionário sem apagar o cadastro nem seus vínculos históricos. Exige sessão, UUID no caminho, `Origin` e `X-Agrofin-Request: 1`, sem corpo ou exigência de `Content-Type`. Qualquer corpo é rejeitado com `400`; a leitura limitada a um byte também cobre tamanho desconhecido sem carregar o conteúdo inteiro. O serviço monta `Employee{ID: employeeID, UserID: userID, Active: false}`. O repositório recebe essa entidade e executa um único `UPDATE` filtrado por ID e gerente, alterando somente `active` e `deactivated_at`. `COALESCE(deactivated_at, now())` registra a primeira data e a preserva em repetições, inclusive concorrentes. Não há filtro por estado no WHERE: um registro já inativo também retorna sucesso; zero linhas afetadas vira `ErrNotFound`. Não é necessária migração nem transação explícita. Retorna `204` sem corpo, inclusive na repetição; `400` para UUID ou corpo inválido; `401` sem sessão; `403` quando origem ou marcador de escrita forem inválidos; `404` tanto para registro inexistente quanto de outra conta; `408`, `504` e `500` para cancelamento, prazo esgotado e falha interna. O funcionário continua na listagem com `active=false`. A coleção Postman v2.1 inclui a requisição sem corpo, usando a variável `employee_id`; ela pode ser usada no Postman ou importada no Bruno.
 
 O PATCH `/employees/{id}/reactivate` restaura `active=true` e limpa `deactivated_at` no mesmo `UPDATE`, filtrado por ID e gerente. A restrição do banco exige essa combinação para um registro ativo. Não cria outro cadastro nem altera nome, dono, data de criação ou vínculos históricos. Exige sessão, UUID válido, origem, marcador de escrita e ausência de corpo, compartilhando o decodificador com a desativação. Retorna `204` vazio inclusive para registro já ativo; `400`, `401`, `403`, `404`, `408`, `504` e `500` seguem os mesmos significados da desativação. Não exige migração ou transação explícita. Desativar novamente registra a data de um novo ciclo; repetir a desativação nesse ciclo preserva essa nova data. A limpeza do marcador atual não altera os lançamentos históricos e não representa reativação de uma conta de gerente.
 
@@ -171,7 +171,7 @@ internal/
     service.go
     repository.go
     ...
-  colheitas/                 # Implementados: domínio, serviço e cifra da tarifa
+  colheitas/                 # Implementados: tarifas e criação inicial de colheitas
     rate.go
     rate_cipher.go
     service.go
@@ -181,7 +181,9 @@ internal/
     handler_response.go
     routes.go
     errors.go
-    ...                        # Testes; lançamentos de colheita pendentes
+    harvest.go                 # Agregado e itens de lançamento
+    harvest_service.go         # Tarifa vigente e gravação do agregado
+    ...
 ```
 
 `colheitas` é um pacote irmão de `funcionarios`, iniciado pelo núcleo local de tarifas, com serviço e repositório próprios já implementados. Colocar uma pasta em `funcionarios/colheitas` não criaria uma relação especial entre os tipos nem daria acesso aos identificadores privados do pacote acima. Em Go, os arquivos de um mesmo diretório formam um pacote; diretórios distintos são pacotes distintos. [Documentação de Go](https://go.dev/doc/code#Code_organization).
@@ -203,13 +205,13 @@ type Item struct {
 }
 ```
 
-O modelo completo também precisará da data e da tarifa aplicada, com validação e proteção dos valores financeiros. O serviço de colheitas coordenará o lançamento: funcionário ativo e pertencente ao gerente da sessão, data válida, quantidades inteiras positivas, tipos normal ou moagem e tarifa vigente fotografada em cada item. A verificação do estado do funcionário deve ser consistente com a gravação, inclusive diante de desativação concorrente. A colheita não cria uma nova diária nem um pagamento automaticamente.
+O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A listagem, correção com auditoria e fechamento semanal continuam pendentes. A colheita não cria diária nem pagamento automaticamente.
 
 Se o serviço de colheitas precisar de uma operação do cadastro, a dependência deve ser explícita. Uma interface pequena, declarada junto do consumidor em `colheitas`, pode ser conectada na composição da aplicação. Não criar a interface antes de conhecer a operação necessária nem fazer o cadastro depender de todo o histórico de colheitas.
 
-### Núcleo local de tarifas implementado
+### Tarifas e criação inicial de colheitas implementadas
 
-O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e as rotas HTTP de criação e consulta de tarifas. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências.
+O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e as rotas HTTP de tarifas e criação de colheitas. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências.
 
 `BoxType` aceita normal e moagem para pagamento da colheita. É um tipo próprio, mas uma conversão explícita ainda pode criar um valor desconhecido; por isso a validação rejeita o valor vazio e outros tipos, inclusive exportação e mercado, que pertencem à venda.
 
@@ -242,13 +244,13 @@ As interfaces privadas ficam junto do serviço que as consome. `RatePeriod` deli
 
 `NextRateID` obtém `gen_random_uuid()` do PostgreSQL antes da cifra e usa esse ID no `INSERT` final, preservando a geração técnica no banco sem inserir uma tarifa incompleta. O ID precisa existir antes da cifra porque é autenticado junto com a conta. A consulta de sobreposição no serviço é complementada pela exclusão existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório traduz a restrição para `ErrRateOverlap`. A integração já testa essa concorrência com o banco real.
 
-`RateCipher`, no próprio pacote `colheitas`, usa AES-256-GCM da biblioteca padrão, com chaves de 32 bytes e nonce aleatório de 96 bits gerado por `cipher.NewGCMWithRandomNonce`. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave, conforme as colunas existentes. O formato do campo, versão, gerente e ID da tarifa formam dados adicionais autenticados; trocar esses identificadores, a cifra ou o nonce faz a leitura falhar. A composição usa um array JSON para não concatenar identificadores de forma ambígua. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
+`RateCipher`, no próprio pacote `colheitas`, usa AES-256-GCM da biblioteca padrão, com chaves de 32 bytes e nonce aleatório de 96 bits gerado por `cipher.NewGCMWithRandomNonce`. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave, conforme as colunas existentes. Para tarifas, o formato do campo, versão, gerente e ID da tarifa formam dados adicionais autenticados. Para a fotografia no item, a autenticação também vincula lançamento, funcionário, data, tipo e quantidade. A composição usa um array JSON para não concatenar identificadores de forma ambígua. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
 
 O runtime lê `HARVEST_RATE_ACTIVE_KEY_VERSION` e `HARVEST_RATE_KEYS_HEX_JSON`, um objeto JSON que mapeia versões para chaves hexadecimais de 32 bytes. A inicialização valida a configuração antes de abrir o servidor e falha sem registrar os valores quando faltam chaves, a versão ativa não existe ou o material é inválido. O construtor prepara seu próprio mapa de cifras e aceita versões antigas para recuperação. Para uma rotação manual, configure material novo sob nova versão como ativa e mantenha as antigas necessárias. Repetir material sob duas versões é rejeitado: renomear uma chave não é rotacioná-la. A configuração por ambiente é uma composição inicial; o provedor operacional para produção continua por escolher. Nonces não são chaves e acompanham o envelope.
 
 Antes de habilitar escrita em produção, o provisionamento, rotação e recuperação das chaves e o controle de uso por material devem ser definidos entre todas as instâncias e reinícios. A biblioteca limita AES-GCM com nonce aleatório a no máximo `2^32` cifras por chave; a rotação precisa ocorrer antes desse limite, que não é reiniciado apenas por mudar o nome da versão. Esse controle operacional global não está implementado neste recorte. As chaves devem permanecer fora do banco e de seu backup. [Documentação de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce) e [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 
-Os testes existentes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. As rotas de criação e consulta foram conectadas à composição em `cmd/api` e incluídas na coleção Bruno. O controle operacional do limite global de uso por chave também continua pendente.
+Os testes existentes usam cifras reais para conferir o envelope entregue pelo serviço, recuperação com chave correspondente, leitura de versões anteriores e rejeição de adulteração, chave incorreta e troca de conta ou registro. Dependências controladas verificam que falhas e cancelamentos não avançam para escrita. As rotas de criação e consulta foram conectadas à composição em `cmd/api` e incluídas na coleção Postman v2.1, importável no Bruno. O controle operacional do limite global de uso por chave também continua pendente.
 
 ### Persistência PostgreSQL de tarifas gerais
 
@@ -268,7 +270,7 @@ Não foi necessária migração. A única instrução de inserção grava metada
 
 Os testes de integração existentes usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado foram verificados nos três métodos originais de escrita. `ListRates` foi acrescentado neste recorte e ainda não tem cobertura automatizada dedicada.
 
-O repositório foi testado com PostgreSQL real e agora é usado pelas rotas HTTP protegidas `GET` e `POST /harvest-rates`. A criação fica em uma pasta manual Bruno por gravar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
+O repositório foi testado com PostgreSQL real e agora é usado pelas rotas HTTP protegidas `GET` e `POST /harvest-rates`. A criação fica em uma pasta Manual da coleção Postman v2.1 por gravar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
 
 ### Rota de criação de tarifas gerais
 
@@ -291,7 +293,28 @@ Uma criação retorna `201` com ID, tipo, centavos e vigência. Formato inválid
 
 `GET /api/v1/harvest-rates` exige sessão e retorna todas as tarifas gerais da conta autenticada, incluindo histórico, sem filtros por query. O repositório busca somente linhas com `user_id` da sessão e `employee_id IS NULL`, ordenando por `valid_from` decrescente, `box_type` e ID. O serviço descriptografa os envelopes com o `user_id` autenticado e o ID de cada registro; se algum envelope falhar, descarta a resposta inteira para não apresentar lista parcial. A resposta `200` é um array dos mesmos DTOs usados na criação e retorna `[]` quando a conta não tem tarifas. As respostas usam `Cache-Control: no-store`.
 
-A lista descriptografada é entregue somente à sessão proprietária. Falhas de banco ou de autenticação do envelope retornam `500` com mensagem genérica; os detalhes não são enviados ao cliente nem registrados nos logs. A coleção Bruno inclui **07.3 - Listar tarifas**.
+A lista descriptografada é entregue somente à sessão proprietária. Falhas de banco ou de autenticação do envelope retornam `500` com mensagem genérica; os detalhes não são enviados ao cliente nem registrados nos logs. A coleção Postman v2.1, que pode ser usada no Postman ou importada no Bruno, inclui **07.3 - Listar tarifas**.
+
+### Criação inicial de lançamentos de colheita
+
+`POST /api/v1/harvest-entries` exige sessão, `Content-Type: application/json`, origem permitida e `X-Agrofin-Request: 1`. O corpo aceita somente `employee_id`, `harvest_date` e `items`; cada item aceita `box_type` e `quantity`. O funcionário deve estar ativo e pertencer à conta da sessão. Um lançamento aceita um ou dois itens, um por tipo (`normal` ou `moagem`), com quantidades inteiras positivas.
+
+Exemplo:
+
+```json
+{
+  "employee_id": "00000000-0000-4000-8000-000000000000",
+  "harvest_date": "2026-11-03",
+  "items": [
+    {"box_type": "normal", "quantity": 10},
+    {"box_type": "moagem", "quantity": 2}
+  ]
+}
+```
+
+O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O valor unitário de cada item é cifrado como uma fotografia vinculada ao dono, lançamento, funcionário, data, tipo e quantidade; mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
+
+Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Listagem, correção com auditoria e resumos por período continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
 
 ### Respostas para a tela
 
@@ -312,7 +335,7 @@ Por exemplo, um resumo de funcionário por período poderá retornar:
 
 Esse é um exemplo de DTO proposto, não uma resposta disponível hoje. Os totais devem ser calculados a partir dos lançamentos do período autorizado, sem criar contadores editáveis no cadastro. Ao incluir valores, distinguir devido de pago e aplicar a proteção financeira prevista no projeto.
 
-`/employees` continua responsável pelo cadastro. As rotas propostas de `/harvest-entries` atenderão os lançamentos; `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. A forma final dos filtros e dos DTOs ainda será detalhada. O início da semana permanece pendente de confirmação com o cliente.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` está implementado para a criação inicial; as rotas de consulta e correção permanecem propostas. `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. A forma final dos filtros e dos DTOs ainda será detalhada. O início da semana permanece pendente de confirmação com o cliente.
 
 ## Sequência sugerida
 
@@ -320,9 +343,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — cadastro e consulta de tarifas implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, lançamentos com itens e consultas por período.
+3. **Tarifas e colheitas — tarifas e criação inicial implementadas:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates` e `POST /harvest-entries` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, consulta e correção de lançamentos e consultas por período.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais funcionam com sessão e cifra. Lançamentos de colheita continuam como próxima entrega.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais e a criação inicial de lançamentos funcionam com sessão e proteção financeira. Consulta e correção de lançamentos são os próximos recortes.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -344,7 +367,7 @@ PATCH          ${API_PREFIX}/employees/{id}       # renomear
 DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histórico
 PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
-GET/POST       ${API_PREFIX}/harvest-entries
+POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
 POST           ${API_PREFIX}/employee-payments
@@ -352,7 +375,7 @@ POST           ${API_PREFIX}/employee-payments
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
 
-O filtro opcional `active` na listagem faz parte do contrato implementado: `true` para ativos, `false` para inativos e ausência para ambos. O decodificador usa `url.ParseQuery` para rejeitar query malformada e múltiplas ocorrências antes de chamar o serviço. Um `*bool` representa os três casos: `nil` é ausência; ponteiros para `true` e `false` são filtros explícitos. Serviço e repositório recebem esse critério separado do ID do gerente. No SQL, `user_id = $1 AND ($2::boolean IS NULL OR active = $2)` mantém o dono obrigatório em todos os casos e parametriza o filtro, sem montar SQL com texto do cliente. Não é necessária migração. A coleção Bruno mantém a consulta sem filtro, adiciona exemplos de ativos e inativos e inclui a listagem de tarifas em `07.3`.
+O filtro opcional `active` na listagem faz parte do contrato implementado: `true` para ativos, `false` para inativos e ausência para ambos. O decodificador usa `url.ParseQuery` para rejeitar query malformada e múltiplas ocorrências antes de chamar o serviço. Um `*bool` representa os três casos: `nil` é ausência; ponteiros para `true` e `false` são filtros explícitos. Serviço e repositório recebem esse critério separado do ID do gerente. No SQL, `user_id = $1 AND ($2::boolean IS NULL OR active = $2)` mantém o dono obrigatório em todos os casos e parametriza o filtro, sem montar SQL com texto do cliente. Não é necessária migração. A coleção Postman v2.1 mantém a consulta sem filtro, adiciona exemplos de ativos e inativos e inclui a listagem de tarifas em `07.3`; o arquivo pode ser aberto no Postman ou importado no Bruno.
 
 ## Verificações que importam
 

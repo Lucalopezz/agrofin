@@ -28,6 +28,19 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
 - Na semana 1, lançamentos de X e Z fazem ambos aparecer no resumo. Na semana 2, lançamentos de Z e F fazem apenas Z e F aparecer no resumo daquela semana. X continua no histórico e não é desativado automaticamente.
 
+### HU-02 — criação inicial de lançamento implementada
+
+`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação; listagem, edição e histórico de correções continuam pendentes.
+
+- A sessão define o dono do lançamento. O corpo contém somente `employee_id`, `harvest_date` e `items`; campos extras, UUID inválido, data fora de `AAAA-MM-DD` e quantidade fora do intervalo de inteiro positivo são rejeitados.
+- O funcionário precisa pertencer à conta e estar ativo. Registro ausente ou de outra conta retorna `404`; funcionário inativo retorna `409`.
+- O lançamento aceita um item normal, um item de moagem ou ambos. Tipos desconhecidos, quantidade zero ou negativa e tipos repetidos retornam `400`.
+- Para cada tipo, usa a tarifa geral vigente na data da colheita. Sem tarifa vigente para um dos tipos, retorna `409` e não grava parcialmente o lançamento.
+- Cabeçalho e itens são persistidos juntos. Se a gravação de qualquer item falhar, nenhum cabeçalho parcial permanece.
+- Cada tarifa aplicada é gravada cifrada como fotografia do item; mudar tarifas futuras não recalcula esse lançamento. A resposta `201` devolve os tipos, quantidades e tarifas unitárias aplicadas à sessão autenticada, com `Cache-Control: no-store`.
+- A verificação de estado do funcionário permanece bloqueada até a conclusão da gravação, evitando aceitar uma colheita que concorra com a desativação.
+- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Correção com auditoria, consultas e tratamento de repetição ficam para recortes posteriores.
+
 ### HU-01 e HU-02 — núcleo local de tarifas
 
 Estes critérios verificam o domínio em memória, já implementado. O serviço, a proteção local e o repositório PostgreSQL também estão testados; configuração de chaves no runtime e a rota HTTP de criação estão implementadas.
@@ -69,7 +82,7 @@ Estes critérios estão cobertos por integração com banco migrado, serviço e 
 - Uma tarifa válida retorna `201` com ID e os dados da tarifa para a sessão autenticada. `amount_cents` é persistido somente cifrado.
 - Tipo, centavos, vigência, JSON ou data inválidos retornam `400`; sobreposição do mesmo tipo e conta retorna `409`.
 - Se a configuração das chaves AES-256 estiver ausente ou inválida, a API encerra a inicialização sem disponibilizar a rota de escrita.
-- A pasta Manual correspondente na coleção Bruno permite conferir a criação após entrar. A listagem retorna todas as tarifas da própria conta, com valores descriptografados somente para a sessão autenticada.
+- A pasta Manual correspondente na coleção de formato Postman v2.1 permite conferir a criação após entrar. O arquivo pode ser usado no Postman ou importado no Bruno. A listagem retorna todas as tarifas da própria conta, com valores descriptografados somente para a sessão autenticada.
 
 ### HU-01 e HU-02 — listagem HTTP de tarifas
 
@@ -77,7 +90,7 @@ Estes critérios estão cobertos por integração com banco migrado, serviço e 
 - A consulta inclui o histórico e ordena por início de vigência mais recente, tipo e ID. Uma conta sem tarifas recebe `200` com `[]`.
 - O serviço descriptografa cada valor usando o gerente autenticado e o ID do registro. Se um envelope não puder ser autenticado, não devolve uma lista parcial nem registra valores financeiros; responde `500` com mensagem genérica.
 - A resposta contém ID, tipo, centavos e datas. `Cache-Control: no-store` evita armazenar valores financeiros no navegador ou em proxies.
-- **07.3 - Listar tarifas** na coleção Bruno permite conferir o fluxo com sessão ativa; a requisição Manual de criação permite criar uma tarifa para visualizar na listagem.
+- **07.3 - Listar tarifas** na coleção Postman v2.1 permite conferir o fluxo com sessão ativa; a requisição Manual de criação permite criar uma tarifa para visualizar na listagem. A coleção pode ser aberta no Postman ou importada no Bruno.
 
 ### HU-01 — reativação e filtro implementados
 
