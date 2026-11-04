@@ -245,15 +245,17 @@ func (r *Repository) CreateHarvest(ctx context.Context, harvest ProtectedHarvest
 
 // ListHarvests retorna envelopes ainda cifrados; o Service só os abre depois de
 // este SQL restringir a leitura ao dono autenticado e ao intervalo pedido.
-func (r *Repository) ListHarvests(ctx context.Context, userID string, period HarvestPeriod) ([]ProtectedHarvest, error) {
+func (r *Repository) ListHarvests(ctx context.Context, userID string, period HarvestPeriod) ([]ProtectedHarvestRecord, error) {
 	const query = `
-		SELECT h.id::text, h.employee_id::text, h.harvest_date,
+		SELECT h.id::text, h.employee_id::text, e.name, h.harvest_date,
 		       hi.box_type, hi.quantity,
 		       hi.applied_rate_ciphertext, hi.applied_rate_nonce,
 		       hi.applied_rate_key_version
 		FROM harvests h
 		JOIN harvest_items hi
 		  ON hi.user_id = h.user_id AND hi.harvest_id = h.id
+		JOIN employees e
+		  ON e.user_id = h.user_id AND e.id = h.employee_id
 		WHERE h.user_id = $1
 		  AND h.harvest_date >= $2::date
 		  AND h.harvest_date <= $3::date
@@ -265,14 +267,14 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 	}
 	defer rows.Close()
 
-	harvests := make([]ProtectedHarvest, 0)
+	harvests := make([]ProtectedHarvestRecord, 0)
 	indices := make(map[string]int)
 	for rows.Next() {
-		var harvestID, employeeID, boxType string
+		var harvestID, employeeID, employeeName, boxType string
 		var harvestDate time.Time
 		var item ProtectedHarvestItem
 		err := rows.Scan(
-			&harvestID, &employeeID, &harvestDate,
+			&harvestID, &employeeID, &employeeName, &harvestDate,
 			&boxType, &item.Quantity,
 			&item.AppliedAmount.Ciphertext, &item.AppliedAmount.Nonce,
 			&item.AppliedAmount.KeyVersion,
@@ -285,14 +287,17 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 		if !exists {
 			index = len(harvests)
 			indices[harvestID] = index
-			harvests = append(harvests, ProtectedHarvest{
-				ID: harvestID, UserID: userID, EmployeeID: employeeID,
-				HarvestDate: rateDate(harvestDate),
-				Items:       make([]ProtectedHarvestItem, 0, 2),
+			harvests = append(harvests, ProtectedHarvestRecord{
+				EmployeeName: employeeName,
+				Harvest: ProtectedHarvest{
+					ID: harvestID, UserID: userID, EmployeeID: employeeID,
+					HarvestDate: rateDate(harvestDate),
+					Items:       make([]ProtectedHarvestItem, 0, 2),
+				},
 			})
 		}
 		item.BoxType = BoxType(boxType)
-		harvests[index].Items = append(harvests[index].Items, item)
+		harvests[index].Harvest.Items = append(harvests[index].Harvest.Items, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("listar lançamentos protegidos: %w", err)

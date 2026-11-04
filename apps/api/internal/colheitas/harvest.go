@@ -51,6 +51,23 @@ type ProtectedHarvest struct {
 	Items       []ProtectedHarvestItem
 }
 
+// ProtectedHarvestRecord inclui o nome atual do funcionário para projeções de leitura.
+type ProtectedHarvestRecord struct {
+	Harvest      ProtectedHarvest
+	EmployeeName string
+}
+
+// HarvestSummary agrupa caixas e valor gerado pela colheita, antes de pagamentos.
+type HarvestSummary struct {
+	EmployeeID         string
+	EmployeeName       string
+	NormalBoxes        int64
+	MillingBoxes       int64
+	NormalAmountCents  int64
+	MillingAmountCents int64
+	HarvestAmountCents int64
+}
+
 type ProtectedHarvestItem struct {
 	BoxType       BoxType
 	Quantity      int32

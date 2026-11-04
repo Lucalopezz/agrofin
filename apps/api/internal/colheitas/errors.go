@@ -15,6 +15,7 @@ var (
 	ErrInvalidHarvestEmployee     = errors.New("colheitas: funcionário do lançamento inválido")
 	ErrInvalidHarvestDate         = errors.New("colheitas: data do lançamento inválida")
 	ErrInvalidHarvestPeriod       = errors.New("colheitas: período de consulta inválido")
+	ErrHarvestSummaryOverflow     = errors.New("colheitas: total do resumo excede int64")
 	ErrInvalidHarvestItems        = errors.New("colheitas: lançamento precisa conter caixas")
 	ErrInvalidHarvestQuantity     = errors.New("colheitas: quantidade de caixas deve ser positiva")
 	ErrDuplicateHarvestItem       = errors.New("colheitas: tipo de caixa repetido no lançamento")

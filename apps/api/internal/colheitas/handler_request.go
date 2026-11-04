@@ -138,7 +138,7 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 	}, true
 }
 
-func decodeListHarvestEntriesRequest(w http.ResponseWriter, r *http.Request) (HarvestPeriod, bool) {
+func decodeHarvestPeriodQuery(w http.ResponseWriter, r *http.Request) (HarvestPeriod, bool) {
 	// Exigir limites explícitos impede que uma consulta de tela leia todo o histórico
 	// por acidente; os dois dias pertencem ao intervalo retornado.
 	query, err := url.ParseQuery(r.URL.RawQuery)

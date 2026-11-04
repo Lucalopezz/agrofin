@@ -15,6 +15,7 @@ type rateService interface {
 type harvestService interface {
 	Create(ctx context.Context, userID string, input CreateHarvestInput) (Harvest, error)
 	List(ctx context.Context, userID string, period HarvestPeriod) ([]Harvest, error)
+	Summarize(ctx context.Context, userID string, period HarvestPeriod) ([]HarvestSummary, error)
 }
 
 // Handler adapta as operações de colheita e tarifa ao protocolo HTTP, sem persistência.
@@ -84,11 +85,27 @@ func (h *Handler) listHarvestEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	period, ok := decodeListHarvestEntriesRequest(w, r)
+	period, ok := decodeHarvestPeriodQuery(w, r)
 	if !ok {
 		return
 	}
 
 	harvests, err := h.harvestService.List(r.Context(), principal.UserID, period)
 	writeListHarvestEntriesResponse(w, harvests, err)
+}
+
+func (h *Handler) summarizeHarvestEntries(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	period, ok := decodeHarvestPeriodQuery(w, r)
+	if !ok {
+		return
+	}
+
+	summaries, err := h.harvestService.Summarize(r.Context(), principal.UserID, period)
+	writeHarvestSummaryResponse(w, summaries, err)
 }

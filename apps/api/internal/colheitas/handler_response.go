@@ -33,6 +33,20 @@ type harvestItemResponse struct {
 	AppliedRateCents int64   `json:"applied_rate_cents"`
 }
 
+type harvestSummaryResponse struct {
+	Employee           harvestSummaryEmployeeResponse `json:"employee"`
+	NormalBoxes        int64                          `json:"normal_boxes"`
+	MillingBoxes       int64                          `json:"milling_boxes"`
+	NormalAmountCents  int64                          `json:"normal_amount_cents"`
+	MillingAmountCents int64                          `json:"milling_amount_cents"`
+	HarvestAmountCents int64                          `json:"harvest_amount_cents"`
+}
+
+type harvestSummaryEmployeeResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 func writeCreateRateResponse(w http.ResponseWriter, rate Rate, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidBoxType):
@@ -119,6 +133,35 @@ func writeListHarvestEntriesResponse(w http.ResponseWriter, harvests []Harvest, 
 		response := make([]harvestResponse, 0, len(harvests))
 		for _, harvest := range harvests {
 			response = append(response, newHarvestResponse(harvest))
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+func writeHarvestSummaryResponse(w http.ResponseWriter, summaries []HarvestSummary, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidHarvestPeriod):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve ser igual ou posterior a start_date"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para resumir colheitas esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// O resumo depende da autenticação das tarifas aplicadas; uma falha invalida a lista inteira.
+		log.Print("erro ao resumir lançamentos de colheita protegidos")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível resumir as colheitas"})
+	default:
+		response := make([]harvestSummaryResponse, 0, len(summaries))
+		for _, summary := range summaries {
+			response = append(response, harvestSummaryResponse{
+				Employee: harvestSummaryEmployeeResponse{
+					ID: summary.EmployeeID, Name: summary.EmployeeName,
+				},
+				NormalBoxes: summary.NormalBoxes, MillingBoxes: summary.MillingBoxes,
+				NormalAmountCents:  summary.NormalAmountCents,
+				MillingAmountCents: summary.MillingAmountCents,
+				HarvestAmountCents: summary.HarvestAmountCents,
+			})
 		}
 		writeJSON(w, http.StatusOK, response)
 	}

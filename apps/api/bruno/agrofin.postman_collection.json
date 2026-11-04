@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação de colheitas e consulta de lançamentos por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação, consulta e resumo de colheitas por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -213,6 +213,14 @@
         "description": "Exige sessão. Informe harvest_start_date e harvest_end_date como AAAA-MM-DD; os limites são inclusivos. Retorna somente lançamentos do gerente autenticado, com tarifas aplicadas descriptografadas para essa sessão. Sem resultados, retorna [].",
         "method": "GET",
         "url": "{{base_url}}/harvest-entries?start_date={{harvest_start_date}}&end_date={{harvest_end_date}}"
+      }
+    },
+    {
+      "name": "07.5 - Resumir colheitas por funcionário",
+      "request": {
+        "description": "Exige sessão. Usa o mesmo intervalo inclusivo de 07.4 e agrupa caixas e valores gerados por funcionário. Os valores somam as tarifas aplicadas nos lançamentos; pagamentos, diárias e ajustes não são abatidos.",
+        "method": "GET",
+        "url": "{{base_url}}/harvest-entries/summary?start_date={{harvest_start_date}}&end_date={{harvest_end_date}}"
       }
     },
     {
