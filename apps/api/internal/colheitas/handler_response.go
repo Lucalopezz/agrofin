@@ -102,6 +102,28 @@ func writeCreateHarvestResponse(w http.ResponseWriter, harvest Harvest, err erro
 	}
 }
 
+func writeListHarvestEntriesResponse(w http.ResponseWriter, harvests []Harvest, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidHarvestPeriod):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve ser igual ou posterior a start_date"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para consultar colheitas esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		// Um envelope adulterado ou falha de leitura invalida a consulta inteira;
+		// não devolvemos uma lista parcial nem detalhes financeiros nos logs.
+		log.Print("erro ao listar lançamentos de colheita protegidos")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível consultar as colheitas"})
+	default:
+		response := make([]harvestResponse, 0, len(harvests))
+		for _, harvest := range harvests {
+			response = append(response, newHarvestResponse(harvest))
+		}
+		writeJSON(w, http.StatusOK, response)
+	}
+}
+
 func newRateResponse(rate Rate) rateResponse {
 	response := rateResponse{
 		ID: rate.ID, BoxType: rate.BoxType, AmountCents: rate.AmountCents,

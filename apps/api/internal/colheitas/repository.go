@@ -242,3 +242,60 @@ func (r *Repository) CreateHarvest(ctx context.Context, harvest ProtectedHarvest
 	}
 	return nil
 }
+
+// ListHarvests retorna envelopes ainda cifrados; o Service só os abre depois de
+// este SQL restringir a leitura ao dono autenticado e ao intervalo pedido.
+func (r *Repository) ListHarvests(ctx context.Context, userID string, period HarvestPeriod) ([]ProtectedHarvest, error) {
+	const query = `
+		SELECT h.id::text, h.employee_id::text, h.harvest_date,
+		       hi.box_type, hi.quantity,
+		       hi.applied_rate_ciphertext, hi.applied_rate_nonce,
+		       hi.applied_rate_key_version
+		FROM harvests h
+		JOIN harvest_items hi
+		  ON hi.user_id = h.user_id AND hi.harvest_id = h.id
+		WHERE h.user_id = $1
+		  AND h.harvest_date >= $2::date
+		  AND h.harvest_date <= $3::date
+		ORDER BY h.harvest_date DESC, h.created_at DESC, h.id DESC, hi.box_type ASC
+	`
+	rows, err := r.pool.Query(ctx, query, userID, period.StartDate, period.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("listar lançamentos protegidos: %w", err)
+	}
+	defer rows.Close()
+
+	harvests := make([]ProtectedHarvest, 0)
+	indices := make(map[string]int)
+	for rows.Next() {
+		var harvestID, employeeID, boxType string
+		var harvestDate time.Time
+		var item ProtectedHarvestItem
+		err := rows.Scan(
+			&harvestID, &employeeID, &harvestDate,
+			&boxType, &item.Quantity,
+			&item.AppliedAmount.Ciphertext, &item.AppliedAmount.Nonce,
+			&item.AppliedAmount.KeyVersion,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("ler item de lançamento protegido: %w", err)
+		}
+
+		index, exists := indices[harvestID]
+		if !exists {
+			index = len(harvests)
+			indices[harvestID] = index
+			harvests = append(harvests, ProtectedHarvest{
+				ID: harvestID, UserID: userID, EmployeeID: employeeID,
+				HarvestDate: rateDate(harvestDate),
+				Items:       make([]ProtectedHarvestItem, 0, 2),
+			})
+		}
+		item.BoxType = BoxType(boxType)
+		harvests[index].Items = append(harvests[index].Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listar lançamentos protegidos: %w", err)
+	}
+	return harvests, nil
+}

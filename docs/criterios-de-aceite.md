@@ -30,7 +30,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 ### HU-02 — criação inicial de lançamento implementada
 
-`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação; listagem, edição e histórico de correções continuam pendentes.
+`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação. A consulta inicial de lançamentos está disponível em `GET /api/v1/harvest-entries`; edição e histórico de correções continuam pendentes.
 
 - A sessão define o dono do lançamento. O corpo contém somente `employee_id`, `harvest_date` e `items`; campos extras, UUID inválido, data fora de `AAAA-MM-DD` e quantidade fora do intervalo de inteiro positivo são rejeitados.
 - O funcionário precisa pertencer à conta e estar ativo. Registro ausente ou de outra conta retorna `404`; funcionário inativo retorna `409`.
@@ -39,7 +39,17 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Cabeçalho e itens são persistidos juntos. Se a gravação de qualquer item falhar, nenhum cabeçalho parcial permanece.
 - Cada tarifa aplicada é gravada cifrada como fotografia do item; mudar tarifas futuras não recalcula esse lançamento. A resposta `201` devolve os tipos, quantidades e tarifas unitárias aplicadas à sessão autenticada, com `Cache-Control: no-store`.
 - A verificação de estado do funcionário permanece bloqueada até a conclusão da gravação, evitando aceitar uma colheita que concorra com a desativação.
-- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Correção com auditoria, consultas e tratamento de repetição ficam para recortes posteriores.
+- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Correção com auditoria e tratamento de repetição continuam pendentes.
+
+### HU-02 — consulta inicial de lançamentos implementada
+
+`GET /api/v1/harvest-entries` exige sessão e recebe `start_date` e `end_date` em `AAAA-MM-DD`. Os dois limites são inclusivos; informar ambos evita que uma tela consulte todo o histórico sem delimitação. Esta é a forma inicial do filtro da API, sem definir o começo da semana de pagamento.
+
+- A sessão define o gerente dono da consulta. A API não aceita `user_id` ou `employee_id` como substitutos de autorização; os resultados incluem apenas lançamentos pertencentes ao gerente autenticado.
+- Os valores persistidos da tarifa aplicada são lidos cifrados. Depois do filtro por dono e período, o serviço autentica e descriptografa cada fotografia para a sessão dona, retornando `applied_rate_cents` por item.
+- O resultado mantém cada lançamento e seus itens, ordenados por data e criação mais recentes; não calcula totais semanais nem junta o cadastro completo de funcionários ao agregado.
+- Uma faixa vazia retorna `[]`. Parâmetros ausentes, repetidos, extras ou malformados e fim anterior ao início retornam `400`; sem sessão retorna `401`.
+- Se a consulta ao banco ou a autenticação de qualquer envelope falhar, a API retorna erro sem entregar uma lista parcial. Respostas contêm dados financeiros e usam `Cache-Control: no-store`.
 
 ### HU-01 e HU-02 — núcleo local de tarifas
 

@@ -12,18 +12,19 @@ type rateService interface {
 	ListRates(ctx context.Context, userID string) ([]Rate, error)
 }
 
-type harvestCreator interface {
+type harvestService interface {
 	Create(ctx context.Context, userID string, input CreateHarvestInput) (Harvest, error)
+	List(ctx context.Context, userID string, period HarvestPeriod) ([]Harvest, error)
 }
 
 // Handler adapta as operações de colheita e tarifa ao protocolo HTTP, sem persistência.
 type Handler struct {
 	service        rateService
-	harvestCreator harvestCreator
+	harvestService harvestService
 }
 
-func NewHandler(service rateService, harvestCreator harvestCreator) *Handler {
-	return &Handler{service: service, harvestCreator: harvestCreator}
+func NewHandler(service rateService, harvestService harvestService) *Handler {
+	return &Handler{service: service, harvestService: harvestService}
 }
 
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +71,24 @@ func (h *Handler) createHarvest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	harvest, err := h.harvestCreator.Create(r.Context(), principal.UserID, input)
+	harvest, err := h.harvestService.Create(r.Context(), principal.UserID, input)
 	writeCreateHarvestResponse(w, harvest, err)
+}
+
+func (h *Handler) listHarvestEntries(w http.ResponseWriter, r *http.Request) {
+	// A sessão define a conta consultada; employee_id e user_id não são filtros
+	// da listagem para evitar cruzar escopos ou transformar metadados em autorização.
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	period, ok := decodeListHarvestEntriesRequest(w, r)
+	if !ok {
+		return
+	}
+
+	harvests, err := h.harvestService.List(r.Context(), principal.UserID, period)
+	writeListHarvestEntriesResponse(w, harvests, err)
 }

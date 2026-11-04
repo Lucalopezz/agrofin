@@ -19,6 +19,12 @@ type HarvestItemInput struct {
 	Quantity int32
 }
 
+// HarvestPeriod delimita uma consulta por datas de calendário, com início e fim inclusivos.
+type HarvestPeriod struct {
+	StartDate time.Time
+	EndDate   time.Time
+}
+
 // Harvest é o agregado retornado pelo serviço. Cada tipo tem sua própria
 // fotografia da tarifa vigente no dia do lançamento.
 type Harvest struct {
@@ -49,6 +55,16 @@ type ProtectedHarvestItem struct {
 	BoxType       BoxType
 	Quantity      int32
 	AppliedAmount ProtectedRateAmount
+}
+
+func normalizeHarvestPeriod(period HarvestPeriod) (HarvestPeriod, error) {
+	period.StartDate = rateDate(period.StartDate)
+	period.EndDate = rateDate(period.EndDate)
+	// A data de início e fim devem ser válidas e o fim não pode ser anterior ao início.
+	if period.StartDate.IsZero() || period.EndDate.IsZero() || period.EndDate.Before(period.StartDate) {
+		return HarvestPeriod{}, ErrInvalidHarvestPeriod
+	}
+	return period, nil
 }
 
 func normalizeHarvest(harvest Harvest) (Harvest, error) {

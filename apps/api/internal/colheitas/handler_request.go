@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -135,6 +136,34 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 	return CreateHarvestInput{
 		EmployeeID: employeeID, HarvestDate: harvestDate, Items: items,
 	}, true
+}
+
+func decodeListHarvestEntriesRequest(w http.ResponseWriter, r *http.Request) (HarvestPeriod, bool) {
+	// Exigir limites explícitos impede que uma consulta de tela leia todo o histórico
+	// por acidente; os dois dias pertencem ao intervalo retornado.
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Parâmetros de consulta inválidos"})
+		return HarvestPeriod{}, false
+	}
+	startValues, hasStart := query["start_date"]
+	endValues, hasEnd := query["end_date"]
+	if len(query) != 2 || !hasStart || !hasEnd || len(startValues) != 1 || len(endValues) != 1 {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Informe start_date e end_date uma única vez"})
+		return HarvestPeriod{}, false
+	}
+
+	startDate, err := parseRateDate(startValues[0])
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "start_date deve usar o formato AAAA-MM-DD"})
+		return HarvestPeriod{}, false
+	}
+	endDate, err := parseRateDate(endValues[0])
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
+		return HarvestPeriod{}, false
+	}
+	return HarvestPeriod{StartDate: startDate, EndDate: endDate}, true
 }
 
 func parseRateDate(value string) (time.Time, error) {

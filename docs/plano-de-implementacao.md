@@ -171,7 +171,7 @@ internal/
     service.go
     repository.go
     ...
-  colheitas/                 # Implementados: tarifas e criação inicial de colheitas
+  colheitas/                 # Implementados: tarifas, criação e consulta de colheitas
     rate.go
     rate_cipher.go
     service.go
@@ -205,11 +205,11 @@ type Item struct {
 }
 ```
 
-O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A listagem, correção com auditoria e fechamento semanal continuam pendentes. A colheita não cria diária nem pagamento automaticamente.
+O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A consulta por período também está implementada; correção com auditoria e fechamento semanal continuam pendentes. A colheita não cria diária nem pagamento automaticamente.
 
 Se o serviço de colheitas precisar de uma operação do cadastro, a dependência deve ser explícita. Uma interface pequena, declarada junto do consumidor em `colheitas`, pode ser conectada na composição da aplicação. Não criar a interface antes de conhecer a operação necessária nem fazer o cadastro depender de todo o histórico de colheitas.
 
-### Tarifas e criação inicial de colheitas implementadas
+### Tarifas, criação e consulta inicial de colheitas implementadas
 
 O pacote `internal/colheitas` contém o domínio, serviço, cifra, repositório e as rotas HTTP de tarifas e criação de colheitas. A composição em `cmd/api` carrega as chaves do ambiente e conecta essas dependências.
 
@@ -314,7 +314,17 @@ Exemplo:
 
 O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O valor unitário de cada item é cifrado como uma fotografia vinculada ao dono, lançamento, funcionário, data, tipo e quantidade; mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
 
-Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Listagem, correção com auditoria e resumos por período continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
+Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Correção com auditoria e resumos por período continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. A requisição **07.4 - Listar lançamentos de colheita** consulta o período inclusivo. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
+
+### Consulta inicial de lançamentos
+
+`GET /api/v1/harvest-entries` exige sessão e recebe `start_date` e `end_date` em `AAAA-MM-DD`. Os dois limites são inclusivos. Ambos são obrigatórios para delimitar a leitura do histórico; esse intervalo não define a semana de pagamento.
+
+- O handler rejeita query malformada, parâmetro ausente, repetido ou extra, e data fora do formato com `400`. O serviço também rejeita período em que `end_date` antecede `start_date`.
+- O repositório filtra `user_id` pela sessão e o período antes de ler as linhas, agrupa cada cabeçalho com seus itens e mantém os envelopes financeiros cifrados.
+- O serviço descriptografa cada tarifa aplicada com o contexto autenticado do item — gerente, lançamento, funcionário, data, tipo e quantidade. Se algum envelope falhar, nenhuma lista parcial é devolvida.
+- A resposta `200` contém uma lista de agregados com `id`, `employee_id`, `harvest_date` e `items` (`box_type`, `quantity`, `applied_rate_cents`). A lista vazia é `[]`; não há cálculo de totais semanais nesta rota.
+- A coleção compartilhada Postman v2.1 inclui **07.4 - Listar lançamentos de colheita**, com variáveis para as datas; pode ser usada no Postman ou importada no Bruno.
 
 ### Respostas para a tela
 
@@ -335,7 +345,7 @@ Por exemplo, um resumo de funcionário por período poderá retornar:
 
 Esse é um exemplo de DTO proposto, não uma resposta disponível hoje. Os totais devem ser calculados a partir dos lançamentos do período autorizado, sem criar contadores editáveis no cadastro. Ao incluir valores, distinguir devido de pago e aplicar a proteção financeira prevista no projeto.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` está implementado para a criação inicial; as rotas de consulta e correção permanecem propostas. `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. A forma final dos filtros e dos DTOs ainda será detalhada. O início da semana permanece pendente de confirmação com o cliente.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos e `GET /harvest-entries` consulta-os por `start_date` e `end_date`; ambos estão implementados. A resposta da consulta representa cada agregado com itens e tarifas aplicadas, sem carregar o histórico para dentro do cadastro do funcionário. `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. Correção auditável e o início da semana de pagamento permanecem pendentes de confirmação com o cliente.
 
 ## Sequência sugerida
 
@@ -343,9 +353,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — tarifas e criação inicial implementadas:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates` e `POST /harvest-entries` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, consulta e correção de lançamentos e consultas por período.
+3. **Tarifas e colheitas — tarifas, criação e consulta inicial implementadas:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates`, `POST /harvest-entries` e `GET /harvest-entries` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, correção auditável e resumos por período.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais e a criação inicial de lançamentos funcionam com sessão e proteção financeira. Consulta e correção de lançamentos são os próximos recortes.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais, criação de lançamentos e consulta inicial por período funcionam com sessão e proteção financeira. Correção auditável e resumo semanal são os próximos recortes do domínio de colheitas.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -367,6 +377,7 @@ PATCH          ${API_PREFIX}/employees/{id}       # renomear
 DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histórico
 PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
+GET            ${API_PREFIX}/harvest-entries       # consulta inicial por período implementada
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary

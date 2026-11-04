@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas e criação inicial de colheitas. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação de colheitas e consulta de lançamentos por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -28,6 +28,14 @@
     {
       "key": "employee_id",
       "value": ""
+    },
+    {
+      "key": "harvest_start_date",
+      "value": "2026-11-01"
+    },
+    {
+      "key": "harvest_end_date",
+      "value": "2026-11-30"
     }
   ],
   "item": [
@@ -197,6 +205,14 @@
         "description": "Exige sessão e retorna o histórico de tarifas gerais da conta autenticada, com valores descriptografados para essa sessão. A ordem é por início de vigência mais recente, depois tipo e ID. Sem tarifas, retorna [].",
         "method": "GET",
         "url": "{{base_url}}/harvest-rates"
+      }
+    },
+    {
+      "name": "07.4 - Listar lançamentos de colheita",
+      "request": {
+        "description": "Exige sessão. Informe harvest_start_date e harvest_end_date como AAAA-MM-DD; os limites são inclusivos. Retorna somente lançamentos do gerente autenticado, com tarifas aplicadas descriptografadas para essa sessão. Sem resultados, retorna [].",
+        "method": "GET",
+        "url": "{{base_url}}/harvest-entries?start_date={{harvest_start_date}}&end_date={{harvest_end_date}}"
       }
     },
     {
