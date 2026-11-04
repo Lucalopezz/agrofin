@@ -2,7 +2,7 @@
 
 Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas têm criptografia autenticada, persistência PostgreSQL e rotas protegidas de criação e consulta; a consulta descriptografa valores somente depois de filtrar pelo gerente autenticado. As chaves são fornecidas por variáveis de ambiente; gerenciamento operacional global das chaves e gravação dos demais fluxos continuam pendentes.
 
-O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. Essa consulta não altera o agregado nem calcula o fechamento semanal.
+O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. `GET /harvest-entries/summary` projeta essas linhas por funcionário e soma as quantidades e valores gerados pelas caixas, sem subtrair pagamentos nem calcular fechamento semanal. Essas consultas não alteram os agregados persistidos.
 
 ## Princípios do modelo
 

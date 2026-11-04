@@ -148,7 +148,7 @@ Antes de produção, validar: sessão expirada ou revogada falha; logout invalid
 
 ## Funcionários, colheitas e agregados
 
-As caixas colhidas ficam vinculadas ao funcionário, mas cada lançamento de colheita forma um agregado próprio. Essa é uma escolha do domínio que pode ser aplicada tanto em Java quanto em Go. O retorno atual de `/employees` contém somente o cadastro porque os lançamentos ainda não estão implementados na API; suas tabelas já existem nas migrações.
+As caixas colhidas ficam vinculadas ao funcionário, mas cada lançamento de colheita forma um agregado próprio. Essa é uma escolha do domínio que pode ser aplicada tanto em Java quanto em Go. O retorno de `/employees` contém somente o cadastro; criação e consulta de lançamentos têm rotas próprias. Para o significado dos termos usados nos identificadores, consulte a [linguagem de domínio](linguagem-de-dominio.md).
 
 ### Relacionamento e agregado
 
@@ -314,7 +314,7 @@ Exemplo:
 
 O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O valor unitário de cada item é cifrado como uma fotografia vinculada ao dono, lançamento, funcionário, data, tipo e quantidade; mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
 
-Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Correção com auditoria e resumos por período continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. A requisição **07.4 - Listar lançamentos de colheita** consulta o período inclusivo. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
+Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Correção com auditoria e resumo semanal de pagamento continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
 
 ### Consulta inicial de lançamentos
 
@@ -326,26 +326,41 @@ Esta criação ainda não oferece chave de idempotência: repetir um POST aceito
 - A resposta `200` contém uma lista de agregados com `id`, `employee_id`, `harvest_date` e `items` (`box_type`, `quantity`, `applied_rate_cents`). A lista vazia é `[]`; não há cálculo de totais semanais nesta rota.
 - A coleção compartilhada Postman v2.1 inclui **07.4 - Listar lançamentos de colheita**, com variáveis para as datas; pode ser usada no Postman ou importada no Bruno.
 
+### Resumo inicial de produção por funcionário
+
+`GET /api/v1/harvest-entries/summary` exige sessão e recebe o mesmo `start_date` e `end_date` inclusivo da listagem de lançamentos. A faixa é arbitrária e não define início de semana.
+
+- O serviço consulta os lançamentos autorizados e descriptografa as tarifas aplicadas antes de calcular os totais.
+- A resposta agrupa por funcionário e soma caixas normais, caixas de moagem e o valor de cada tipo. Quando há tarifas diferentes no período, cada item usa sua própria fotografia antes da soma.
+- `harvest_amount_cents` é o valor gerado pelas caixas; pagamentos, diárias e ajustes não são incluídos. Portanto, este endpoint não informa saldo a pagar nem confirma quitação.
+- Funcionários com lançamento aparecem uma vez, ordenados por nome e ID. Sem lançamentos no período, retorna `[]`.
+- A coleção compartilhada contém **07.5 - Resumir colheitas por funcionário**, que reutiliza as variáveis de data de **07.4**.
+
 ### Respostas para a tela
 
 A entidade de domínio e o DTO de resposta HTTP têm responsabilidades diferentes. Uma consulta pode reunir dados de vários agregados sem transformá-los em um único agregado de escrita.
 
-Por exemplo, um resumo de funcionário por período poderá retornar:
+Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 
 ```json
-{
-  "employee": {
-    "id": "...",
-    "name": "João"
-  },
-  "normal_boxes": 30,
-  "milling_boxes": 5
-}
+[
+  {
+    "employee": {
+      "id": "...",
+      "name": "João"
+    },
+    "normal_boxes": 30,
+    "milling_boxes": 5,
+    "normal_amount_cents": 15000,
+    "milling_amount_cents": 2500,
+    "harvest_amount_cents": 17500
+  }
+]
 ```
 
-Esse é um exemplo de DTO proposto, não uma resposta disponível hoje. Os totais devem ser calculados a partir dos lançamentos do período autorizado, sem criar contadores editáveis no cadastro. Ao incluir valores, distinguir devido de pago e aplicar a proteção financeira prevista no projeto.
+O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. Os totais são calculados a partir dos lançamentos autorizados, sem criar contadores editáveis no cadastro. O fechamento semanal completo ainda precisa distinguir valor gerado, devido e pago e incluir diárias e ajustes.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos e `GET /harvest-entries` consulta-os por `start_date` e `end_date`; ambos estão implementados. A resposta da consulta representa cada agregado com itens e tarifas aplicadas, sem carregar o histórico para dentro do cadastro do funcionário. `/payroll-weeks/{week}/summary` poderá reunir identificação, caixas e valores para o fechamento semanal. Correção auditável e o início da semana de pagamento permanecem pendentes de confirmação com o cliente.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data e `GET /harvest-entries/summary` agrupa produção e valores gerados por funcionário; essas operações estão implementadas. A resposta das consultas representa cada agregado ou projeção sem carregar o histórico para dentro do cadastro do funcionário. `/payroll-weeks/{week}/summary` poderá reunir colheitas, diárias, pagamentos e ajustes no fechamento semanal. Correção auditável e o início da semana de pagamento permanecem pendentes.
 
 ## Sequência sugerida
 
@@ -353,9 +368,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — tarifas, criação e consulta inicial implementadas:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates`, `POST /harvest-entries` e `GET /harvest-entries` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, correção auditável e resumos por período.
+3. **Tarifas e colheitas — tarifas, criação, consulta e resumo inicial implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates`, `POST /harvest-entries`, `GET /harvest-entries` e `GET /harvest-entries/summary` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, correção auditável e resumo semanal de pagamento.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas gerais, criação de lançamentos e consulta inicial por período funcionam com sessão e proteção financeira. Correção auditável e resumo semanal são os próximos recortes do domínio de colheitas.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos e resumo inicial de produção por período funcionam com sessão e proteção financeira. Correção auditável e saldo semanal após pagamentos continuam pendentes.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -378,6 +393,7 @@ DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histó
 PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
 GET            ${API_PREFIX}/harvest-entries       # consulta inicial por período implementada
+GET            ${API_PREFIX}/harvest-entries/summary # resumo inicial por funcionário implementado
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary

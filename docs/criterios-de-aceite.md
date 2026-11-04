@@ -41,6 +41,13 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - A verificação de estado do funcionário permanece bloqueada até a conclusão da gravação, evitando aceitar uma colheita que concorra com a desativação.
 - Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Correção com auditoria e tratamento de repetição continuam pendentes.
 
+### Correção de colheita — regras definidas, implementação pendente
+
+- Ao corrigir data ou tipo de caixa, usar a tarifa vigente para os dados corrigidos. O lançamento corrigido mantém a tarifa aplicada como fotografia histórica.
+- Pagamento parcial não bloqueia a correção enquanto ainda houver saldo no período.
+- Depois que o período estiver quitado, bloquear a edição. Se a correção for necessária, o cliente registra manualmente a diferença no próximo período; a API não cria ajuste automático.
+- A identificação de quitação depende do fluxo de pagamentos, ainda não implementado. Dias sem colheita continuam sem lançamento e sem penalidade.
+
 ### HU-02 — consulta inicial de lançamentos implementada
 
 `GET /api/v1/harvest-entries` exige sessão e recebe `start_date` e `end_date` em `AAAA-MM-DD`. Os dois limites são inclusivos; informar ambos evita que uma tela consulte todo o histórico sem delimitação. Esta é a forma inicial do filtro da API, sem definir o começo da semana de pagamento.
@@ -50,6 +57,16 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - O resultado mantém cada lançamento e seus itens, ordenados por data e criação mais recentes; não calcula totais semanais nem junta o cadastro completo de funcionários ao agregado.
 - Uma faixa vazia retorna `[]`. Parâmetros ausentes, repetidos, extras ou malformados e fim anterior ao início retornam `400`; sem sessão retorna `401`.
 - Se a consulta ao banco ou a autenticação de qualquer envelope falhar, a API retorna erro sem entregar uma lista parcial. Respostas contêm dados financeiros e usam `Cache-Control: no-store`.
+
+### HU-03 — resumo inicial de produção por período implementado
+
+`GET /api/v1/harvest-entries/summary` exige sessão e usa os mesmos parâmetros `start_date` e `end_date` inclusivos da listagem. Esta consulta ainda não define semanas de pagamento.
+
+- O serviço agrupa os lançamentos do gerente autenticado por funcionário, com nome atual do cadastro e quantidade de caixas normais e de moagem.
+- Para cada tipo, o valor é a soma de `quantidade × tarifa aplicada` nos itens do intervalo. Assim, tarifas diferentes em lançamentos distintos são preservadas; não se presume uma única tarifa para todo o período.
+- `harvest_amount_cents` representa o valor gerado pelas caixas antes de pagamentos. Não subtrai pagamentos nem inclui diárias ou ajustes, portanto não é o saldo a pagar.
+- Dias sem lançamento simplesmente não contribuem para as quantidades ou valores; não são criados faltas nem caixas com quantidade zero.
+- Sem lançamentos no intervalo, retorna `200` com `[]`. Datas inválidas ou período invertido retornam `400`; sem sessão, `401`. Falha ao autenticar uma tarifa aplicada invalida o resumo inteiro.
 
 ### HU-01 e HU-02 — núcleo local de tarifas
 
