@@ -33,7 +33,9 @@ O lançamento é a raiz do agregado: seus itens pertencem a ele e são persistid
 | `Harvest` | Um evento de colheita de um funcionário em uma data, com um ou mais itens. | Criação e consulta por período disponíveis. |
 | `HarvestPeriod` | Intervalo de datas usado para consultar lançamentos; as duas datas são inclusivas. | Usado na consulta da API. |
 | `ProtectedHarvest` | Forma interna de persistência do lançamento, com os valores financeiros cifrados. | Usada pelo repositório PostgreSQL. |
-| `AuditEvent` | Registro de uma alteração, com dados de antes e depois protegidos. | A tabela existe; o fluxo de auditoria de correções ainda será implementado. |
+| `DailyWork` | Uma diária lançada para um funcionário e uma data, separada das caixas. | Criação disponível em `POST /daily-work`; valor protegido no banco. |
+| `ProtectedDailyWork` | Forma interna de persistência da diária, com centavos substituídos pelo envelope cifrado. | Recebida pelo repositório PostgreSQL. |
+| `AuditEvent` | Registro técnico de uma alteração com dados protegidos. | A tabela existe no esquema, mas a V1 não registra auditoria de edição de colheitas. |
 | `Summary` | Projeção de leitura que combina lançamentos para mostrar totais em uma tela. Não é um novo cadastro. | Resumo inicial por funcionário e intervalo disponível em `GET /harvest-entries/summary`; não representa um agregado persistido. |
 
 ## Por que as caixas não ficam dentro de `Employee`
@@ -47,3 +49,5 @@ Por isso, `Harvest` referencia o funcionário pelo ID. Para uma tela de resumo, 
 `BoxType` classifica caixas para calcular a remuneração da colheita: `normal` ou `moagem`. A classificação da venda ao barracão é outro conceito (`exportação`, `mercado` ou `moagem`) e não deve ser usada como tipo de caixa da colheita.
 
 `AppliedRateCents` representa centavos inteiros em memória ou na resposta autorizada. No banco, o valor correspondente fica cifrado dentro de `ProtectedHarvest`; a tarifa aplicada é uma fotografia do lançamento e não muda quando uma tarifa futura é cadastrada.
+
+`DailyWork.AmountCents` também representa centavos inteiros. A diária é um lançamento financeiro próprio e não se converte em caixas nem aparece no resumo inicial de colheitas. `ProtectedDailyWork` leva ao repositório somente ciphertext, nonce e versão da chave para esse valor.

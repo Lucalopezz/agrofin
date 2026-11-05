@@ -1,8 +1,8 @@
 # Modelo de dados inicial
 
-Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas têm criptografia autenticada, persistência PostgreSQL e rotas protegidas de criação e consulta; a consulta descriptografa valores somente depois de filtrar pelo gerente autenticado. As chaves são fornecidas por variáveis de ambiente; gerenciamento operacional global das chaves e gravação dos demais fluxos continuam pendentes.
+Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas e diárias têm criptografia autenticada e persistência PostgreSQL; a consulta de tarifas descriptografa valores somente depois de filtrar pelo gerente autenticado. As chaves são fornecidas por variáveis de ambiente; gerenciamento operacional global das chaves e gravação dos demais fluxos continuam pendentes.
 
-O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. `GET /harvest-entries/summary` projeta essas linhas por funcionário e soma as quantidades e valores gerados pelas caixas, sem subtrair pagamentos nem calcular fechamento semanal. Essas consultas não alteram os agregados persistidos.
+O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. `GET /harvest-entries/summary` projeta essas linhas por funcionário e soma as quantidades e valores gerados pelas caixas, sem subtrair pagamentos nem calcular fechamento semanal. `POST /daily-work` registra uma diária para funcionário ativo, separada das caixas e com o valor cifrado antes da persistência. Essas operações não calculam pagamento ou saldo semanal.
 
 ## Princípios do modelo
 
@@ -41,7 +41,7 @@ As 22 tabelas abaixo são criadas pelas oito migrações. O diagrama mostra as c
 | `spray_applications` | `id`, `user_id`, `applied_at`, observações | Evento de pulverização que aparece no histórico e no calendário. |
 | `spraying_inputs` | `id`, `user_id`, `spray_application_id`, `product_id`, quantidade usada, unidade | Insumos usados em uma pulverização. Permite cadastrar e selecionar um novo produto sem perder o formulário atual. |
 | `stock_movements` | `id`, `user_id`, `product_id`, `movement_date`, quantidade com sinal, `source_type`, `purchase_item_id` ou `spraying_input_id` | Livro de estoque: compra, saldo inicial, uso ou ajuste. Compra e uso têm referência única à linha de origem; o saldo vem da soma dos movimentos. |
-| `audit_events` | `id`, `user_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Trilha para correções relevantes. Dados anteriores e posteriores deverão ser cifrados juntos pela aplicação antes da gravação. |
+| `audit_events` | `id`, `user_id`, `actor_id`, `happened_at`, entidade, operação, envelope cifrado | Estrutura genérica já existente; não é usada pelo registro de diárias nem pela V1 de colheitas, que não inclui edição. |
 
 ## identidade e sessões
 
@@ -115,7 +115,7 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 - Um dia sem colheita não cria falta, penalidade ou desconto.
 - Uma tarifa tem vigência. Uma alteração não recalcula colheitas anteriores. A regra confirmada usa tarifa geral por conta e tipo, igual para todos os funcionários. A possibilidade técnica de employee_id no esquema não habilita tarifas individuais.
 - Pagamento semanal é calculado por funcionário e período: caixas + diárias − pagamentos + ajustes aplicáveis. O início da semana ainda precisa ser escolhido.
-- O servidor deve bloquear pagamento acima do saldo devido, salvo ajuste explícito. Correção em período já pago deve destacar a diferença e deixar registro rastreável.
+- O servidor deve bloquear pagamento acima do saldo devido, salvo ajuste explícito. Edição de lançamentos e seu efeito em períodos pagos foram adiados para depois da V1.
 - Venda bruta é a soma das linhas; venda líquida é o bruto menos descontos; a receber é o líquido menos recebimentos. Valores vendidos e recebidos aparecem separadamente.
 - Saldo de caixa soma somente dinheiro efetivamente recebido e pago no período. Não deve ser apresentado como lucro contábil.
 - Compras de insumos geram entrada de estoque. Pulverizações geram saídas de estoque, mas não uma nova despesa pela compra já registrada.
@@ -130,12 +130,12 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 
 ## Proteção dos valores financeiros
 
-O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. `RateCipher` protege tarifas com AES-256-GCM; o repositório persiste envelopes, `POST /harvest-rates` cifra antes de gravar e `GET /harvest-rates` descriptografa somente as linhas da conta autenticada. O runtime recebe a versão ativa em `HARVEST_RATE_ACTIVE_KEY_VERSION` e um objeto JSON de versões com chaves hexadecimais em `HARVEST_RATE_KEYS_HEX_JSON`; cada chave deve representar 32 bytes. Chaves antigas precisam continuar disponíveis para recuperação. A escolha do provedor operacional e o controle global do limite de cifras por chave continuam pendentes antes de produção.
+O cenário protegido é o vazamento isolado de uma cópia do banco: a cópia não deve revelar tarifas, preços, descontos, pagamentos, recebimentos, custos de compra ou despesas. As tabelas já exigem bytes cifrados, nonce e versão da chave para cada valor financeiro. `internal/financialcipher` compartilha a cifra AES-256-GCM; `colheitas` e `diarias` fornecem contextos autenticados próprios, separados por propósito e vínculo do registro. Tarifas e diárias são cifradas antes da gravação, e tarifas só são descriptografadas para a conta autenticada. O runtime recebe a versão ativa em `HARVEST_RATE_ACTIVE_KEY_VERSION` e um objeto JSON de versões com chaves hexadecimais em `HARVEST_RATE_KEYS_HEX_JSON`; cada chave deve representar 32 bytes. Os nomes atuais das variáveis são mantidos por compatibilidade, e o chaveiro é compartilhado pelos domínios financeiros implementados. Chaves antigas precisam continuar disponíveis para recuperação. A escolha do provedor operacional e o controle global do limite de cifras por chave continuam pendentes antes de produção.
 
 - Durante os cálculos, representar dinheiro em centavos inteiros (`int64`), sem ponto flutuante. Cifrar a representação antes de gravar; no banco, guardar bytes cifrados, nonce e versão/identificador da chave conforme o formato escolhido.
 - Usar criptografia autenticada de uma biblioteca mantida, como AES-GCM quando adequado ao ambiente. A OWASP recomenda algoritmos estabelecidos, modos seguros e separação entre as chaves e os dados cifrados; a implementação também precisa respeitar a unicidade de nonce e os limites do modo escolhido. [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html)
 - Manter as chaves fora do banco e do controle de versão, com plano de rotação e recuperação. A estratégia concreta de gerenciamento de chaves para o deploy ainda não foi escolhida. Backups do banco não devem conter a chave necessária para decifrar os dados.
-- Cifrar também valores em auditorias e agregados persistidos. Não gravar valores financeiros em logs, erros, telemetria ou métricas sem proteção.
+- Cifrar valores financeiros em qualquer auditoria ou agregado persistido que venha a ser implementado. Não gravar valores financeiros em logs, erros, telemetria ou métricas sem proteção.
 - Senhas usam hash próprio para senhas, não a criptografia reversível usada para valores financeiros.
 - Datas, quantidades, classificações, IDs e categorias ainda podem ficar visíveis. Essa exposição de metadados é uma limitação deliberada do modelo inicial e deve ser considerada na avaliação de privacidade.
 
@@ -183,7 +183,7 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente 
 
 1. Banco, migrações, conexão inicial, cadastro público e autenticação dos clientes e cadastro simples de funcionários já entregues.
 2. Implementar tarifas com vigência, lançamento de caixas e resumo semanal.
-3. Implementar diárias, pagamentos parciais e correções de período já pago.
+3. Implementar pagamentos parciais e fechamento dos períodos; diárias já podem ser registradas pela API.
 4. Implementar venda, descontos e recebimentos.
 5. Implementar despesas gerais, compras, pagamentos de compras e movimentos de estoque.
 6. Implementar pulverizações, cadastro rápido de insumos e calendário lunar.

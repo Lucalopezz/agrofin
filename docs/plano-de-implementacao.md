@@ -12,7 +12,9 @@ agrofin/
       cmd/api/                 # entrada local
       cmd/migrate/             # aplicar e consultar migrações
       internal/
-        colheitas/             # proposta: lançamentos e seus itens
+        colheitas/             # tarifas e lançamentos de caixa implementados
+        diarias/                # registro de diárias implementado
+        financialcipher/        # cifra financeira compartilhada entre domínios
         funcionarios/          # cadastro simples e rotas da feature
         pagamentos/
         vendas/
@@ -45,7 +47,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro, a listagem, a renomeação, a desativação e a reativação de funcionários e a autenticação do gerente estão implementados. O cadastro de funcionário já exige sessão. O serviço de tarifas e o componente local de cifra estão implementados, mas a composição das chaves no runtime e sua integração HTTP, os demais fluxos de escrita e o protótipo de deploy unificado ainda pertencem às próximas etapas.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, as tarifas, os lançamentos de caixas e o registro de diárias estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Pagamentos, fechamento semanal, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
 
 ### Organização interna do cadastro de funcionários
 
@@ -205,7 +207,7 @@ type Item struct {
 }
 ```
 
-O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A consulta por período também está implementada; correção com auditoria e fechamento semanal continuam pendentes. A colheita não cria diária nem pagamento automaticamente.
+O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A consulta por período também está implementada; edição foi adiada para depois da V1 e o fechamento semanal continua pendente. A colheita não cria diária nem pagamento automaticamente.
 
 Se o serviço de colheitas precisar de uma operação do cadastro, a dependência deve ser explícita. Uma interface pequena, declarada junto do consumidor em `colheitas`, pode ser conectada na composição da aplicação. Não criar a interface antes de conhecer a operação necessária nem fazer o cadastro depender de todo o histórico de colheitas.
 
@@ -244,9 +246,9 @@ As interfaces privadas ficam junto do serviço que as consome. `RatePeriod` deli
 
 `NextRateID` obtém `gen_random_uuid()` do PostgreSQL antes da cifra e usa esse ID no `INSERT` final, preservando a geração técnica no banco sem inserir uma tarifa incompleta. O ID precisa existir antes da cifra porque é autenticado junto com a conta. A consulta de sobreposição no serviço é complementada pela exclusão existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório traduz a restrição para `ErrRateOverlap`. A integração já testa essa concorrência com o banco real.
 
-`RateCipher`, no próprio pacote `colheitas`, usa AES-256-GCM da biblioteca padrão, com chaves de 32 bytes e nonce aleatório de 96 bits gerado por `cipher.NewGCMWithRandomNonce`. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave, conforme as colunas existentes. Para tarifas, o formato do campo, versão, gerente e ID da tarifa formam dados adicionais autenticados. Para a fotografia no item, a autenticação também vincula lançamento, funcionário, data, tipo e quantidade. A composição usa um array JSON para não concatenar identificadores de forma ambígua. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
+`internal/financialcipher` compartilha a cifra AES-256-GCM da biblioteca padrão entre os domínios financeiros. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave. `colheitas` e `diarias` fornecem propósitos distintos nos dados adicionais autenticados, além dos IDs do gerente e do registro; os itens de colheita também vinculam funcionário, data, tipo e quantidade. A codificação preserva o formato anterior das tarifas e fotografias para que dados já gravados continuem legíveis. O nonce aleatório usa `cipher.NewGCMWithRandomNonce`; o controle global do limite por chave permanece pendente. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
 
-O runtime lê `HARVEST_RATE_ACTIVE_KEY_VERSION` e `HARVEST_RATE_KEYS_HEX_JSON`, um objeto JSON que mapeia versões para chaves hexadecimais de 32 bytes. A inicialização valida a configuração antes de abrir o servidor e falha sem registrar os valores quando faltam chaves, a versão ativa não existe ou o material é inválido. O construtor prepara seu próprio mapa de cifras e aceita versões antigas para recuperação. Para uma rotação manual, configure material novo sob nova versão como ativa e mantenha as antigas necessárias. Repetir material sob duas versões é rejeitado: renomear uma chave não é rotacioná-la. A configuração por ambiente é uma composição inicial; o provedor operacional para produção continua por escolher. Nonces não são chaves e acompanham o envelope.
+O runtime lê `HARVEST_RATE_ACTIVE_KEY_VERSION` e `HARVEST_RATE_KEYS_HEX_JSON`, um objeto JSON que mapeia versões para chaves hexadecimais de 32 bytes. Os nomes são mantidos por compatibilidade, e o mesmo chaveiro protege tarifas, fotografias de colheita e diárias, cada qual com propósito autenticado distinto. A inicialização valida a configuração antes de abrir o servidor e falha sem registrar os valores quando faltam chaves, a versão ativa não existe ou o material é inválido. O construtor prepara um chaveiro compartilhado e aceita versões antigas para recuperação. Para uma rotação manual, configure material novo sob nova versão como ativa e mantenha as antigas necessárias. Repetir material sob duas versões é rejeitado: renomear uma chave não é rotacioná-la. A configuração por ambiente é uma composição inicial; o provedor operacional para produção continua por escolher. Nonces não são chaves e acompanham o envelope.
 
 Antes de habilitar escrita em produção, o provisionamento, rotação e recuperação das chaves e o controle de uso por material devem ser definidos entre todas as instâncias e reinícios. A biblioteca limita AES-GCM com nonce aleatório a no máximo `2^32` cifras por chave; a rotação precisa ocorrer antes desse limite, que não é reiniciado apenas por mudar o nome da versão. Esse controle operacional global não está implementado neste recorte. As chaves devem permanecer fora do banco e de seu backup. [Documentação de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce) e [OWASP Cryptographic Storage](https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html).
 
@@ -314,7 +316,7 @@ Exemplo:
 
 O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O valor unitário de cada item é cifrado como uma fotografia vinculada ao dono, lançamento, funcionário, data, tipo e quantidade; mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
 
-Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. Correção com auditoria e resumo semanal de pagamento continuam pendentes. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
+Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. A edição está fora da V1, e o resumo semanal de pagamento continua pendente. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
 
 ### Consulta inicial de lançamentos
 
@@ -335,6 +337,16 @@ Esta criação ainda não oferece chave de idempotência: repetir um POST aceito
 - `harvest_amount_cents` é o valor gerado pelas caixas; pagamentos, diárias e ajustes não são incluídos. Portanto, este endpoint não informa saldo a pagar nem confirma quitação.
 - Funcionários com lançamento aparecem uma vez, ordenados por nome e ID. Sem lançamentos no período, retorna `[]`.
 - A coleção compartilhada contém **07.5 - Resumir colheitas por funcionário**, que reutiliza as variáveis de data de **07.4**.
+
+### Registro de diárias implementado
+
+`POST /api/v1/daily-work` exige sessão e registra um funcionário, dia, valor positivo em centavos e observação opcional. O `user_id` vem exclusivamente do principal autenticado; o corpo não pode escolher o gerente. O funcionário precisa pertencer à conta e estar ativo; funcionário alheio ou inexistente retorna `404`, e funcionário inativo retorna `409`.
+
+O domínio normaliza o UUID e a data antes de chamar as dependências. O serviço verifica o funcionário, gera um ID antes da cifra e entrega ao repositório apenas `ProtectedDailyWork`. A cifra financeira compartilhada usa propósito próprio e autentica gerente, ID do lançamento, funcionário e data; os centavos em claro não chegam à persistência. O repositório revalida e mantém um bloqueio do funcionário dentro da transação de inserção, evitando corrida com a desativação. Não foi necessária migração porque `daily_work` já existia no esquema.
+
+A resposta `201` devolve o valor em centavos para a sessão autenticada e usa `Cache-Control: no-store`. UUID, data, valor, JSON ou campos desconhecidos inválidos retornam `400`; `415` indica tipo de mídia incorreto; `413`, corpo acima de 4 KiB; cancelamento e prazo esgotado retornam `408` e `504`. Falhas internas retornam mensagem genérica sem registrar o valor financeiro.
+
+A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos de origem e proteção CSRF. O envio é persistente e repetido cria outro lançamento; teste manualmente, não execute a coleção inteira pelo runner. A diária permanece separada das caixas e ainda não é incluída no resumo inicial de colheitas nem em saldo semanal.
 
 ### Respostas para a tela
 
@@ -360,7 +372,7 @@ Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 
 O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. Os totais são calculados a partir dos lançamentos autorizados, sem criar contadores editáveis no cadastro. O fechamento semanal completo ainda precisa distinguir valor gerado, devido e pago e incluir diárias e ajustes.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data e `GET /harvest-entries/summary` agrupa produção e valores gerados por funcionário; essas operações estão implementadas. A resposta das consultas representa cada agregado ou projeção sem carregar o histórico para dentro do cadastro do funcionário. `/payroll-weeks/{week}/summary` poderá reunir colheitas, diárias, pagamentos e ajustes no fechamento semanal. Correção auditável e o início da semana de pagamento permanecem pendentes.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas e valores gerados por funcionário e `POST /daily-work` registra diárias; essas operações estão implementadas. O resumo inicial ainda considera somente caixas. `/payroll-weeks/{week}/summary` poderá reunir colheitas, diárias, pagamentos e ajustes no fechamento semanal. A edição de colheita foi adiada para depois da V1, e o início da semana de pagamento permanece pendente.
 
 ## Sequência sugerida
 
@@ -368,14 +380,14 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas e colheitas — tarifas, criação, consulta e resumo inicial implementados:** tarifas são gerais por conta e tipo; domínio, serviço, cifra, repositório PostgreSQL, `GET` e `POST /harvest-rates`, `POST /harvest-entries`, `GET /harvest-entries` e `GET /harvest-entries/summary` estão implementados. Seguem pendentes controles globais de uso/rotação das chaves, correção auditável e resumo semanal de pagamento.
+3. **Tarifas, colheitas e diárias — criação e consultas iniciais implementadas:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas e criação de diárias. Seguem pendentes pagamentos, fechamento semanal e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos e resumo inicial de produção por período funcionam com sessão e proteção financeira. Correção auditável e saldo semanal após pagamentos continuam pendentes.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, resumo inicial de produção e registro de diárias funcionam com sessão e proteção financeira. Edição de colheita foi adiada para depois da V1; o saldo semanal após pagamentos continua pendente.
 
 | etapa | entrega verificável |
 | --- | --- |
 | 1. base técnica | React e Go sob a mesma origem, PostgreSQL, cadastro/Argon2id, sessão em cookie, proteção de origem e middleware que protege as rotas privadas estão disponíveis. |
-| 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
+| 2. primeiro fluxo completo | Cadastrar funcionário e tarifa, registrar caixas e diárias, ver resumo semanal e registrar pagamento. Validar os exemplos de cálculo dos [critérios de aceite](criterios-de-aceite.md). |
 | 3. vendas e despesas | Registrar venda por classificação, desconto e recebimento; registrar energia e demais despesas; mostrar painel com vendido, recebido, devido, pago e saldo de caixa separados. |
 | 4. insumos e calendário | Registrar produto, compra, estoque e pulverização; permitir cadastro rápido; mostrar calendário e mudança das fases da Lua. |
 | 5. uso real | Observar o registro de uma semana com o cliente, corrigir rótulos e passos difíceis e conferir resultados com os controles que ele já usa. |
@@ -395,6 +407,7 @@ GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral p
 GET            ${API_PREFIX}/harvest-entries       # consulta inicial por período implementada
 GET            ${API_PREFIX}/harvest-entries/summary # resumo inicial por funcionário implementado
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
+POST           ${API_PREFIX}/daily-work            # registro de diária implementado
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
 POST           ${API_PREFIX}/employee-payments

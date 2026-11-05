@@ -22,7 +22,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Uma conta não pode renomear funcionários de outra; a resposta é a mesma de um funcionário inexistente e nenhum registro é alterado.
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
-- Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição registra quem alterou, quando alterou e os valores anteriores.
+- Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição de lançamentos está fora do escopo da V1.
 - Desativar um funcionário marca o cadastro como inativo e registra a data, preservando ID, dono, nome e histórico. A listagem do cadastro continua retornando o registro com `active=false`.
 - Repetir a desativação retorna o mesmo sucesso sem alterar a primeira data. Funcionário inexistente ou de outra conta recebe a mesma resposta `404`, sem alterar registros.
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
@@ -30,7 +30,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 ### HU-02 — criação inicial de lançamento implementada
 
-`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação. A consulta inicial de lançamentos está disponível em `GET /api/v1/harvest-entries`; edição e histórico de correções continuam pendentes.
+`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação. A consulta inicial de lançamentos está disponível em `GET /api/v1/harvest-entries`; edição foi adiada para depois da V1.
 
 - A sessão define o dono do lançamento. O corpo contém somente `employee_id`, `harvest_date` e `items`; campos extras, UUID inválido, data fora de `AAAA-MM-DD` e quantidade fora do intervalo de inteiro positivo são rejeitados.
 - O funcionário precisa pertencer à conta e estar ativo. Registro ausente ou de outra conta retorna `404`; funcionário inativo retorna `409`.
@@ -39,14 +39,13 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Cabeçalho e itens são persistidos juntos. Se a gravação de qualquer item falhar, nenhum cabeçalho parcial permanece.
 - Cada tarifa aplicada é gravada cifrada como fotografia do item; mudar tarifas futuras não recalcula esse lançamento. A resposta `201` devolve os tipos, quantidades e tarifas unitárias aplicadas à sessão autenticada, com `Cache-Control: no-store`.
 - A verificação de estado do funcionário permanece bloqueada até a conclusão da gravação, evitando aceitar uma colheita que concorra com a desativação.
-- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Correção com auditoria e tratamento de repetição continuam pendentes.
+- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Edição foi adiada para depois da V1.
 
-### Correção de colheita — regras definidas, implementação pendente
+### Edição de colheita — fora da V1
 
-- Ao corrigir data ou tipo de caixa, usar a tarifa vigente para os dados corrigidos. O lançamento corrigido mantém a tarifa aplicada como fotografia histórica.
-- Pagamento parcial não bloqueia a correção enquanto ainda houver saldo no período.
-- Depois que o período estiver quitado, bloquear a edição. Se a correção for necessária, o cliente registra manualmente a diferença no próximo período; a API não cria ajuste automático.
-- A identificação de quitação depende do fluxo de pagamentos, ainda não implementado. Dias sem colheita continuam sem lançamento e sem penalidade.
+- A API da V1 não altera nem apaga lançamentos já criados; não há rota de edição.
+- Ao retomar a feature, a preferência atual é permitir a edição antes do pagamento do período do funcionário e bloqueá-la depois. Esse comportamento será confirmado junto com o fluxo de pagamentos.
+- Não há decisão atual de adicionar uma auditoria específica para cada correção. Se a edição voltar ao escopo, rever a necessidade antes de implementá-la.
 
 ### HU-02 — consulta inicial de lançamentos implementada
 
@@ -67,6 +66,17 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - `harvest_amount_cents` representa o valor gerado pelas caixas antes de pagamentos. Não subtrai pagamentos nem inclui diárias ou ajustes, portanto não é o saldo a pagar.
 - Dias sem lançamento simplesmente não contribuem para as quantidades ou valores; não são criados faltas nem caixas com quantidade zero.
 - Sem lançamentos no intervalo, retorna `200` com `[]`. Datas inválidas ou período invertido retornam `400`; sem sessão, `401`. Falha ao autenticar uma tarifa aplicada invalida o resumo inteiro.
+
+### HU-04 — registro de diária implementado
+
+`POST /api/v1/daily-work` cria uma diária separada dos itens de caixa. A operação exige sessão e grava o lançamento e o envelope financeiro em uma transação.
+
+- O corpo recebe `employee_id`, `work_date` em `AAAA-MM-DD`, `amount_cents` positivo e `notes` opcional. A sessão define `user_id`; campos extras, inclusive `user_id`, são rejeitados.
+- O funcionário deve pertencer à conta autenticada e estar ativo. Ausente ou de outra conta retorna `404`; inativo retorna `409`.
+- Valor zero ou negativo, UUID inválido, data inválida, JSON malformado ou campo desconhecido retorna `400`; tipo de mídia incorreto retorna `415`; corpo acima de 4 KiB retorna `413`.
+- A resposta `201` retorna ID, funcionário, data, centavos e observação para a sessão autenticada. `Cache-Control: no-store` evita guardar o valor no navegador ou em proxies.
+- O banco guarda somente ciphertext, nonce e versão da chave para o valor. Uma falha na transação não deixa diária parcial.
+- A coleção compartilhada Postman v2.1 contém a pasta **Manual - Registrar diária**. A operação é persistente; envie manualmente com sessão e não execute a coleção inteira pelo runner.
 
 ### HU-01 e HU-02 — núcleo local de tarifas
 

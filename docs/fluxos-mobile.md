@@ -25,7 +25,7 @@ Uma ação de **repetir lançamento** pode preencher funcionário e tipos do úl
 3. Tocar em um funcionário, conferir o detalhamento e informar valor e data do pagamento.
 4. Salvar e voltar à lista, que já mostra o saldo atualizado.
 
-Correções de caixas ou diárias de uma semana quitada exigem destaque do novo saldo e um registro de ajuste, para que o histórico continue compreensível.
+Edição de caixas ou diárias está fora da V1. Se for retomada, definir o bloqueio por pagamento e a necessidade de ajustes junto com o fluxo de pagamentos.
 
 ## Registrar venda
 
