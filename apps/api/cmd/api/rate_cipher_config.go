@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
+	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
 )
 
 const (
@@ -14,9 +14,10 @@ const (
 	rateKeysHexJSONEnv      = "HARVEST_RATE_KEYS_HEX_JSON"
 )
 
-// rateCipherFromEnv carrega as chaves fora do banco e valida toda a configuração
-// antes de abrir o servidor, para nunca disponibilizar escrita sem cifra.
-func rateCipherFromEnv() (*colheitas.RateCipher, error) {
+// financialKeyringFromEnv carrega o chaveiro fora do banco e valida a
+// configuração antes de abrir o servidor. Os nomes antigos das variáveis são
+// mantidos para não invalidar ambientes já configurados.
+func financialKeyringFromEnv() (*financialcipher.Keyring, error) {
 	activeVersion := os.Getenv(rateActiveKeyVersionEnv)
 	encodedKeys := os.Getenv(rateKeysHexJSONEnv)
 	if activeVersion == "" || encodedKeys == "" {
@@ -42,10 +43,10 @@ func rateCipherFromEnv() (*colheitas.RateCipher, error) {
 		keys[version] = key
 	}
 
-	protector, err := colheitas.NewRateCipher(activeVersion, keys)
+	keyring, err := financialcipher.NewKeyring(activeVersion, keys)
 	if err != nil {
 		// A mensagem não inclui os valores recebidos do ambiente, que contêm segredos.
-		return nil, fmt.Errorf("configuração de chaves de tarifa inválida")
+		return nil, fmt.Errorf("configuração das chaves financeiras inválida")
 	}
-	return protector, nil
+	return keyring, nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
+	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/health"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
@@ -42,7 +43,15 @@ func run() error {
 	if err := auth.ValidateSessionConfig(publicOrigin, cookieSecure); err != nil {
 		return err
 	}
-	rateCipher, err := rateCipherFromEnv()
+	financialKeyring, err := financialKeyringFromEnv()
+	if err != nil {
+		return err
+	}
+	rateCipher, err := colheitas.NewRateCipherWithKeyring(financialKeyring)
+	if err != nil {
+		return err
+	}
+	dailyWorkCipher, err := diarias.NewCipher(financialKeyring)
 	if err != nil {
 		return err
 	}
@@ -86,6 +95,11 @@ func run() error {
 	harvestService := colheitas.NewHarvestService(rateRepository, rateCipher)
 	rateHandler := colheitas.NewHandler(rateService, harvestService)
 	colheitas.RegisterRoutes(apiMux, rateHandler, sessionMiddleware.RequireSession)
+
+	dailyWorkRepository := diarias.NewRepository(pool)
+	dailyWorkService := diarias.NewService(dailyWorkRepository, dailyWorkCipher)
+	dailyWorkHandler := diarias.NewHandler(dailyWorkService)
+	diarias.RegisterRoutes(apiMux, dailyWorkHandler, sessionMiddleware.RequireSession)
 
 	mux := http.NewServeMux()
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))

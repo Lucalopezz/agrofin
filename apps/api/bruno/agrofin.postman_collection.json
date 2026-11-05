@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação, consulta e resumo de colheitas por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação, consulta e resumo de colheitas por período e registro de diárias. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -445,6 +445,43 @@
             "body": {
               "mode": "raw",
               "raw": "{\"employee_id\":\"{{employee_id}}\",\"harvest_date\":\"2026-11-03\",\"items\":[{\"box_type\":\"normal\",\"quantity\":10},{\"box_type\":\"moagem\",\"quantity\":2}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Registrar diária",
+      "description": "Cria uma diária persistente e protegida para um funcionário ativo. Execute somente após entrar e não rode esta pasta pelo runner, pois cada envio cria outro lançamento.",
+      "item": [
+        {
+          "name": "Registrar diária do funcionário",
+          "request": {
+            "description": "Exige sessão ativa e os cabeçalhos Origin e X-Agrofin-Request. Copie o ID de um funcionário ativo para employee_id. O valor é enviado em centavos e gravado somente cifrado; 8000 representa R$ 80,00. A resposta 201 retorna o valor para a sessão autenticada. Funcionário de outra conta retorna 404 e funcionário inativo retorna 409.",
+            "method": "POST",
+            "url": "{{base_url}}/daily-work",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"employee_id\":\"{{employee_id}}\",\"work_date\":\"2026-11-04\",\"amount_cents\":8000,\"notes\":\"Diária de teste\"}",
               "options": {
                 "raw": {
                   "language": "json"
