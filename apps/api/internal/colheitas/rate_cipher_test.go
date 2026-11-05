@@ -13,7 +13,7 @@ import (
 
 // Material determinístico é exclusivo das fixtures, nunca de uma chave real.
 func testRateKey(seed byte) []byte {
-	return bytes.Repeat([]byte{seed}, rateKeySize)
+	return bytes.Repeat([]byte{seed}, 32)
 }
 
 func TestNewRateCipher(t *testing.T) {
@@ -181,23 +181,4 @@ func TestRateCipherOwnsPreparedKeys(t *testing.T) {
 	got, err := c.Decrypt("user-a", "rate-a", amount)
 	require.NoError(t, err)
 	assert.EqualValues(t, 500, got)
-}
-
-func TestRateCipherRejectsAuthenticatedInvalidAmount(t *testing.T) {
-	c, err := NewRateCipher("v1", map[string][]byte{"v1": testRateKey(1)})
-	require.NoError(t, err)
-	aad, err := rateAdditionalData("v1", "user-a", "rate-a")
-	require.NoError(t, err)
-	for _, invalid := range []uint64{0, 1 << 63, math.MaxUint64} {
-		// Conhecer a chave na fixture permite construir um envelope autenticado
-		// cujo conteúdo viola o domínio. Autenticar não dispensa validar centavos.
-		var plaintext [8]byte
-		binary.BigEndian.PutUint64(plaintext[:], invalid)
-		sealed := c.keys["v1"].Seal(nil, nil, plaintext[:], aad)
-		got, err := c.Decrypt("user-a", "rate-a", ProtectedRateAmount{
-			KeyVersion: "v1", Nonce: sealed[:12], Ciphertext: sealed[12:],
-		})
-		assert.ErrorIs(t, err, ErrInvalidProtectedRateAmount)
-		assert.Zero(t, got)
-	}
 }

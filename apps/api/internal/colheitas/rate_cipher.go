@@ -1,342 +1,165 @@
 package colheitas
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/binary"
-	"encoding/json"
-	"math"
+	"errors"
 	"strconv"
-	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
 )
 
 const (
-	rateKeySize       = 32
-	rateNonceSize     = 12
-	ratePlaintextSize = 8
+	ratePurpose            = "agrofin.harvest-rate.amount.v1"
+	harvestItemRatePurpose = "agrofin.harvest-entry.applied-rate.v1"
 )
 
-// ProtectedRateAmount é o envelope persistível de uma tarifa ou de sua fotografia
-// em um lançamento. Centavos em claro nunca atravessam a fronteira do Repository.
-type ProtectedRateAmount struct {
-	// contém o valor criptografado e sua tag de autenticação.
-	// Ciphertext: []byte{0x91, 0xAF, 0x23, ...}
-	Ciphertext []byte
-	// Contém o nonce utilizado para criptografar aquele valor.
-	// Na descriptografia, precisamos utilizar o mesmo nonce.
-	Nonce      []byte
-	KeyVersion string // v1
-}
+// rateCipherPurpose é um marcador de compilação compartilhado pelas cifras de
+// tarifa e colheita. Os propósitos em string continuam separados no AAD em execução.
+type rateCipherPurpose struct{}
 
-// RateCipher protege tarifas e fotografias aplicadas com AES-256-GCM. As chaves
-// chegam em memória pela composição; o componente não as gera, lê do banco ou persiste.
+// ProtectedRateAmount mantém o nome conhecido pelo pacote de colheitas, mas usa
+// o envelope comum. Assim, os chamadores não precisam conhecer a estrutura interna
+// compartilhada nem mudar a forma das colunas de persistência.
+type ProtectedRateAmount = financialcipher.Amount[rateCipherPurpose]
+
+// RateCipher aplica contextos próprios às tarifas e às fotografias de colheita.
+// A implementação criptográfica comum fica fora de um domínio específico.
 type RateCipher struct {
-	// Qual chave será usada para novas cifras, v1, v2
-	activeVersion string
-	// map com as especificações de cada versão, para descriptografar valores antigos
-	keys map[string]cipher.AEAD
+	amounts *financialcipher.Cipher[rateCipherPurpose]
 }
 
-// NewRateCipher usa a versão ativa para novas cifras e mantém versões anteriores
-// disponíveis para recuperação. Trocar a versão ativa exige reconstruir a instância.
+// NewRateCipher mantém o construtor histórico de colheitas e delega a validação
+// criptográfica ao pacote comum. Ele é útil para chamadores independentes; na
+// aplicação, a composição usa NewRateCipherWithKeyring para compartilhar o mesmo
+// chaveiro já validado com diárias.
 func NewRateCipher(activeVersion string, keys map[string][]byte) (*RateCipher, error) {
-	if activeVersion == "" || strings.TrimSpace(activeVersion) != activeVersion {
+	keyring, err := financialcipher.NewKeyring(activeVersion, keys)
+	if err != nil {
 		return nil, ErrInvalidRateCipherConfig
 	}
-	// A versão ativa precisa estar presente no mapa de chaves, mesmo que seja a única.
-	if _, ok := keys[activeVersion]; !ok {
-		return nil, ErrInvalidRateCipherConfig
-	}
-	// Map que sera retornado com a cifra preparada para cada versão
-	prepared := make(map[string]cipher.AEAD, len(keys))
-	seen := make(map[[rateKeySize]byte]bool, len(keys))
-	for version, key := range keys {
-		if version == "" || strings.TrimSpace(version) != version || !utf8.ValidString(version) || len(key) != rateKeySize {
-			return nil, ErrInvalidRateCipherConfig
-		}
-		// Uma versão nova precisa de material novo: apenas renomear a mesma chave
-		// não constitui rotação nem reinicia seus limites de utilização.
-		var material [rateKeySize]byte
-		copy(material[:], key)
-
-		// Impede o uso da mesma chave com versoes diferentes
-		if seen[material] {
-			return nil, ErrInvalidRateCipherConfig
-		}
-		seen[material] = true
-		// Cria a cifra AES-256-GCM para cada versão. A biblioteca gera o nonce aleatório
-		block, err := aes.NewCipher(key)
-		if err != nil {
-			return nil, ErrInvalidRateCipherConfig
-		}
-
-		// A biblioteca gera o nonce aleatório e o inclui no resultado de Seal.
-		// O limite de 2^32 cifras por chave deve ser respeitado entre todas as
-		// instâncias que a compartilhem, inclusive após reinícios, antes da produção.
-		aead, err := cipher.NewGCMWithRandomNonce(block)
-		if err != nil {
-			return nil, ErrInvalidRateCipherConfig
-		}
-		// Guardar cifras
-		prepared[version] = aead
-	}
-	// Guardar cifras preparadas em um mapa próprio evita depender de alterações
-	// posteriores no mapa ou nos slices de chave recebidos pelo construtor.
-	return &RateCipher{activeVersion: activeVersion, keys: prepared}, nil
+	return NewRateCipherWithKeyring(keyring)
 }
 
-// Encrypt vincula os centavos à conta e ao registro. O ID da tarifa precisa
-// estar definido antes da cifra, mesmo que a persistência ainda não tenha ocorrido.
+// NewRateCipherWithKeyring injeta o chaveiro preparado pela composição da API.
+// A reutilização evita manter duas cópias das chaves e das cifras em memória; cada
+// método de colheitas ainda usa propósitos próprios no AAD, separados das diárias.
+func NewRateCipherWithKeyring(keyring *financialcipher.Keyring) (*RateCipher, error) {
+	amounts, err := financialcipher.NewCipher[rateCipherPurpose](keyring)
+	if err != nil {
+		return nil, ErrInvalidRateCipherConfig
+	}
+	return &RateCipher{amounts: amounts}, nil
+}
+
+// Encrypt protege uma tarifa geral vinculando os centavos à conta e ao ID da tarifa.
+// O ID precisa existir antes da gravação porque participa da autenticação do envelope.
 func (c *RateCipher) Encrypt(userID, rateID string, amountCents int64) (ProtectedRateAmount, error) {
-	if c == nil || len(c.keys) == 0 {
+	if c == nil || c.amounts == nil {
 		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
 	}
-	if _, ok := c.keys[c.activeVersion]; !ok {
-		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	amount, err := c.amounts.Encrypt(financialcipher.Context[rateCipherPurpose]{
+		Purpose: ratePurpose, UserID: userID, RecordID: rateID,
+	}, amountCents)
+	return amount, mapRateCipherError(err)
+}
+
+// Decrypt reconstrói o mesmo propósito e contexto usados na criação da tarifa.
+// Se a conta, o ID ou os bytes do envelope não corresponderem, o pacote comum rejeita a leitura.
+func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) (int64, error) {
+	if c == nil || c.amounts == nil {
+		return 0, ErrInvalidRateCipherConfig
 	}
-	// AAD autentica a versão, a conta e o registro, sem cifrar. O envelope não pode
-	// ser transplantado para outra conta, registro ou versão sem falhar na autenticação.
-	aad, err := rateAdditionalData(c.activeVersion, userID, rateID)
+	value, err := c.amounts.Decrypt(financialcipher.Context[rateCipherPurpose]{
+		Purpose: ratePurpose, UserID: userID, RecordID: rateID,
+	}, amount)
+	return value, mapRateCipherError(err)
+}
+
+// EncryptHarvestItemRate registra a fotografia da tarifa que valeu no lançamento.
+// Além do dono e do ID da colheita, autentica funcionário, data, tipo e quantidade:
+// mudar qualquer um desses dados sem refazer a cifra invalida a leitura do valor.
+func (c *RateCipher) EncryptHarvestItemRate(
+	userID, harvestID, employeeID string,
+	harvestDate time.Time,
+	boxType BoxType,
+	quantity int32,
+	amountCents int64,
+) (ProtectedRateAmount, error) {
+	context, err := harvestItemRateContext(userID, harvestID, employeeID, harvestDate, boxType, quantity)
 	if err != nil {
 		return ProtectedRateAmount{}, err
 	}
-	return c.encryptAmount(amountCents, aad)
+	if c == nil || c.amounts == nil {
+		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	}
+	amount, err := c.amounts.Encrypt(context, amountCents)
+	return amount, mapRateCipherError(err)
 }
 
-// EncryptHarvestItemRate cria a fotografia cifrada da tarifa aplicada. Os dados
-// autenticados ligam o valor ao lançamento, funcionário, data, tipo e quantidade,
-// para que trocar esses campos na linha não transforme a fotografia em outra.
-func (c *RateCipher) EncryptHarvestItemRate(userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32, amountCents int64) (ProtectedRateAmount, error) {
-	if c == nil || len(c.keys) == 0 {
-		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
-	}
-	if _, ok := c.keys[c.activeVersion]; !ok {
-		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
-	}
-	aad, err := harvestItemRateAdditionalData(c.activeVersion, userID, harvestID, employeeID, harvestDate, boxType, quantity)
+// DecryptHarvestItemRate exige os mesmos campos usados ao cifrar a fotografia.
+// Isso mantém o valor aplicado preso ao item original mesmo se a tarifa geral mudar depois.
+func (c *RateCipher) DecryptHarvestItemRate(
+	userID, harvestID, employeeID string,
+	harvestDate time.Time,
+	boxType BoxType,
+	quantity int32,
+	amount ProtectedRateAmount,
+) (int64, error) {
+	context, err := harvestItemRateContext(userID, harvestID, employeeID, harvestDate, boxType, quantity)
 	if err != nil {
-		return ProtectedRateAmount{}, err
+		return 0, err
 	}
-	return c.encryptAmount(amountCents, aad)
+	if c == nil || c.amounts == nil {
+		return 0, ErrInvalidRateCipherConfig
+	}
+	value, err := c.amounts.Decrypt(context, amount)
+	return value, mapRateCipherError(err)
 }
 
-func (c *RateCipher) encryptAmount(amountCents int64, aad []byte) (ProtectedRateAmount, error) {
-	if c == nil || len(c.keys) == 0 {
-		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+func harvestItemRateContext(
+	userID, harvestID, employeeID string,
+	harvestDate time.Time,
+	boxType BoxType,
+	quantity int32,
+) (financialcipher.Context[rateCipherPurpose], error) {
+	// Data e quantidade fazem parte da identidade do item para a cifra. Rejeitá-las
+	// aqui evita produzir envelopes que não poderiam ser reconstruídos numa consulta.
+	if harvestDate.IsZero() || quantity <= 0 {
+		return financialcipher.Context[rateCipherPurpose]{}, ErrInvalidRateCipherContext
 	}
-	aead, ok := c.keys[c.activeVersion]
-	if !ok {
-		return ProtectedRateAmount{}, ErrInvalidRateCipherConfig
+	if boxType != BoxTypeNormal && boxType != BoxTypeMoagem {
+		return financialcipher.Context[rateCipherPurpose]{}, ErrInvalidBoxType
 	}
-	if amountCents <= 0 {
-		return ProtectedRateAmount{}, ErrInvalidRateAmount
-	}
-	// O domínio já usa centavos inteiros positivos; oito bytes preservam int64
-	// sem conversões decimais, ponto flutuante ou cópias de valor em texto.
-	var plaintext [ratePlaintextSize]byte
-	defer clear(plaintext[:])
-
-	// Transforma o int64 em uint64 para evitar problemas de sinal e usa big-endian
-	// 500 cents -> 00 00 00 00 00 00 01 F4
-	binary.BigEndian.PutUint64(plaintext[:], uint64(amountCents))
-	// Criptografa e autentica o valor, gerando nonce aleatório de 96 bits e tag de 128 bits.
-	sealed := aead.Seal(nil, nil, plaintext[:], aad)
-	// O esquema tem campos separados. Extraímos o prefixo de 96 bits gerado
-	// pela biblioteca e copiamos os slices para não compartilhar seus buffers.
-	return ProtectedRateAmount{
-		// separa o nonce do restante do envelope, que inclui a tag de autenticação
-		Nonce:      append([]byte(nil), sealed[:rateNonceSize]...),
-		Ciphertext: append([]byte(nil), sealed[rateNonceSize:]...),
-		KeyVersion: c.activeVersion,
+	// A data é reduzida ao dia de calendário e a quantidade é texto decimal estável;
+	// essa representação precisa permanecer igual para preservar a leitura histórica.
+	return financialcipher.Context[rateCipherPurpose]{
+		Purpose:  harvestItemRatePurpose,
+		UserID:   userID,
+		RecordID: harvestID,
+		Attributes: []string{
+			employeeID,
+			rateDate(harvestDate).Format("2006-01-02"),
+			string(boxType),
+			strconv.FormatInt(int64(quantity), 10),
+		},
 	}, nil
 }
 
-// Decrypt só devolve centavos após autenticar envelope, conta e registro.
-// Versão ausente, material incorreto e adulteração não expõem detalhes privados.
-func (c *RateCipher) Decrypt(userID, rateID string, amount ProtectedRateAmount) (int64, error) {
-	aead, err := c.aeadForProtectedAmount(amount)
-	if err != nil {
-		return 0, err
+func mapRateCipherError(err error) error {
+	// O serviço de colheitas conhece erros do próprio domínio, não os detalhes do
+	// pacote compartilhado. errors.Is preserva o mapeamento mesmo se o erro for envolvido.
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, financialcipher.ErrInvalidConfig):
+		return ErrInvalidRateCipherConfig
+	case errors.Is(err, financialcipher.ErrInvalidContext):
+		return ErrInvalidRateCipherContext
+	case errors.Is(err, financialcipher.ErrInvalidAmount):
+		return ErrInvalidRateAmount
+	case errors.Is(err, financialcipher.ErrInvalidProtected):
+		return ErrInvalidProtectedRateAmount
+	default:
+		return err
 	}
-	aad, err := rateAdditionalData(amount.KeyVersion, userID, rateID)
-	if err != nil {
-		return 0, err
-	}
-	return c.decryptAmount(amount, aad, aead)
 }
-
-// DecryptHarvestItemRate autentica o envelope com os mesmos campos usados na criação.
-func (c *RateCipher) DecryptHarvestItemRate(userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32, amount ProtectedRateAmount) (int64, error) {
-	aead, err := c.aeadForProtectedAmount(amount)
-	if err != nil {
-		return 0, err
-	}
-	aad, err := harvestItemRateAdditionalData(amount.KeyVersion, userID, harvestID, employeeID, harvestDate, boxType, quantity)
-	if err != nil {
-		return 0, err
-	}
-	return c.decryptAmount(amount, aad, aead)
-}
-
-// aeadForProtectedAmount valida o envelope antes de montar o AAD, pois uma
-// versão vazia faz o validador do contexto retornar outro erro de domínio.
-func (c *RateCipher) aeadForProtectedAmount(amount ProtectedRateAmount) (cipher.AEAD, error) {
-	if c == nil || len(c.keys) == 0 {
-		return nil, ErrInvalidRateCipherConfig
-	}
-	// Recupera a cifra correspondente à versão do envelope; versões antigas seguem válidas.
-	aead, ok := c.keys[amount.KeyVersion]
-	// O formato AES-GCM exige nonce de 12 bytes e 24 bytes para 8 bytes de valor mais a tag.
-	if !ok || len(amount.Nonce) != rateNonceSize || len(amount.Ciphertext) != ratePlaintextSize+aead.Overhead()-rateNonceSize {
-		return nil, ErrInvalidProtectedRateAmount
-	}
-	return aead, nil
-}
-
-func (c *RateCipher) decryptAmount(amount ProtectedRateAmount, aad []byte, aead cipher.AEAD) (int64, error) {
-	// Na encriptaçao, foi separado o nonce do ciphertext, temos que juntar
-	sealed := make([]byte, 0, len(amount.Nonce)+len(amount.Ciphertext))
-	sealed = append(sealed, amount.Nonce...)
-	sealed = append(sealed, amount.Ciphertext...)
-	// Descriptografa e autentica o envelope, devolvendo os centavos em claro.
-	plaintext, err := aead.Open(nil, nil, sealed, aad)
-	if err != nil {
-		return 0, ErrInvalidProtectedRateAmount
-	}
-	defer clear(plaintext)
-	// Converte de volta para int64, validando o domínio positivo. O envelope não pode
-	value := binary.BigEndian.Uint64(plaintext)
-	if value == 0 || value > math.MaxInt64 {
-		return 0, ErrInvalidProtectedRateAmount
-	}
-	return int64(value), nil
-}
-
-func rateAdditionalData(version, userID, rateID string) ([]byte, error) {
-	if version == "" || userID == "" || rateID == "" || strings.TrimSpace(version) != version || strings.TrimSpace(userID) != userID || strings.TrimSpace(rateID) != rateID || !utf8.ValidString(version) || !utf8.ValidString(userID) || !utf8.ValidString(rateID) {
-		return nil, ErrInvalidRateCipherContext
-	}
-	// JSON torna a composição inequívoca. Conta, registro, campo/formato e versão
-	// são autenticados sem serem cifrados, impedindo transplantar um valor entre eles.
-	data, err := json.Marshal([4]string{"agrofin.harvest-rate.amount.v1", version, userID, rateID})
-	if err != nil {
-		return nil, ErrInvalidRateCipherContext
-	}
-	return data, nil
-}
-
-func harvestItemRateAdditionalData(version, userID, harvestID, employeeID string, harvestDate time.Time, boxType BoxType, quantity int32) ([]byte, error) {
-	if version == "" || userID == "" || harvestID == "" || employeeID == "" || strings.TrimSpace(version) != version || strings.TrimSpace(userID) != userID || strings.TrimSpace(harvestID) != harvestID || strings.TrimSpace(employeeID) != employeeID || !utf8.ValidString(version) || !utf8.ValidString(userID) || !utf8.ValidString(harvestID) || !utf8.ValidString(employeeID) || harvestDate.IsZero() || quantity <= 0 {
-		return nil, ErrInvalidRateCipherContext
-	}
-	if boxType != BoxTypeNormal && boxType != BoxTypeMoagem {
-		return nil, ErrInvalidBoxType
-	}
-	// JSON evita ambiguidades entre campos concatenados. Tipo e quantidade também
-	// são autenticados para que um valor aplicado não seja deslocado para outro item.
-	data, err := json.Marshal([8]string{
-		"agrofin.harvest-entry.applied-rate.v1", version, userID, harvestID,
-		employeeID, rateDate(harvestDate).Format("2006-01-02"), string(boxType), strconv.FormatInt(int64(quantity), 10),
-	})
-	if err != nil {
-		return nil, ErrInvalidRateCipherContext
-	}
-	return data, nil
-}
-
-// EXEMPLO DE FUNCIONAMENTO DO AES-256-GCM
-//
-// Imagine que uma caixa de limão colhida custa R$ 5,00.
-// No sistema, esse valor é representado como 500 centavos.
-//
-// 1. CRIPTOGRAFANDO O VALOR
-//
-//    protected, err := rateCipher.Encrypt("user-123", "rate-456", 500)
-//
-//    O resultado possui três informações:
-//
-//    ProtectedRateAmount{
-//        Ciphertext: []byte{...}, // Valor criptografado + tag de autenticação (24 bytes)
-//        Nonce:      []byte{...}, // Número aleatório gerado para essa operação (12 bytes)
-//        KeyVersion: "v1",       // Versão da chave utilizada
-//    }
-//
-//    Esses três campos são armazenados no PostgreSQL.
-//    O valor original (500) não é armazenado em texto puro.
-//
-// 2. DESCRIPTOGRAFANDO O VALOR
-//
-//    amount, err := rateCipher.Decrypt("user-123", "rate-456", protected)
-//
-//    Resultado:
-//        amount = 500
-//        err = nil
-//
-//    O sistema recupera o valor original de R$ 5,00.
-//
-// 3. CRIPTOGRAFANDO O MESMO VALOR NOVAMENTE
-//
-//    first, _ := rateCipher.Encrypt("user-123", "rate-456", 500)
-//    second, _ := rateCipher.Encrypt("user-123", "rate-456", 500)
-//
-//    first.Ciphertext != second.Ciphertext  // Normalmente true
-//    first.Nonce != second.Nonce            // Normalmente true
-//
-//    Isso acontece porque cada operação utiliza um nonce aleatório.
-//    Mesmo assim, ambos podem ser descriptografados para 500 centavos.
-//
-// 4. TENTANDO DESCRIPTOGRAFAR COM OUTRO USUÁRIO
-//
-//    amount, err := rateCipher.Decrypt("user-999", "rate-456", protected)
-//
-//    Resultado:
-//        amount = 0
-//        err = ErrInvalidProtectedRateAmount
-//
-//    O erro acontece porque o userID faz parte do AAD (dados autenticados).
-//    O valor foi criptografado para "user-123", não para "user-999".
-//
-// 5. TENTANDO UTILIZAR O VALOR EM OUTRA TARIFA
-//
-//    amount, err := rateCipher.Decrypt("user-123", "rate-999", protected)
-//
-//    Resultado:
-//        amount = 0
-//        err = ErrInvalidProtectedRateAmount
-//
-//    Isso impede copiar o valor criptografado de uma tarifa para outra,
-//    mesmo quando ambas pertencem ao mesmo usuário.
-//
-// 6. ALTERANDO OS BYTES CRIPTOGRAFADOS
-//
-//    adulterado := ProtectedRateAmount{
-//        Ciphertext: append([]byte(nil), protected.Ciphertext...),
-//        Nonce:      append([]byte(nil), protected.Nonce...),
-//        KeyVersion: protected.KeyVersion,
-//    }
-//
-//    adulterado.Ciphertext[0] ^= 0x01
-//
-//    amount, err := rateCipher.Decrypt("user-123", "rate-456", adulterado)
-//
-//    Resultado:
-//        amount = 0
-//        err = ErrInvalidProtectedRateAmount
-//
-//    O AES-GCM detecta que o conteúdo foi modificado e rejeita a operação.
-//
-// RESUMO:
-//
-//    Valor original:      500 centavos (R$ 5,00)
-//    Criptografia:        AES-256-GCM
-//    Chave:               32 bytes (secreta)
-//    Nonce:               12 bytes (não secreto)
-//    Ciphertext:          24 bytes (8 bytes cifrados + 16 bytes de autenticação)
-//    Versão da chave:     "v1"
-//    Dados autenticados:  versão + userID + rateID + identificador do campo
-//
-// A criptografia protege a confidencialidade do valor.
-// A autenticação detecta alterações e impede transplantar o valor
-// para outra conta ou tarifa sem que a descriptografia falhe.
