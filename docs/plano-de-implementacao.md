@@ -22,7 +22,7 @@ agrofin/
         insumos/
         pulverizacoes/
         relatorios/
-        platform/             # banco, autenticação, criptografia
+        platform/             # banco e utilidades transversais da API
       migrations/
     web/
       src/
@@ -45,6 +45,8 @@ agrofin/
 
 No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do projeto. As rotas de uma funcionalidade pertencem ao pacote dessa funcionalidade, como `internal/funcionarios`; `cmd/api` compõe as rotas e inicia o servidor. `platform` recebe infraestrutura transversal apenas quando ela surgir. Os pacotes devem refletir responsabilidades reais, sem impor camadas vazias. Uma adaptação de entrada para a Vercel pode chamar a mesma aplicação HTTP usada localmente. No React, organizar por `features/<domínio>`, seguindo o padrão informado pelo usuário; código compartilhado fica em `shared` quando for realmente reutilizado.
 
+`platform/httpjson.Decode[T]` centraliza o protocolo repetido dos corpos JSON: exige `application/json`, limita a leitura a 4 KiB, rejeita campos desconhecidos e conteúdo após o primeiro valor. O tipo genérico deixa cada pacote declarar o DTO que espera; o helper devolve o valor tipado e um erro de protocolo, enquanto cada handler mantém suas próprias mensagens e validações de domínio. O ponteiro de retorno também permite que cada endpoint decida como tratar `null`. `platform/uuid.New` gera UUID v4 na aplicação para os lançamentos que precisam do ID antes da cifra; isso não substitui IDs de entidades cuja criação ainda é feita pelo banco.
+
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
 O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, as tarifas, os lançamentos de caixas e o registro de diárias estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Pagamentos, fechamento semanal, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
@@ -59,7 +61,7 @@ Os caminhos HTTP de criação, listagem, renomeação, desativação e reativaç
 | `service.go` | `Service.Create` valida o nome e monta a entidade `Employee` com o ID do gerente e estado ativo inicial antes de chamar a persistência. `Service.List` delega a consulta com o ID do gerente, o filtro opcional de estado e o contexto recebidos. `Service.Rename` reutiliza a normalização do nome e monta a entidade antes da atualização. `Service.Deactivate` monta a entidade com identificação e estado inativo; `Service.Reactivate` faz o mesmo com estado ativo. |
 | `repository.go` | `Repository.Create` recebe um `Employee` validado, executa o `INSERT` parametrizado e devolve a entidade com o ID gerado pelo banco. `Repository.List` filtra por gerente, aplica o estado quando informado e ordena por nome e ID. `Repository.Rename` atualiza somente o nome, filtrando por ID e gerente, e traduz ausência para `ErrNotFound`. `Repository.Deactivate` atualiza o estado e a data sem excluir o registro; repetição preserva a primeira data e ausência também vira `ErrNotFound`. `Repository.Reactivate` restaura o estado e limpa o marcador de desativação sob o mesmo dono. |
 | `handler.go` | Compõe o fluxo HTTP: obtém o principal autenticado, chama o serviço com o contexto da requisição e delega a entrada e a resposta às funções auxiliares. |
-| `handler_request.go` | Decodifica o filtro opcional de estado e compartilha o DTO e o decodificador de nome entre cadastro e renomeação; valida tipo de mídia, tamanho e formato do JSON e UUID do caminho; rejeita corpo nas operações de desativação e reativação. Regras do nome ficam no serviço. |
+| `handler_request.go` | Decodifica o filtro opcional de estado e compartilha o DTO e o decodificador de nome entre cadastro e renomeação; usa `platform/httpjson` para tipo de mídia, limite e JSON estrito, valida o UUID do caminho e rejeita corpo nas operações de desativação e reativação. Regras do nome ficam no serviço. |
 | `errors.go` | Define os erros de domínio `ErrInvalidName` e `ErrNotFound`, sem dependência de HTTP ou do driver. |
 | `handler_response.go` | Define os DTOs de saída, converte erros da aplicação em status HTTP e serializa as respostas JSON. |
 | `routes.go` | Registra criação, listagem, renomeação, desativação e reativação, todas protegidas pelo middleware de sessão. |
@@ -237,14 +239,14 @@ O serviço `CreateRate` já está implementado e testado com dependências contr
 Entrada de tarifa geral
   → Validar e normalizar Rate
   → Consultar sobreposição por gerente, tipo e vigência
-  → Obter ID gerado pela persistência
+  → Gerar UUID v4 na aplicação
   → Cifrar os centavos, autenticando gerente e ID da tarifa
   → Enviar ProtectedRate para gravação
 ```
 
 As interfaces privadas ficam junto do serviço que as consome. `RatePeriod` delimita a consulta sem transmitir valor financeiro; `ProtectedRate` contém somente metadados e `ProtectedRateAmount`, sem campo de centavos em claro. O retorno `Rate` mantém os centavos em memória para o chamador autorizado. O serviço preserva o contexto em todas as chamadas de persistência e interrompe o fluxo em erros, sobreposição ou cancelamento, sem solicitar uma escrita parcial.
 
-`NextRateID` obtém `gen_random_uuid()` do PostgreSQL antes da cifra e usa esse ID no `INSERT` final, preservando a geração técnica no banco sem inserir uma tarifa incompleta. O ID precisa existir antes da cifra porque é autenticado junto com a conta. A consulta de sobreposição no serviço é complementada pela exclusão existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório traduz a restrição para `ErrRateOverlap`. A integração já testa essa concorrência com o banco real.
+O serviço gera um UUID v4 na aplicação antes da cifra e usa o mesmo ID no `INSERT` final; isso mantém a autenticação do registro pela cifra sem uma consulta isolada ao PostgreSQL nem uma tarifa incompleta. A consulta de sobreposição no serviço é complementada pela exclusão existente no PostgreSQL; se uma disputa ocorrer entre consulta e gravação, o repositório traduz a restrição para `ErrRateOverlap`. A integração já testa essa concorrência com o banco real.
 
 `internal/financialcipher` compartilha a cifra AES-256-GCM da biblioteca padrão entre os domínios financeiros. O valor é codificado como oito bytes de centavos inteiros positivos, sem ponto flutuante. O envelope mantém ciphertext com autenticação, nonce separado e versão da chave. `colheitas` e `diarias` fornecem propósitos distintos nos dados adicionais autenticados, além dos IDs do gerente e do registro; os itens de colheita também vinculam funcionário, data, tipo e quantidade. A codificação preserva o formato anterior das tarifas e fotografias para que dados já gravados continuem legíveis. O nonce aleatório usa `cipher.NewGCMWithRandomNonce`; o controle global do limite por chave permanece pendente. [Documentação oficial de Go](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
 
@@ -261,7 +263,7 @@ O `Repository` de `internal/colheitas` já implementa as três operações consu
 | Operação | Comportamento implementado |
 | --- | --- |
 | `HasRateOverlap` | Consulta `EXISTS` por gerente, tipo e escopo geral, usando interseção de `daterange` com início inclusivo e fim exclusivo. Fim ausente representa período aberto. Não lê valores financeiros. |
-| `NextRateID` | Executa `SELECT gen_random_uuid()::text` antes da cifra, sem inserir uma linha parcial ou gerar ID na aplicação. |
+| Geração do ID | O serviço gera um UUID v4 na aplicação antes da cifra; o repositório apenas persiste a entidade protegida. |
 | `CreateRate` | Insere ID, gerente, tipo, ciphertext, nonce, versão e vigência em uma única instrução, fixando `employee_id = NULL`. Não recebe centavos em claro. |
 
 Períodos adjacentes são permitidos: uma tarifa que termina em 10/11 não impede outra de começar em 10/11. Sobreposição só existe dentro da mesma conta e tipo; tarifas de normal e moagem ou contas distintas não disputam o mesmo intervalo.
@@ -270,7 +272,7 @@ A consulta do serviço ajuda a detectar o conflito antes da cifra, mas duas requ
 
 Não foi necessária migração. A única instrução de inserção grava metadados e envelope juntos; as consultas anteriores não inserem estado parcial e não exigem uma transação explícita neste caso de uso.
 
-Os testes de integração existentes usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, geração de IDs sem linha parcial, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado foram verificados nos três métodos originais de escrita. `ListRates` foi acrescentado neste recorte e ainda não tem cobertura automatizada dedicada.
+Os testes de integração existentes usam `TEST_DATABASE_URL` e contas exclusivas da execução. Conferem vigência aberta, limites adjacentes, isolamento por conta/tipo, tarifa persistida com o UUID criado pelo serviço, envelope recuperado do banco com a chave histórica e falha com chave incorreta. Uma barreira faz duas criações passarem pela consulta antes de liberar as escritas: exatamente uma persiste, e a outra retorna `ErrRateOverlap`. Essa verificação usa o serviço, cifra e PostgreSQL reais. Cancelamento e prazo esgotado são verificados na consulta de sobreposição e na gravação. `ListRates` foi acrescentado neste recorte e ainda não tem cobertura automatizada dedicada.
 
 O repositório foi testado com PostgreSQL real e agora é usado pelas rotas HTTP protegidas `GET` e `POST /harvest-rates`. A criação fica em uma pasta Manual da coleção Postman v2.1 por gravar um registro persistente. A inicialização exige chaves do ambiente; seleção do provedor operacional e controles globais de uso/rotação continuam pendentes antes de produção. Não foi necessária migração.
 
@@ -314,7 +316,7 @@ Exemplo:
 }
 ```
 
-O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O valor unitário de cada item é cifrado como uma fotografia vinculada ao dono, lançamento, funcionário, data, tipo e quantidade; mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
+O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O UUID v4 do lançamento é gerado na aplicação antes da cifra, pois também autentica cada fotografia vinculada ao dono, funcionário, data, tipo e quantidade. Mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
 
 Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. A edição está fora da V1, e o resumo semanal de pagamento continua pendente. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
 
@@ -342,7 +344,7 @@ Esta criação ainda não oferece chave de idempotência: repetir um POST aceito
 
 `POST /api/v1/daily-work` exige sessão e registra um funcionário, dia, valor positivo em centavos e observação opcional. O `user_id` vem exclusivamente do principal autenticado; o corpo não pode escolher o gerente. O funcionário precisa pertencer à conta e estar ativo; funcionário alheio ou inexistente retorna `404`, e funcionário inativo retorna `409`.
 
-O domínio normaliza o UUID e a data antes de chamar as dependências. O serviço verifica o funcionário, gera um ID antes da cifra e entrega ao repositório apenas `ProtectedDailyWork`. A cifra financeira compartilhada usa propósito próprio e autentica gerente, ID do lançamento, funcionário e data; os centavos em claro não chegam à persistência. O repositório revalida e mantém um bloqueio do funcionário dentro da transação de inserção, evitando corrida com a desativação. Não foi necessária migração porque `daily_work` já existia no esquema.
+O domínio normaliza o UUID e a data antes de chamar as dependências. O serviço verifica o funcionário, gera UUID v4 localmente antes da cifra e entrega ao repositório apenas `ProtectedDailyWork`. A cifra financeira compartilhada usa propósito próprio e autentica gerente, ID do lançamento, funcionário e data; os centavos em claro não chegam à persistência. O repositório revalida e mantém um bloqueio do funcionário dentro da transação de inserção, evitando corrida com a desativação. Não foi necessária migração porque `daily_work` já existia no esquema.
 
 A resposta `201` devolve o valor em centavos para a sessão autenticada e usa `Cache-Control: no-store`. UUID, data, valor, JSON ou campos desconhecidos inválidos retornam `400`; `415` indica tipo de mídia incorreto; `413`, corpo acima de 4 KiB; cancelamento e prazo esgotado retornam `408` e `504`. Falhas internas retornam mensagem genérica sem registrar o valor financeiro.
 
