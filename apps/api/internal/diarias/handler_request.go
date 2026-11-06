@@ -1,13 +1,12 @@
 package diarias
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
-	"mime"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
 
 const dailyWorkDateLayout = "2006-01-02"
@@ -20,30 +19,12 @@ type createDailyWorkRequest struct {
 }
 
 func decodeCreateDailyWorkRequest(w http.ResponseWriter, r *http.Request) (CreateDailyWorkInput, bool) {
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	request, err := httpjson.Decode[createDailyWorkRequest](w, r)
+	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
 		return CreateDailyWorkInput{}, false
 	}
-
-	// O lançamento é pequeno; limitar o corpo evita consumir memória sem limite.
-	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var request *createDailyWorkRequest
-	err = decoder.Decode(&request)
-	if err == nil && request != nil {
-		var extra any
-		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
-			if trailingErr == nil {
-				err = errors.New("mais de um valor json")
-			} else {
-				err = trailingErr
-			}
-		}
-	}
-	var sizeErr *http.MaxBytesError
-	if errors.As(err, &sizeErr) {
+	if errors.Is(err, httpjson.ErrBodyTooLarge) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "Corpo da requisição excede 4 KiB"})
 		return CreateDailyWorkInput{}, false
 	}

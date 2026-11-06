@@ -1,11 +1,10 @@
 package auth
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
-	"mime"
 	"net/http"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
 
 type credentialsRequest struct {
@@ -35,8 +34,8 @@ type passwordChangeRequest struct {
 
 // decodeCredentialsRequest valida o formato de login; as regras do login ficam no Service.
 func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (*credentialsRequest, bool) {
-	var input *credentialsRequest
-	if !decodeJSONRequest(w, r, &input) {
+	input, ok := decodeJSONRequest[credentialsRequest](w, r)
+	if !ok {
 		return nil, false
 	}
 	if input == nil || input.LoginName == "" || input.Password == "" {
@@ -48,8 +47,8 @@ func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (*credenti
 
 // decodeRegistrationRequest exige nome de exibição e credenciais no cadastro de conta.
 func decodeRegistrationRequest(w http.ResponseWriter, r *http.Request) (*registrationRequest, bool) {
-	var input *registrationRequest
-	if !decodeJSONRequest(w, r, &input) {
+	input, ok := decodeJSONRequest[registrationRequest](w, r)
+	if !ok {
 		return nil, false
 	}
 	if input == nil || input.Name == "" || input.LoginName == "" || input.Password == "" {
@@ -61,8 +60,8 @@ func decodeRegistrationRequest(w http.ResponseWriter, r *http.Request) (*registr
 
 // decodeManagerNamePatchRequest aceita somente name; login_name continua imutável pela API.
 func decodeManagerNamePatchRequest(w http.ResponseWriter, r *http.Request) (*managerNamePatchRequest, bool) {
-	var input *managerNamePatchRequest
-	if !decodeJSONRequest(w, r, &input) {
+	input, ok := decodeJSONRequest[managerNamePatchRequest](w, r)
+	if !ok {
 		return nil, false
 	}
 	if input == nil || input.Name == "" {
@@ -75,8 +74,8 @@ func decodeManagerNamePatchRequest(w http.ResponseWriter, r *http.Request) (*man
 // decodeManagerStatusPatchRequest exige active explícito para não interpretar
 // um PATCH vazio como uma ordem de desativação.
 func decodeManagerStatusPatchRequest(w http.ResponseWriter, r *http.Request) (*managerStatusPatchRequest, bool) {
-	var input *managerStatusPatchRequest
-	if !decodeJSONRequest(w, r, &input) {
+	input, ok := decodeJSONRequest[managerStatusPatchRequest](w, r)
+	if !ok {
 		return nil, false
 	}
 	if input == nil || input.Active == nil {
@@ -89,8 +88,8 @@ func decodeManagerStatusPatchRequest(w http.ResponseWriter, r *http.Request) (*m
 // decodePasswordChangeRequest aceita as duas senhas necessárias; confirmação
 // de senha é validação de formulário e não precisa ser enviada à API.
 func decodePasswordChangeRequest(w http.ResponseWriter, r *http.Request) (*passwordChangeRequest, bool) {
-	var input *passwordChangeRequest
-	if !decodeJSONRequest(w, r, &input) {
+	input, ok := decodeJSONRequest[passwordChangeRequest](w, r)
+	if !ok {
 		return nil, false
 	}
 	if input == nil || input.CurrentPassword == "" || input.NewPassword == "" {
@@ -100,40 +99,20 @@ func decodePasswordChangeRequest(w http.ResponseWriter, r *http.Request) (*passw
 	return input, true
 }
 
-// decodeJSONRequest centraliza limites e regras do protocolo para os corpos da auth.
-// O parâmetro recebe um ponteiro para ponteiro; assim o chamador distingue JSON null.
-func decodeJSONRequest(w http.ResponseWriter, r *http.Request, target any) bool {
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+// decodeJSONRequest adapta os erros comuns do protocolo às mensagens usadas
+// pelos endpoints de auth, mantendo a validação dos campos em cada decoder.
+func decodeJSONRequest[T any](w http.ResponseWriter, r *http.Request) (*T, bool) {
+	input, err := httpjson.Decode[T](w, r)
+	if err == nil {
+		return input, true
+	}
+	switch {
+	case errors.Is(err, httpjson.ErrUnsupportedMediaType):
 		writeError(w, http.StatusUnsupportedMediaType, "envie o corpo como application/json")
-		return false
-	}
-
-	// Corpos pequenos limitam memória e evitam aceitar campos que o endpoint não conhece.
-	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	decodeErr := decoder.Decode(target)
-	if decodeErr == nil {
-		// Um segundo Decode precisa encontrar EOF; isso rejeita outro objeto ou lixo
-		// depois do primeiro JSON válido.
-		var extra any
-		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
-			if trailingErr == nil {
-				decodeErr = errors.New("mais de um valor json")
-			} else {
-				decodeErr = trailingErr
-			}
-		}
-	}
-	var sizeErr *http.MaxBytesError
-	if errors.As(decodeErr, &sizeErr) {
+	case errors.Is(err, httpjson.ErrBodyTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, "corpo da requisição excede 4 KiB")
-		return false
-	}
-	if decodeErr != nil {
+	default:
 		writeError(w, http.StatusBadRequest, "envie um único objeto JSON válido")
-		return false
 	}
-	return true
+	return nil, false
 }

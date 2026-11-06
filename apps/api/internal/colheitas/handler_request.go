@@ -1,14 +1,13 @@
 package colheitas
 
 import (
-	"encoding/json"
 	"errors"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
 
 const rateDateLayout = "2006-01-02"
@@ -32,31 +31,12 @@ type createHarvestItemRequest struct {
 }
 
 func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRateInput, bool) {
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	request, err := httpjson.Decode[createRateRequest](w, r)
+	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
 		return CreateRateInput{}, false
 	}
-
-	// O payload é pequeno e fechado; o limite e os campos estritos evitam aceitar
-	// propriedades como user_id ou employee_id que não pertencem à entrada.
-	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var request *createRateRequest
-	err = decoder.Decode(&request)
-	if err == nil && request != nil {
-		var extra any
-		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
-			if trailingErr == nil {
-				err = errors.New("mais de um valor JSON")
-			} else {
-				err = trailingErr
-			}
-		}
-	}
-	var sizeErr *http.MaxBytesError
-	if errors.As(err, &sizeErr) {
+	if errors.Is(err, httpjson.ErrBodyTooLarge) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "Corpo da requisição excede 4 KiB"})
 		return CreateRateInput{}, false
 	}
@@ -87,31 +67,12 @@ func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRate
 }
 
 func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateHarvestInput, bool) {
-	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" {
+	request, err := httpjson.Decode[createHarvestEntryRequest](w, r)
+	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
 		return CreateHarvestInput{}, false
 	}
-
-	// Até dois tipos de caixa formam um lançamento pequeno; o limite evita que
-	// um corpo excessivo ocupe memória antes da validação dos itens.
-	r.Body = http.MaxBytesReader(w, r.Body, 4*1024)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	var request *createHarvestEntryRequest
-	err = decoder.Decode(&request)
-	if err == nil && request != nil {
-		var extra any
-		if trailingErr := decoder.Decode(&extra); trailingErr != io.EOF {
-			if trailingErr == nil {
-				err = errors.New("mais de um valor JSON")
-			} else {
-				err = trailingErr
-			}
-		}
-	}
-	var sizeErr *http.MaxBytesError
-	if errors.As(err, &sizeErr) {
+	if errors.Is(err, httpjson.ErrBodyTooLarge) {
 		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "Corpo da requisição excede 4 KiB"})
 		return CreateHarvestInput{}, false
 	}
