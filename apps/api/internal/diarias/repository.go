@@ -38,16 +38,6 @@ func (r *Repository) CheckActiveEmployee(ctx context.Context, userID, employeeID
 	return nil
 }
 
-// NextDailyWorkID gera o ID antes da cifra, pois ele participa do contexto
-// autenticado do envelope e impede copiar a cifra entre lançamentos.
-func (r *Repository) NextDailyWorkID(ctx context.Context) (string, error) {
-	var id string
-	if err := r.pool.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&id); err != nil {
-		return "", fmt.Errorf("gerar identificador da diária: %w", err)
-	}
-	return id, nil
-}
-
 // CreateDailyWork revalida e bloqueia o funcionário na mesma transação da
 // inserção, evitando aceitar diária enquanto outra operação o desativa.
 func (r *Repository) CreateDailyWork(ctx context.Context, work ProtectedDailyWork) error {

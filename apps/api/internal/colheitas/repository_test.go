@@ -87,20 +87,6 @@ func TestRateRepositoryIntegration(t *testing.T) {
 		return stored
 	}
 
-	firstID, err := repo.NextRateID(ctx)
-	require.NoError(t, err)
-	secondID, err := repo.NextRateID(ctx)
-	require.NoError(t, err)
-	assert.NotEqual(t, firstID, secondID)
-	var canonical string
-	err = pool.QueryRow(ctx, "SELECT $1::uuid::text", firstID).Scan(&canonical)
-	require.NoError(t, err)
-	assert.Equal(t, firstID, canonical)
-	var count int
-	err = pool.QueryRow(ctx, "SELECT count(*) FROM harvest_rates WHERE id::text = ANY($1)", []string{firstID, secondID}).Scan(&count)
-	require.NoError(t, err)
-	assert.Zero(t, count, "gerar IDs não pode inserir tarifas parciais")
-
 	normal := create(userIDs[0], BoxTypeNormal, 500, &end)
 	open := create(userIDs[0], BoxTypeMoagem, 200, nil)
 	other := create(userIDs[1], BoxTypeNormal, 700, &end)
@@ -208,6 +194,7 @@ func TestRateRepositoryIntegration(t *testing.T) {
 		}
 		assert.Equal(t, 1, successes)
 		assert.Equal(t, 1, conflicts)
+		var count int
 		err = pool.QueryRow(ctx, "SELECT count(*) FROM harvest_rates WHERE user_id = $1", userIDs[2]).Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 1, count)
@@ -224,9 +211,6 @@ func TestRateRepositoryIntegration(t *testing.T) {
 		}{{canceledCtx, context.Canceled}, {expiredCtx, context.DeadlineExceeded}} {
 			_, err := repo.HasRateOverlap(tt.ctx, RatePeriod{UserID: normal.UserID, BoxType: BoxTypeNormal, ValidFrom: start, ValidUntil: &end})
 			assert.ErrorIs(t, err, tt.err)
-			id, err := repo.NextRateID(tt.ctx)
-			assert.ErrorIs(t, err, tt.err)
-			assert.Empty(t, id)
 			err = repo.CreateRate(tt.ctx, stored)
 			assert.ErrorIs(t, err, tt.err)
 		}

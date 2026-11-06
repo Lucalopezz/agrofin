@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 // CreateRateInput contém somente os dados da tarifa geral por tipo. O gerente
@@ -39,7 +41,6 @@ type ProtectedRate struct {
 // traduz a disputa concorrente para ErrRateOverlap.
 type rateRepository interface {
 	HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error)
-	NextRateID(ctx context.Context) (string, error)
 	CreateRate(ctx context.Context, rate ProtectedRate) error
 	ListRates(ctx context.Context, userID string) ([]ProtectedRate, error)
 }
@@ -88,10 +89,9 @@ func (s *Service) CreateRate(ctx context.Context, userID string, input CreateRat
 	if overlaps {
 		return Rate{}, ErrRateOverlap
 	}
-	// O ID deve existir antes da cifra para autenticar também o registro. A
-	// persistência obtém gen_random_uuid() do PostgreSQL sem inserir uma tarifa
-	// parcial; a gravação usa esse mesmo ID depois de o valor estar protegido.
-	rate.ID, err = s.repo.NextRateID(ctx)
+	// O ID é criado na aplicação porque a cifra precisa autenticá-lo antes da
+	// primeira gravação; gerar esse valor não exige uma consulta ao PostgreSQL.
+	rate.ID, err = uuid.New()
 	if err != nil {
 		return Rate{}, err
 	}

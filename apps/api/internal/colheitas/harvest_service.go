@@ -6,11 +6,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type harvestRepository interface {
 	CheckActiveEmployee(ctx context.Context, userID, employeeID string) error
-	NextHarvestID(ctx context.Context) (string, error)
 	RateForDate(ctx context.Context, userID string, boxType BoxType, date time.Time) (ProtectedRate, error)
 	CreateHarvest(ctx context.Context, harvest ProtectedHarvest) error
 	ListHarvests(ctx context.Context, userID string, period HarvestPeriod) ([]ProtectedHarvestRecord, error)
@@ -67,9 +68,13 @@ func (s *HarvestService) Create(ctx context.Context, userID string, input Create
 	}
 
 	// O ID precisa existir antes da cifra: ele compõe o AAD e impede que o
-	// envelope de um item seja copiado para outro lançamento.
-	harvest.ID, err = s.repo.NextHarvestID(ctx)
+	// envelope de um item seja copiado para outro lançamento. Como UUID é
+	// independente do estado do banco, gerá-lo localmente evita uma consulta extra.
+	harvest.ID, err = uuid.New()
 	if err != nil {
+		return Harvest{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return Harvest{}, err
 	}
 	protected := ProtectedHarvest{

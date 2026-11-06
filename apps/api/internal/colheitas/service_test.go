@@ -14,17 +14,12 @@ import (
 // retorna um erro explícito, revelando que o serviço avançou além do esperado.
 type rateRepositoryStub struct {
 	overlap func(context.Context, RatePeriod) (bool, error)
-	nextID  func(context.Context) (string, error)
 	create  func(context.Context, ProtectedRate) error
 	list    func(context.Context, string) ([]ProtectedRate, error)
 }
 
 func (r rateRepositoryStub) HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error) {
 	return r.overlap(ctx, period)
-}
-
-func (r rateRepositoryStub) NextRateID(ctx context.Context) (string, error) {
-	return r.nextID(ctx)
 }
 
 func (r rateRepositoryStub) CreateRate(ctx context.Context, rate ProtectedRate) error {
@@ -59,6 +54,7 @@ func TestServiceCreateRate(t *testing.T) {
 	protector, err := NewRateCipher("v1", map[string][]byte{"v1": testRateKey(1)})
 	require.NoError(t, err)
 	calls := []string{}
+	var generatedID string
 	repo := rateRepositoryStub{
 		overlap: func(gotCtx context.Context, period RatePeriod) (bool, error) {
 			calls = append(calls, "consulta")
@@ -66,15 +62,10 @@ func TestServiceCreateRate(t *testing.T) {
 			assert.Equal(t, RatePeriod{UserID: "user-id", BoxType: BoxTypeNormal, ValidFrom: expectedStart, ValidUntil: &expectedEnd}, period)
 			return false, nil
 		},
-		nextID: func(gotCtx context.Context) (string, error) {
-			calls = append(calls, "id")
-			assert.Same(t, ctx, gotCtx)
-			return "rate-id", nil
-		},
 		create: func(gotCtx context.Context, rate ProtectedRate) error {
 			calls = append(calls, "gravação")
 			assert.Same(t, ctx, gotCtx)
-			assert.Equal(t, "rate-id", rate.ID)
+			assert.Equal(t, generatedID, rate.ID)
 			assert.Equal(t, "user-id", rate.UserID)
 			assert.Equal(t, BoxTypeNormal, rate.BoxType)
 			assert.Equal(t, expectedStart, rate.ValidFrom)
@@ -90,14 +81,22 @@ func TestServiceCreateRate(t *testing.T) {
 	}
 	observedProtector := rateAmountProtectorFunc(func(userID, rateID string, cents int64) (ProtectedRateAmount, error) {
 		calls = append(calls, "cifra")
+		generatedID = rateID
 		return protector.Encrypt(userID, rateID, cents)
 	})
 	got, err := NewService(repo, observedProtector).CreateRate(ctx, "user-id", CreateRateInput{
 		BoxType: BoxTypeNormal, AmountCents: 500, ValidFrom: start, ValidUntil: &end,
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"consulta", "id", "cifra", "gravação"}, calls)
-	assert.Equal(t, Rate{ID: "rate-id", UserID: "user-id", BoxType: BoxTypeNormal, AmountCents: 500, ValidFrom: expectedStart, ValidUntil: &expectedEnd}, got)
+	assert.Equal(t, []string{"consulta", "cifra", "gravação"}, calls)
+	assert.NotEmpty(t, generatedID)
+	assert.Equal(t, generatedID, got.ID)
+	assert.Equal(t, "user-id", got.UserID)
+	assert.Equal(t, BoxTypeNormal, got.BoxType)
+	assert.EqualValues(t, 500, got.AmountCents)
+	assert.Equal(t, expectedStart, got.ValidFrom)
+	require.NotNil(t, got.ValidUntil)
+	assert.Equal(t, expectedEnd, *got.ValidUntil)
 }
 
 func TestServiceCreateRateRejectsInvalidInput(t *testing.T) {
@@ -133,24 +132,22 @@ func TestServiceCreateRateStopsOnFailure(t *testing.T) {
 		name               string
 		overlap            bool
 		checkErr           error
-		idErr              error
 		protectErr         error
 		createErr          error
-		cancelAfterID      bool
+		cancelAfterOverlap bool
 		cancelAfterProtect bool
 		expectedErr        error
 		expectedCalls      []string
 	}{
 		{name: "falha na consulta", checkErr: failure, expectedErr: failure, expectedCalls: []string{"consulta"}},
 		{name: "vigência sobreposta", overlap: true, expectedErr: ErrRateOverlap, expectedCalls: []string{"consulta"}},
-		{name: "falha no id", idErr: failure, expectedErr: failure, expectedCalls: []string{"consulta", "id"}},
-		{name: "falha na proteção", protectErr: failure, expectedErr: failure, expectedCalls: []string{"consulta", "id", "cifra"}},
-		{name: "falha na gravação", createErr: failure, expectedErr: failure, expectedCalls: []string{"consulta", "id", "cifra", "gravação"}},
+		{name: "falha na proteção", protectErr: failure, expectedErr: failure, expectedCalls: []string{"consulta", "cifra"}},
+		{name: "falha na gravação", createErr: failure, expectedErr: failure, expectedCalls: []string{"consulta", "cifra", "gravação"}},
 		// A restrição do banco será a última defesa quando outra requisição
 		// gravar um intervalo conflitante depois da consulta do serviço.
-		{name: "conflito concorrente traduzido", createErr: ErrRateOverlap, expectedErr: ErrRateOverlap, expectedCalls: []string{"consulta", "id", "cifra", "gravação"}},
-		{name: "cancelamento antes da cifra", cancelAfterID: true, expectedErr: context.Canceled, expectedCalls: []string{"consulta", "id"}},
-		{name: "cancelamento antes da escrita", cancelAfterProtect: true, expectedErr: context.Canceled, expectedCalls: []string{"consulta", "id", "cifra"}},
+		{name: "conflito concorrente traduzido", createErr: ErrRateOverlap, expectedErr: ErrRateOverlap, expectedCalls: []string{"consulta", "cifra", "gravação"}},
+		{name: "cancelamento após consulta", cancelAfterOverlap: true, expectedErr: context.Canceled, expectedCalls: []string{"consulta"}},
+		{name: "cancelamento antes da escrita", cancelAfterProtect: true, expectedErr: context.Canceled, expectedCalls: []string{"consulta", "cifra"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -161,15 +158,10 @@ func TestServiceCreateRateStopsOnFailure(t *testing.T) {
 				overlap: func(gotCtx context.Context, period RatePeriod) (bool, error) {
 					assert.Same(t, ctx, gotCtx)
 					calls = append(calls, "consulta")
-					return tt.overlap, tt.checkErr
-				},
-				nextID: func(gotCtx context.Context) (string, error) {
-					assert.Same(t, ctx, gotCtx)
-					calls = append(calls, "id")
-					if tt.cancelAfterID {
+					if tt.cancelAfterOverlap {
 						cancel()
 					}
-					return "rate-id", tt.idErr
+					return tt.overlap, tt.checkErr
 				},
 				create: func(gotCtx context.Context, rate ProtectedRate) error {
 					assert.Same(t, ctx, gotCtx)

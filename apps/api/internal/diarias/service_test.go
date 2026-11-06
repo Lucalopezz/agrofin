@@ -15,16 +15,11 @@ import (
 
 type dailyWorkRepositoryStub struct {
 	check  func(context.Context, string, string) error
-	nextID func(context.Context) (string, error)
 	create func(context.Context, ProtectedDailyWork) error
 }
 
 func (r dailyWorkRepositoryStub) CheckActiveEmployee(ctx context.Context, userID, employeeID string) error {
 	return r.check(ctx, userID, employeeID)
-}
-
-func (r dailyWorkRepositoryStub) NextDailyWorkID(ctx context.Context) (string, error) {
-	return r.nextID(ctx)
 }
 
 func (r dailyWorkRepositoryStub) CreateDailyWork(ctx context.Context, work ProtectedDailyWork) error {
@@ -47,6 +42,7 @@ func TestServiceCreateDailyWork(t *testing.T) {
 	cipher, err := NewCipher(keyring)
 	require.NoError(t, err)
 	calls := []string{}
+	var generatedID string
 	repo := dailyWorkRepositoryStub{
 		check: func(gotCtx context.Context, userID, employeeID string) error {
 			calls = append(calls, "funcionário")
@@ -55,15 +51,10 @@ func TestServiceCreateDailyWork(t *testing.T) {
 			assert.Equal(t, validEmployeeID, employeeID)
 			return nil
 		},
-		nextID: func(gotCtx context.Context) (string, error) {
-			calls = append(calls, "id")
-			assert.Same(t, ctx, gotCtx)
-			return "daily-a", nil
-		},
 		create: func(gotCtx context.Context, work ProtectedDailyWork) error {
 			calls = append(calls, "gravação")
 			assert.Same(t, ctx, gotCtx)
-			assert.Equal(t, "daily-a", work.ID)
+			assert.Equal(t, generatedID, work.ID)
 			assert.Equal(t, "user-a", work.UserID)
 			assert.Equal(t, validEmployeeID, work.EmployeeID)
 			assert.Equal(t, expectedDate, work.WorkDate)
@@ -76,7 +67,7 @@ func TestServiceCreateDailyWork(t *testing.T) {
 	}
 	protector := dailyWorkProtectorFunc(func(userID, dailyWorkID, employeeID string, date time.Time, cents int64) (ProtectedAmount, error) {
 		calls = append(calls, "cifra")
-		assert.Equal(t, "daily-a", dailyWorkID)
+		generatedID = dailyWorkID
 		assert.Equal(t, expectedDate, date)
 		return cipher.EncryptDailyWorkAmount(userID, dailyWorkID, employeeID, date, cents)
 	})
@@ -85,8 +76,9 @@ func TestServiceCreateDailyWork(t *testing.T) {
 		WorkDate:   inputDate, AmountCents: 8000, Notes: " Trabalho no talhão 2 ",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, []string{"funcionário", "id", "cifra", "gravação"}, calls)
-	assert.Equal(t, "daily-a", got.ID)
+	assert.Equal(t, []string{"funcionário", "cifra", "gravação"}, calls)
+	assert.NotEmpty(t, generatedID)
+	assert.Equal(t, generatedID, got.ID)
 	assert.Equal(t, "user-a", got.UserID)
 	assert.Equal(t, validEmployeeID, got.EmployeeID)
 	assert.Equal(t, expectedDate, got.WorkDate)
@@ -121,30 +113,31 @@ func TestServiceCreateDailyWorkStopsOnDependencyFailure(t *testing.T) {
 	failure := errors.New("falha da dependência")
 	date := time.Date(2026, time.November, 4, 0, 0, 0, 0, time.UTC)
 	for _, tt := range []struct {
-		name        string
-		checkErr    error
-		idErr       error
-		protectErr  error
-		createErr   error
-		expectedErr error
-		expected    []string
+		name             string
+		checkErr         error
+		cancelAfterCheck bool
+		protectErr       error
+		createErr        error
+		expectedErr      error
+		expected         []string
 	}{
 		{name: "falha ao validar funcionário", checkErr: failure, expectedErr: failure, expected: []string{"funcionário"}},
 		{name: "funcionário inativo", checkErr: ErrEmployeeInactive, expectedErr: ErrEmployeeInactive, expected: []string{"funcionário"}},
-		{name: "falha ao gerar id", idErr: failure, expectedErr: failure, expected: []string{"funcionário", "id"}},
-		{name: "falha na cifra", protectErr: failure, expectedErr: failure, expected: []string{"funcionário", "id", "cifra"}},
-		{name: "falha na gravação", createErr: failure, expectedErr: failure, expected: []string{"funcionário", "id", "cifra", "gravação"}},
+		{name: "cancelamento após validar funcionário", cancelAfterCheck: true, expectedErr: context.Canceled, expected: []string{"funcionário"}},
+		{name: "falha na cifra", protectErr: failure, expectedErr: failure, expected: []string{"funcionário", "cifra"}},
+		{name: "falha na gravação", createErr: failure, expectedErr: failure, expected: []string{"funcionário", "cifra", "gravação"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			calls := []string{}
+			caseCtx, caseCancel := context.WithCancel(context.Background())
+			defer caseCancel()
 			repo := dailyWorkRepositoryStub{
 				check: func(context.Context, string, string) error {
 					calls = append(calls, "funcionário")
+					if tt.cancelAfterCheck {
+						caseCancel()
+					}
 					return tt.checkErr
-				},
-				nextID: func(context.Context) (string, error) {
-					calls = append(calls, "id")
-					return "daily-a", tt.idErr
 				},
 				create: func(context.Context, ProtectedDailyWork) error {
 					calls = append(calls, "gravação")
@@ -155,7 +148,7 @@ func TestServiceCreateDailyWorkStopsOnDependencyFailure(t *testing.T) {
 				calls = append(calls, "cifra")
 				return ProtectedAmount{}, tt.protectErr
 			})
-			got, err := NewService(repo, protector).Create(context.Background(), "user-a", CreateDailyWorkInput{
+			got, err := NewService(repo, protector).Create(caseCtx, "user-a", CreateDailyWorkInput{
 				EmployeeID: validEmployeeID, WorkDate: date, AmountCents: 500,
 			})
 			assert.ErrorIs(t, err, tt.expectedErr)

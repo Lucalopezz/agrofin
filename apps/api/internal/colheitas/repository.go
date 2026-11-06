@@ -45,16 +45,6 @@ func (r *Repository) HasRateOverlap(ctx context.Context, period RatePeriod) (boo
 	return overlaps, nil
 }
 
-// NextRateID gera o UUID no PostgreSQL antes da cifra, sem inserir um registro parcial.
-func (r *Repository) NextRateID(ctx context.Context) (string, error) {
-	var id string
-	err := r.pool.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&id)
-	if err != nil {
-		return "", fmt.Errorf("gerar identificador da tarifa: %w", err)
-	}
-	return id, nil
-}
-
 // CreateRate grava a entidade protegida sem normalizar dados ou cifrar valores.
 func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
 	const query = `
@@ -122,17 +112,6 @@ func (r *Repository) ListRates(ctx context.Context, userID string) ([]ProtectedR
 		return nil, fmt.Errorf("listar tarifas protegidas: %w", err)
 	}
 	return rates, nil
-}
-
-// NextHarvestID reserva o identificador usado para autenticar a fotografia da tarifa.
-// TODO: Já existe uma função que faz a mesma coisa, da para criar uma função genérica para gerar UUIDs no banco e usar nos dois lugares.
-func (r *Repository) NextHarvestID(ctx context.Context) (string, error) {
-	var id string
-	err := r.pool.QueryRow(ctx, "SELECT gen_random_uuid()::text").Scan(&id)
-	if err != nil {
-		return "", fmt.Errorf("gerar identificador da colheita: %w", err)
-	}
-	return id, nil
 }
 
 // CheckActiveEmployee dá erro de domínio antes de consultar tarifas. A verificação

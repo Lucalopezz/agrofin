@@ -4,11 +4,12 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type dailyWorkRepository interface {
 	CheckActiveEmployee(ctx context.Context, userID, employeeID string) error
-	NextDailyWorkID(ctx context.Context) (string, error)
 	CreateDailyWork(ctx context.Context, work ProtectedDailyWork) error
 }
 
@@ -50,8 +51,13 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateDailyWo
 		return DailyWork{}, err
 	}
 
-	work.ID, err = s.repo.NextDailyWorkID(ctx)
+	// O identificador é necessário no contexto da cifra, mas não depende do banco;
+	// gerá-lo aqui remove uma consulta isolada antes da transação de criação.
+	work.ID, err = uuid.New()
 	if err != nil {
+		return DailyWork{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return DailyWork{}, err
 	}
 	amount, err := s.protector.EncryptDailyWorkAmount(
