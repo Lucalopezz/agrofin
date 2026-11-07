@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 type dailyWorkRepositoryStub struct {
 	check  func(context.Context, string, string) error
 	create func(context.Context, ProtectedDailyWork) error
+	list   func(context.Context, string, DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error)
 }
 
 func (r dailyWorkRepositoryStub) CheckActiveEmployee(ctx context.Context, userID, employeeID string) error {
@@ -26,10 +28,21 @@ func (r dailyWorkRepositoryStub) CreateDailyWork(ctx context.Context, work Prote
 	return r.create(ctx, work)
 }
 
+func (r dailyWorkRepositoryStub) ListDailyWorks(ctx context.Context, userID string, period DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error) {
+	if r.list == nil {
+		return nil, errors.New("listagem de diárias não configurada no stub")
+	}
+	return r.list(ctx, userID, period)
+}
+
 type dailyWorkProtectorFunc func(string, string, string, time.Time, int64) (ProtectedAmount, error)
 
 func (f dailyWorkProtectorFunc) EncryptDailyWorkAmount(userID, dailyWorkID, employeeID string, workDate time.Time, cents int64) (ProtectedAmount, error) {
 	return f(userID, dailyWorkID, employeeID, workDate, cents)
+}
+
+func (dailyWorkProtectorFunc) DecryptDailyWorkAmount(string, string, string, time.Time, ProtectedAmount) (int64, error) {
+	return 0, ErrInvalidProtectedDailyWorkAmount
 }
 
 func TestServiceCreateDailyWork(t *testing.T) {
@@ -156,4 +169,105 @@ func TestServiceCreateDailyWorkStopsOnDependencyFailure(t *testing.T) {
 			assert.Equal(t, tt.expected, calls)
 		})
 	}
+}
+
+func TestServiceSummarizeDailyWorks(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	keyring, err := financialcipher.NewKeyring("test-v1", map[string][]byte{"test-v1": bytes.Repeat([]byte{5}, 32)})
+	require.NoError(t, err)
+	cipher, err := NewCipher(keyring)
+	require.NoError(t, err)
+	start := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, 6)
+	employeeA := validEmployeeID
+	employeeB := "00000000-0000-4000-8000-000000000002"
+	nameByID := map[string]string{employeeA: "João", employeeB: "Ana"}
+	values := []struct {
+		id         string
+		employeeID string
+		date       time.Time
+		amount     int64
+	}{
+		{id: "daily-a1", employeeID: employeeA, date: start, amount: 8000},
+		{id: "daily-a2", employeeID: employeeA, date: end, amount: 2000},
+		{id: "daily-b1", employeeID: employeeB, date: start, amount: 500},
+	}
+	records := make([]ProtectedDailyWorkRecord, 0, len(values))
+	for _, value := range values {
+		amount, err := cipher.EncryptDailyWorkAmount("user-a", value.id, value.employeeID, value.date, value.amount)
+		require.NoError(t, err)
+		records = append(records, ProtectedDailyWorkRecord{
+			Work: ProtectedDailyWork{
+				ID: value.id, UserID: "user-a", EmployeeID: value.employeeID,
+				WorkDate: value.date, Amount: amount,
+			},
+			EmployeeName: nameByID[value.employeeID],
+		})
+	}
+	repo := dailyWorkRepositoryStub{
+		list: func(gotCtx context.Context, userID string, period DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error) {
+			assert.Same(t, ctx, gotCtx)
+			assert.Equal(t, "user-a", userID)
+			assert.Equal(t, DailyWorkPeriod{StartDate: start, EndDate: end}, period)
+			return records, nil
+		},
+	}
+
+	got, err := NewService(repo, cipher).Summarize(ctx, "user-a", DailyWorkPeriod{
+		StartDate: start, EndDate: end,
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.Equal(t, DailyWorkSummary{EmployeeID: employeeB, EmployeeName: "Ana", DailyWorkAmountCents: 500}, got[0])
+	assert.Equal(t, DailyWorkSummary{EmployeeID: employeeA, EmployeeName: "João", DailyWorkAmountCents: 10000}, got[1])
+
+	// Um envelope adulterado invalida a consulta inteira, sem retornar a soma
+	// parcial dos registros que foram processados antes dele.
+	tampered := append([]byte(nil), records[0].Work.Amount.Ciphertext...)
+	tampered[0] ^= 1
+	records[0].Work.Amount.Ciphertext = tampered
+	partial, err := NewService(repo, cipher).Summarize(ctx, "user-a", DailyWorkPeriod{StartDate: start, EndDate: end})
+	assert.ErrorIs(t, err, ErrInvalidProtectedDailyWorkAmount)
+	assert.Nil(t, partial)
+}
+
+func TestServiceSummarizeDailyWorksRejectsInvalidPeriodBeforeReading(t *testing.T) {
+	end := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
+	start := end.AddDate(0, 0, 1)
+	service := NewService(dailyWorkRepositoryStub{}, nil)
+	_, err := service.Summarize(context.Background(), "user-a", DailyWorkPeriod{StartDate: start, EndDate: end})
+	assert.ErrorIs(t, err, ErrInvalidDailyWorkPeriod)
+}
+
+func TestServiceSummarizeDailyWorksRejectsOverflow(t *testing.T) {
+	ctx := context.Background()
+	date := time.Date(2026, time.November, 4, 0, 0, 0, 0, time.UTC)
+	keyring, err := financialcipher.NewKeyring("test-v1", map[string][]byte{"test-v1": bytes.Repeat([]byte{8}, 32)})
+	require.NoError(t, err)
+	cipher, err := NewCipher(keyring)
+	require.NoError(t, err)
+	values := []struct {
+		id     string
+		amount int64
+	}{{id: "daily-overflow-a", amount: math.MaxInt64}, {id: "daily-overflow-b", amount: 1}}
+	records := make([]ProtectedDailyWorkRecord, 0, len(values))
+	for _, value := range values {
+		protected, err := cipher.EncryptDailyWorkAmount("user-a", value.id, validEmployeeID, date, value.amount)
+		require.NoError(t, err)
+		records = append(records, ProtectedDailyWorkRecord{
+			Work: ProtectedDailyWork{
+				ID: value.id, EmployeeID: validEmployeeID, WorkDate: date, Amount: protected,
+			},
+			EmployeeName: "João",
+		})
+	}
+	repo := dailyWorkRepositoryStub{
+		list: func(context.Context, string, DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error) {
+			return records, nil
+		},
+	}
+
+	_, err = NewService(repo, cipher).Summarize(ctx, "user-a", DailyWorkPeriod{StartDate: date, EndDate: date})
+	assert.ErrorIs(t, err, ErrDailyWorkSummaryOverflow)
 }

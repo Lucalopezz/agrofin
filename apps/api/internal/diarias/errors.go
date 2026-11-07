@@ -6,6 +6,8 @@ var (
 	ErrInvalidDailyWorkOwner           = errors.New("diarias: gerente do lançamento obrigatório")
 	ErrInvalidDailyWorkAmount          = errors.New("diarias: valor da diária inválido")
 	ErrInvalidDailyWorkDate            = errors.New("diarias: data da diária inválida")
+	ErrInvalidDailyWorkPeriod          = errors.New("diarias: período da consulta inválido")
+	ErrDailyWorkSummaryOverflow        = errors.New("diarias: total do resumo excede int64")
 	ErrInvalidEmployeeID               = errors.New("diarias: funcionário da diária inválido")
 	ErrInvalidDailyWorkConfig          = errors.New("diarias: configuração do serviço inválida")
 	ErrInvalidDailyWorkCipherConfig    = errors.New("diarias: configuração da proteção financeira inválida")

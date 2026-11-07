@@ -52,8 +52,7 @@ func (c *Cipher) EncryptDailyWorkAmount(
 
 // DecryptDailyWorkAmount reconstrói o contexto de criação e só recupera os centavos
 // quando o envelope pertence exatamente à mesma conta, diária, funcionário e data.
-// Hoje é usado como capacidade do domínio de cifra; uma rota de consulta de diárias
-// ainda precisa chamá-lo quando esse fluxo for implementado.
+// O resumo por período chama este método depois de filtrar e ler os envelopes no Repository.
 func (c *Cipher) DecryptDailyWorkAmount(
 	userID, dailyWorkID, employeeID string,
 	workDate time.Time,

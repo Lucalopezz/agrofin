@@ -70,6 +70,28 @@ func TestDailyWorkRepositoryIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, date, work.WorkDate)
+	secondDate := date.AddDate(0, 0, 1)
+	_, err = service.Create(ctx, userIDs[0], CreateDailyWorkInput{
+		EmployeeID: employeeIDs[0], WorkDate: secondDate, AmountCents: 2500,
+	})
+	require.NoError(t, err)
+	_, err = service.Create(ctx, userIDs[1], CreateDailyWorkInput{
+		EmployeeID: employeeIDs[1], WorkDate: date, AmountCents: 1000,
+	})
+	require.NoError(t, err)
+
+	summaries, err := service.Summarize(ctx, userIDs[0], DailyWorkPeriod{StartDate: date, EndDate: secondDate})
+	require.NoError(t, err)
+	require.Len(t, summaries, 1, "o resumo não deve incluir diárias de outra conta")
+	assert.Equal(t, employeeIDs[0], summaries[0].EmployeeID)
+	assert.Equal(t, "Funcionário de teste", summaries[0].EmployeeName)
+	assert.EqualValues(t, 10500, summaries[0].DailyWorkAmountCents)
+
+	empty, err := service.Summarize(ctx, userIDs[0], DailyWorkPeriod{
+		StartDate: secondDate.AddDate(0, 0, 1), EndDate: secondDate.AddDate(0, 0, 2),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, empty, "o filtro de data deve excluir lançamentos fora do período")
 
 	var stored ProtectedDailyWork
 	var notes *string
@@ -119,5 +141,5 @@ func TestDailyWorkRepositoryIntegration(t *testing.T) {
 	var count int
 	err = pool.QueryRow(ctx, "SELECT count(*) FROM daily_work WHERE user_id = $1", userIDs[0]).Scan(&count)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count, "falhas de dono ou estado não podem inserir outra diária")
+	assert.Equal(t, 2, count, "falhas de dono ou estado não podem inserir outra diária")
 }

@@ -84,3 +84,47 @@ func (r *Repository) CreateDailyWork(ctx context.Context, work ProtectedDailyWor
 	}
 	return nil
 }
+
+// ListDailyWorks retorna os envelopes cifrados do período e o nome atual do
+// funcionário. O filtro por dono ocorre antes de qualquer descriptografia.
+func (r *Repository) ListDailyWorks(ctx context.Context, userID string, period DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error) {
+	const query = `
+		SELECT d.id::text, d.employee_id::text, e.name, d.work_date,
+		       d.amount_ciphertext, d.amount_nonce, d.amount_key_version
+		FROM daily_work d
+		JOIN employees e
+		  ON e.user_id = d.user_id AND e.id = d.employee_id
+		WHERE d.user_id = $1
+		  AND d.work_date >= $2::date
+		  AND d.work_date <= $3::date
+		ORDER BY d.work_date DESC, d.created_at DESC, d.id DESC
+	`
+	rows, err := r.pool.Query(ctx, query, userID, period.StartDate, period.EndDate)
+	if err != nil {
+		return nil, fmt.Errorf("listar diárias protegidas: %w", err)
+	}
+	defer rows.Close()
+
+	works := make([]ProtectedDailyWorkRecord, 0)
+	for rows.Next() {
+		var record ProtectedDailyWorkRecord
+		var work ProtectedDailyWork
+		err := rows.Scan(
+			&work.ID, &work.EmployeeID, &record.EmployeeName, &work.WorkDate,
+			&work.Amount.Ciphertext, &work.Amount.Nonce, &work.Amount.KeyVersion,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("ler diária protegida: %w", err)
+		}
+		// Reutilizamos o userID confiável usado no filtro SQL ao reconstruir o AAD;
+		// não dependemos de outro campo lido da linha para escolher a conta da cifra.
+		work.UserID = userID
+		work.WorkDate = dailyWorkDate(work.WorkDate)
+		record.Work = work
+		works = append(works, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listar diárias protegidas: %w", err)
+	}
+	return works, nil
+}
