@@ -67,6 +67,15 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Dias sem lançamento simplesmente não contribuem para as quantidades ou valores; não são criados faltas nem caixas com quantidade zero.
 - Sem lançamentos no intervalo, retorna `200` com `[]`. Datas inválidas ou período invertido retornam `400`; sem sessão, `401`. Falha ao autenticar uma tarifa aplicada invalida o resumo inteiro.
 
+### HU-03 e HU-04 — resumo de valores devidos por período implementado
+
+`GET /api/v1/payroll-periods/summary` exige sessão e recebe `start_date` e `end_date` em `AAAA-MM-DD`, inclusivos. O intervalo é explícito e não presume o início da semana de pagamento.
+
+- A resposta inclui o período consultado e funcionários com ao menos uma colheita ou diária nele; dias sem lançamento não criam falta nem valor.
+- Os valores de caixas normais, caixas de moagem e diárias aparecem separados. `due_amount_cents` é a soma do valor gerado pelas caixas com as diárias, antes de pagamentos; ainda não representa o saldo pendente depois de pagar.
+- Os envelopes financeiros só são lidos depois do filtro por gerente e período. A API descriptografa os dados no serviço, soma em centavos inteiros e retorna `500` sem lista parcial se um envelope falhar.
+- Período vazio retorna `200` com `employees: []`. Datas inválidas, ausentes, repetidas, extras ou fim anterior ao início retornam `400`; sem sessão, `401`. A resposta usa `Cache-Control: no-store`.
+
 ### HU-04 — registro de diária implementado
 
 `POST /api/v1/daily-work` cria uma diária separada dos itens de caixa. A operação exige sessão e grava o lançamento e o envelope financeiro em uma transação.
@@ -147,6 +156,8 @@ A reativação e o filtro de estado estão implementados na API; sua integraçã
 - Se forem pagos R$ 100,00, o resumo mostra R$ 100,00 pagos e R$ 38,00 pendentes. Uma segunda tentativa de registrar o mesmo pagamento não deve gerar duplicidade.
 - Um dia sem lançamento não cria falta, desconto ou alerta de ausência.
 - O resumo deixa claro o intervalo de datas da semana e permite voltar ao detalhe que formou o total.
+
+O resumo por período implementado é a base de cálculo; ainda faltam a definição do início semanal e o registro de pagamentos para informar valores pagos e saldo restante.
 
 ## Venda, despesas e painel
 

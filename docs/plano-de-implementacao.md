@@ -16,7 +16,7 @@ agrofin/
         diarias/                # registro de diárias implementado
         financialcipher/        # cifra financeira compartilhada entre domínios
         funcionarios/          # cadastro simples e rotas da feature
-        pagamentos/
+        pagamentos/             # resumo financeiro por período implementado
         vendas/
         despesas/
         insumos/
@@ -49,7 +49,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, as tarifas, os lançamentos de caixas e o registro de diárias estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Pagamentos, fechamento semanal, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias e os resumos por período de caixas e valores devidos estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Registro de pagamentos, saldo após pagamentos, definição do início da semana, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
 
 ### Organização interna do cadastro de funcionários
 
@@ -348,7 +348,17 @@ O domínio normaliza o UUID e a data antes de chamar as dependências. O serviç
 
 A resposta `201` devolve o valor em centavos para a sessão autenticada e usa `Cache-Control: no-store`. UUID, data, valor, JSON ou campos desconhecidos inválidos retornam `400`; `415` indica tipo de mídia incorreto; `413`, corpo acima de 4 KiB; cancelamento e prazo esgotado retornam `408` e `504`. Falhas internas retornam mensagem genérica sem registrar o valor financeiro.
 
-A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos de origem e proteção CSRF. O envio é persistente e repetido cria outro lançamento; teste manualmente, não execute a coleção inteira pelo runner. A diária permanece separada das caixas e ainda não é incluída no resumo inicial de colheitas nem em saldo semanal.
+A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos de origem e proteção CSRF. O envio é persistente e repetido cria outro lançamento; teste manualmente, não execute a coleção inteira pelo runner. A diária permanece fora de `/harvest-entries/summary`, mas entra em `/payroll-periods/summary`; pagamentos ainda não são descontados.
+
+### Resumo de valores devidos por período
+
+`GET /api/v1/payroll-periods/summary` exige sessão e recebe `start_date` e `end_date` inclusivos em `AAAA-MM-DD`. A rota usa datas explícitas porque ainda não há decisão sobre o dia em que começa a semana de pagamento.
+
+- `internal/pagamentos` combina duas projeções: a soma das caixas já calculada por `colheitas` e a soma das diárias calculada por `diarias`. Nenhum pacote passa a guardar o histórico do outro dentro do funcionário.
+- A consulta de diárias filtra `user_id` e período no PostgreSQL, mas devolve os envelopes cifrados. O serviço de diárias reconstrói o contexto autenticado e descriptografa os valores antes de somá-los; a consulta de colheitas faz o mesmo com as tarifas aplicadas.
+- A resposta contém o intervalo e, para cada funcionário com lançamentos, quantidades e valores de caixas normais e de moagem, total das diárias e `due_amount_cents`, que soma caixas e diárias antes de pagamentos. Ainda não há pagamentos nem saldo pendente nessa projeção.
+- Valores são somados como centavos inteiros, com detecção de overflow. Se um envelope não autenticar ou uma consulta falhar, a API não devolve um resultado parcial. A resposta usa `Cache-Control: no-store`.
+- A coleção Postman v2.1 contém **07.6 - Resumir valores devidos no período**, utilizável no Postman ou importável no Bruno e no Insomnia.
 
 ### Respostas para a tela
 
@@ -372,9 +382,9 @@ Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 ]
 ```
 
-O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. Os totais são calculados a partir dos lançamentos autorizados, sem criar contadores editáveis no cadastro. O fechamento semanal completo ainda precisa distinguir valor gerado, devido e pago e incluir diárias e ajustes.
+O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina esses valores com diárias para mostrar o devido antes de pagamentos. O fechamento semanal completo ainda precisa definir o início da semana, registrar pagamentos e calcular o saldo restante; ajustes não fazem parte desta projeção.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas e valores gerados por funcionário e `POST /daily-work` registra diárias; essas operações estão implementadas. O resumo inicial ainda considera somente caixas. `/payroll-weeks/{week}/summary` poderá reunir colheitas, diárias, pagamentos e ajustes no fechamento semanal. A edição de colheita foi adiada para depois da V1, e o início da semana de pagamento permanece pendente.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas e `POST /daily-work` registra diárias; `GET /payroll-periods/summary` combina caixas e diárias para um intervalo explícito. O saldo depois de pagamentos e `/payroll-weeks/{week}/summary` continuam pendentes até implementar pagamentos e definir o início da semana. A edição de colheita foi adiada para depois da V1.
 
 ## Sequência sugerida
 
@@ -382,7 +392,7 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas, colheitas e diárias — criação e consultas iniciais implementadas:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas e criação de diárias. Seguem pendentes pagamentos, fechamento semanal e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
+3. **Tarifas, colheitas e diárias — criação e consultas iniciais implementadas:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas, criação de diárias e resumo de valores devidos por período. Seguem pendentes pagamentos, saldo após pagamento, semana automática e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
 
 Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, resumo inicial de produção e registro de diárias funcionam com sessão e proteção financeira. Edição de colheita foi adiada para depois da V1; o saldo semanal após pagamentos continua pendente.
 
@@ -407,7 +417,8 @@ DELETE         ${API_PREFIX}/employees/{id}       # desativar, sem apagar histó
 PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
 GET            ${API_PREFIX}/harvest-entries       # consulta inicial por período implementada
-GET            ${API_PREFIX}/harvest-entries/summary # resumo inicial por funcionário implementado
+GET            ${API_PREFIX}/harvest-entries/summary # resumo de caixas por funcionário implementado
+GET            ${API_PREFIX}/payroll-periods/summary # resumo de caixas + diárias por período implementado
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 POST           ${API_PREFIX}/daily-work            # registro de diária implementado
 PATCH          ${API_PREFIX}/harvest-entries/{id}
