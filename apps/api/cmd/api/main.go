@@ -15,6 +15,7 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/health"
+	"github.com/lucalopezz/agrofin/apps/api/internal/pagamentos"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
 
@@ -100,6 +101,12 @@ func run() error {
 	dailyWorkService := diarias.NewService(dailyWorkRepository, dailyWorkCipher)
 	dailyWorkHandler := diarias.NewHandler(dailyWorkService)
 	diarias.RegisterRoutes(apiMux, dailyWorkHandler, sessionMiddleware.RequireSession)
+
+	// O resumo combina projeções dos domínios de colheitas e diárias; o pacote
+	// pagamentos só coordena a leitura e não transforma esses lançamentos em um agregado único.
+	payrollSummaryService := pagamentos.NewService(harvestService, dailyWorkService)
+	payrollSummaryHandler := pagamentos.NewHandler(payrollSummaryService)
+	pagamentos.RegisterRoutes(apiMux, payrollSummaryHandler, sessionMiddleware.RequireSession)
 
 	mux := http.NewServeMux()
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))
