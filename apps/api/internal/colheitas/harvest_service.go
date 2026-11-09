@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
@@ -161,7 +162,7 @@ func (s *HarvestService) listRecords(ctx context.Context, userID string, period 
 		harvest := Harvest{
 			ID: protectedHarvest.ID, UserID: userID,
 			EmployeeID:  protectedHarvest.EmployeeID,
-			HarvestDate: rateDate(protectedHarvest.HarvestDate),
+			HarvestDate: calendarDate.Normalize(protectedHarvest.HarvestDate),
 			// Cria uma lista vazia
 			Items: make([]HarvestItem, 0, len(protectedHarvest.Items)),
 		}

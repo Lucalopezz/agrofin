@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
@@ -118,7 +119,7 @@ func (s *Service) Summarize(ctx context.Context, userID string, period DailyWork
 		if err != nil {
 			return nil, err
 		}
-		workDate := dailyWorkDate(work.WorkDate)
+		workDate := calendarDate.Normalize(work.WorkDate)
 		if workDate.IsZero() {
 			return nil, ErrInvalidDailyWorkDate
 		}

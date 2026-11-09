@@ -4,13 +4,11 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
-
-const rateDateLayout = "2006-01-02"
 
 type createRateRequest struct {
 	BoxType     BoxType `json:"box_type"`
@@ -45,14 +43,14 @@ func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRate
 		return CreateRateInput{}, false
 	}
 
-	validFrom, err := parseRateDate(request.ValidFrom)
+	validFrom, err := calendarDate.Parse(request.ValidFrom)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O campo valid_from deve usar o formato AAAA-MM-DD"})
 		return CreateRateInput{}, false
 	}
 	var validUntil *time.Time
 	if request.ValidUntil != nil {
-		parsed, err := parseRateDate(*request.ValidUntil)
+		parsed, err := calendarDate.Parse(*request.ValidUntil)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O campo valid_until deve usar AAAA-MM-DD ou ser null"})
 			return CreateRateInput{}, false
@@ -85,7 +83,7 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "employee_id deve ser um UUID válido"})
 		return CreateHarvestInput{}, false
 	}
-	harvestDate, err := parseRateDate(request.HarvestDate)
+	harvestDate, err := calendarDate.Parse(request.HarvestDate)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "harvest_date deve usar o formato AAAA-MM-DD"})
 		return CreateHarvestInput{}, false
@@ -114,26 +112,15 @@ func decodeHarvestPeriodQuery(w http.ResponseWriter, r *http.Request) (HarvestPe
 		return HarvestPeriod{}, false
 	}
 
-	startDate, err := parseRateDate(startValues[0])
+	startDate, err := calendarDate.Parse(startValues[0])
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "start_date deve usar o formato AAAA-MM-DD"})
 		return HarvestPeriod{}, false
 	}
-	endDate, err := parseRateDate(endValues[0])
+	endDate, err := calendarDate.Parse(endValues[0])
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
 		return HarvestPeriod{}, false
 	}
 	return HarvestPeriod{StartDate: startDate, EndDate: endDate}, true
-}
-
-func parseRateDate(value string) (time.Time, error) {
-	if len(value) != len(rateDateLayout) || strings.TrimSpace(value) != value {
-		return time.Time{}, errors.New("data de tarifa inválida")
-	}
-	date, err := time.Parse(rateDateLayout, value)
-	if err != nil || date.Year() < 1 || date.Format(rateDateLayout) != value {
-		return time.Time{}, errors.New("data de tarifa inválida")
-	}
-	return date, nil
 }

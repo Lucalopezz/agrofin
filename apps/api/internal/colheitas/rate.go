@@ -1,7 +1,11 @@
 // Package colheitas contém o domínio dos lançamentos de colheita e suas tarifas.
 package colheitas
 
-import "time"
+import (
+	"time"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+)
 
 // BoxType classifica a colheita para pagamento, separado da classificação de venda.
 type BoxType string
@@ -37,13 +41,13 @@ func normalizeRate(rate Rate) (Rate, error) {
 	if rate.AmountCents <= 0 {
 		return Rate{}, ErrInvalidRateAmount
 	}
-	rate.ValidFrom = rateDate(rate.ValidFrom)
+	rate.ValidFrom = calendarDate.Normalize(rate.ValidFrom)
 	if rate.ValidFrom.IsZero() {
 		return Rate{}, ErrInvalidRatePeriod
 	}
 
 	if rate.ValidUntil != nil {
-		until := rateDate(*rate.ValidUntil)
+		until := calendarDate.Normalize(*rate.ValidUntil)
 		if until.IsZero() || !until.After(rate.ValidFrom) {
 			return Rate{}, ErrInvalidRatePeriod
 		}
@@ -52,11 +56,4 @@ func normalizeRate(rate Rate) (Rate, error) {
 		rate.ValidUntil = &until
 	}
 	return rate, nil
-}
-
-func rateDate(date time.Time) time.Time {
-	// Extrair os componentes antes de usar UTC preserva o dia informado. Converter
-	// o instante para UTC primeiro poderia deslocar a data para o dia anterior/seguinte.
-	year, month, day := date.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }

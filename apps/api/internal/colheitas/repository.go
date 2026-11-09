@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 // Repository persiste e lê tarifas gerais usando o pool compartilhado da aplicação.
@@ -270,7 +272,7 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 				EmployeeName: employeeName,
 				Harvest: ProtectedHarvest{
 					ID: harvestID, UserID: userID, EmployeeID: employeeID,
-					HarvestDate: rateDate(harvestDate),
+					HarvestDate: calendarDate.Normalize(harvestDate),
 					Items:       make([]ProtectedHarvestItem, 0, 2),
 				},
 			})

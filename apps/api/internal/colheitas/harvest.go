@@ -1,9 +1,10 @@
 package colheitas
 
 import (
-	"encoding/hex"
-	"strings"
 	"time"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 // CreateHarvestInput contém os dados de produção enviados pelo cliente. O dono
@@ -75,12 +76,11 @@ type ProtectedHarvestItem struct {
 }
 
 func normalizeHarvestPeriod(period HarvestPeriod) (HarvestPeriod, error) {
-	period.StartDate = rateDate(period.StartDate)
-	period.EndDate = rateDate(period.EndDate)
-	// A data de início e fim devem ser válidas e o fim não pode ser anterior ao início.
-	if period.StartDate.IsZero() || period.EndDate.IsZero() || period.EndDate.Before(period.StartDate) {
+	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
+	if err != nil {
 		return HarvestPeriod{}, ErrInvalidHarvestPeriod
 	}
+	period.StartDate, period.EndDate = start, end
 	return period, nil
 }
 
@@ -90,7 +90,7 @@ func normalizeHarvest(harvest Harvest) (Harvest, error) {
 		return Harvest{}, err
 	}
 	harvest.EmployeeID = employeeID
-	harvest.HarvestDate = rateDate(harvest.HarvestDate)
+	harvest.HarvestDate = calendarDate.Normalize(harvest.HarvestDate)
 	if harvest.HarvestDate.IsZero() {
 		return Harvest{}, ErrInvalidHarvestDate
 	}
@@ -122,14 +122,9 @@ func normalizeHarvest(harvest Harvest) (Harvest, error) {
 }
 
 func normalizeHarvestEmployeeID(value string) (string, error) {
-	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' || strings.TrimSpace(value) != value {
+	id, err := uuid.Normalize(value)
+	if err != nil {
 		return "", ErrInvalidHarvestEmployee
 	}
-	decoded, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
-	if err != nil || len(decoded) != 16 {
-		return "", ErrInvalidHarvestEmployee
-	}
-	// PostgreSQL devolve UUIDs em minúsculas; usar a mesma forma no AAD garante
-	// que a cifra continue verificável quando o lançamento for lido depois.
-	return strings.ToLower(value), nil
+	return id, nil
 }

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 type errorResponse struct {
@@ -45,7 +47,7 @@ func writeCreateDailyWorkResponse(w http.ResponseWriter, work DailyWork, err err
 func newDailyWorkResponse(work DailyWork) dailyWorkResponse {
 	return dailyWorkResponse{
 		ID: work.ID, EmployeeID: work.EmployeeID,
-		WorkDate:    work.WorkDate.Format(dailyWorkDateLayout),
+		WorkDate:    work.WorkDate.Format(calendarDate.Layout),
 		AmountCents: work.AmountCents, Notes: work.Notes,
 	}
 }

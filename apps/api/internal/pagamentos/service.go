@@ -5,10 +5,10 @@ import (
 	"math"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
 	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 type harvestSummarizer interface {
@@ -131,19 +131,12 @@ func (s *Service) Summarize(ctx context.Context, userID string, period Period) (
 func normalizePeriod(period Period) (Period, error) {
 	// DATE não representa um instante. Normalizar os campos para meia-noite UTC
 	// faz colheitas e diárias consultarem exatamente os mesmos dias inclusivos.
-	period.StartDate = dateOnly(period.StartDate)
-	period.EndDate = dateOnly(period.EndDate)
-	if period.StartDate.IsZero() || period.EndDate.IsZero() || period.EndDate.Before(period.StartDate) {
+	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
+	if err != nil {
 		return Period{}, ErrInvalidPayrollPeriod
 	}
+	period.StartDate, period.EndDate = start, end
 	return period, nil
-}
-
-func dateOnly(date time.Time) time.Time {
-	if date.IsZero() {
-		return time.Time{}
-	}
-	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func addAmount(current, addition int64) (int64, error) {

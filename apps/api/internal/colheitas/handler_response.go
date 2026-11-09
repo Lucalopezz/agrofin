@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 type errorResponse struct {
@@ -170,10 +172,10 @@ func writeHarvestSummaryResponse(w http.ResponseWriter, summaries []HarvestSumma
 func newRateResponse(rate Rate) rateResponse {
 	response := rateResponse{
 		ID: rate.ID, BoxType: rate.BoxType, AmountCents: rate.AmountCents,
-		ValidFrom: rate.ValidFrom.Format(rateDateLayout),
+		ValidFrom: rate.ValidFrom.Format(calendarDate.Layout),
 	}
 	if rate.ValidUntil != nil {
-		validUntil := rate.ValidUntil.Format(rateDateLayout)
+		validUntil := rate.ValidUntil.Format(calendarDate.Layout)
 		response.ValidUntil = &validUntil
 	}
 	return response
@@ -189,7 +191,7 @@ func newHarvestResponse(harvest Harvest) harvestResponse {
 	}
 	return harvestResponse{
 		ID: harvest.ID, EmployeeID: harvest.EmployeeID,
-		HarvestDate: harvest.HarvestDate.Format(rateDateLayout), Items: items,
+		HarvestDate: harvest.HarvestDate.Format(calendarDate.Layout), Items: items,
 	}
 }
 

@@ -3,13 +3,10 @@ package diarias
 import (
 	"errors"
 	"net/http"
-	"strings"
-	"time"
 
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
-
-const dailyWorkDateLayout = "2006-01-02"
 
 type createDailyWorkRequest struct {
 	EmployeeID  string `json:"employee_id"`
@@ -38,7 +35,7 @@ func decodeCreateDailyWorkRequest(w http.ResponseWriter, r *http.Request) (Creat
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "employee_id deve ser um UUID válido"})
 		return CreateDailyWorkInput{}, false
 	}
-	workDate, err := parseDailyWorkDate(request.WorkDate)
+	workDate, err := calendarDate.Parse(request.WorkDate)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "work_date deve usar o formato AAAA-MM-DD"})
 		return CreateDailyWorkInput{}, false
@@ -47,15 +44,4 @@ func decodeCreateDailyWorkRequest(w http.ResponseWriter, r *http.Request) (Creat
 		EmployeeID: employeeID, WorkDate: workDate,
 		AmountCents: request.AmountCents, Notes: request.Notes,
 	}, true
-}
-
-func parseDailyWorkDate(value string) (time.Time, error) {
-	if len(value) != len(dailyWorkDateLayout) || strings.TrimSpace(value) != value {
-		return time.Time{}, errors.New("data da diária inválida")
-	}
-	date, err := time.Parse(dailyWorkDateLayout, value)
-	if err != nil || date.Format(dailyWorkDateLayout) != value {
-		return time.Time{}, errors.New("data da diária inválida")
-	}
-	return date, nil
 }

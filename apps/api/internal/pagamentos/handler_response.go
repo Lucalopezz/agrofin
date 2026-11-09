@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 type errorResponse struct {
@@ -54,8 +56,8 @@ func writePeriodSummaryResponse(w http.ResponseWriter, summary PeriodSummary, er
 	default:
 		response := periodSummaryResponse{
 			Period: periodResponse{
-				StartDate: summary.Period.StartDate.Format(periodDateLayout),
-				EndDate:   summary.Period.EndDate.Format(periodDateLayout),
+				StartDate: summary.Period.StartDate.Format(calendarDate.Layout),
+				EndDate:   summary.Period.EndDate.Format(calendarDate.Layout),
 			},
 			Employees: make([]employeeSummaryResponse, 0, len(summary.Employees)),
 		}

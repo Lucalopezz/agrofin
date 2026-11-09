@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 const dailyWorkAmountPurpose = "agrofin.daily-work.amount.v1"
@@ -70,19 +71,19 @@ func (c *Cipher) DecryptDailyWorkAmount(
 }
 
 func dailyWorkAmountContext(userID, dailyWorkID, employeeID string, workDate time.Time) (financialcipher.Context[dailyWorkPurpose], error) {
+	workDate = calendarDate.Normalize(workDate)
 	if workDate.IsZero() {
 		return financialcipher.Context[dailyWorkPurpose]{}, ErrInvalidDailyWorkCipherContext
 	}
 	// O banco guarda data sem horário. Normalizar para meia-noite UTC garante que
 	// uma leitura SQL reconstrua a mesma cadeia autenticada independentemente do fuso.
-	date := time.Date(workDate.Year(), workDate.Month(), workDate.Day(), 0, 0, 0, 0, time.UTC)
 	return financialcipher.Context[dailyWorkPurpose]{
 		Purpose:  dailyWorkAmountPurpose,
 		UserID:   userID,
 		RecordID: dailyWorkID,
 		Attributes: []string{
 			employeeID,
-			date.Format("2006-01-02"),
+			workDate.Format(calendarDate.Layout),
 		},
 	}, nil
 }

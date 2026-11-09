@@ -1,14 +1,13 @@
 package funcionarios
 
 import (
-	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 // Cadastro e renomeação compartilham o mesmo contrato de entrada: somente name.
@@ -59,13 +58,9 @@ func decodeEmployeeNameRequest(w http.ResponseWriter, r *http.Request) (*employe
 // decodeEmployeeID exige o formato UUID usado nas respostas da API. A validação
 // do caminho pertence ao protocolo e evita enviar um UUID malformado ao banco.
 func decodeEmployeeID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	id := r.PathValue("id")
-	if len(id) == 36 && id[8] == '-' && id[13] == '-' && id[18] == '-' && id[23] == '-' {
-		decoded, err := hex.DecodeString(strings.ReplaceAll(id, "-", ""))
-		// O tamanho também impede aceitar hífens extras no lugar de dígitos.
-		if err == nil && len(decoded) == 16 {
-			return id, true
-		}
+	id, err := uuid.Normalize(r.PathValue("id"))
+	if err == nil {
+		return id, true
 	}
 	writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Identificador do funcionário deve ser um UUID válido"})
 	return "", false

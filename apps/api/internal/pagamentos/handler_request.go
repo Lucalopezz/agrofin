@@ -3,11 +3,9 @@ package pagamentos
 import (
 	"net/http"
 	"net/url"
-	"strings"
-	"time"
-)
 
-const periodDateLayout = "2006-01-02"
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+)
 
 func decodePeriodQuery(w http.ResponseWriter, r *http.Request) (Period, bool) {
 	// Exigir exatamente os dois limites evita uma leitura acidental de todo o histórico.
@@ -23,26 +21,15 @@ func decodePeriodQuery(w http.ResponseWriter, r *http.Request) (Period, bool) {
 		return Period{}, false
 	}
 
-	startDate, err := parsePeriodDate(startValues[0])
+	startDate, err := calendarDate.Parse(startValues[0])
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "start_date deve usar o formato AAAA-MM-DD"})
 		return Period{}, false
 	}
-	endDate, err := parsePeriodDate(endValues[0])
+	endDate, err := calendarDate.Parse(endValues[0])
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
 		return Period{}, false
 	}
 	return Period{StartDate: startDate, EndDate: endDate}, true
-}
-
-func parsePeriodDate(value string) (time.Time, error) {
-	if len(value) != len(periodDateLayout) || strings.TrimSpace(value) != value {
-		return time.Time{}, ErrInvalidPayrollPeriod
-	}
-	date, err := time.Parse(periodDateLayout, value)
-	if err != nil || date.Year() < 1 || date.Format(periodDateLayout) != value {
-		return time.Time{}, ErrInvalidPayrollPeriod
-	}
-	return date, nil
 }

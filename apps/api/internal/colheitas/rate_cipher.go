@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 const (
@@ -124,6 +125,7 @@ func harvestItemRateContext(
 ) (financialcipher.Context[rateCipherPurpose], error) {
 	// Data e quantidade fazem parte da identidade do item para a cifra. Rejeitá-las
 	// aqui evita produzir envelopes que não poderiam ser reconstruídos numa consulta.
+	harvestDate = calendarDate.Normalize(harvestDate)
 	if harvestDate.IsZero() || quantity <= 0 {
 		return financialcipher.Context[rateCipherPurpose]{}, ErrInvalidRateCipherContext
 	}
@@ -138,7 +140,7 @@ func harvestItemRateContext(
 		RecordID: harvestID,
 		Attributes: []string{
 			employeeID,
-			rateDate(harvestDate).Format("2006-01-02"),
+			harvestDate.Format(calendarDate.Layout),
 			string(boxType),
 			strconv.FormatInt(int64(quantity), 10),
 		},

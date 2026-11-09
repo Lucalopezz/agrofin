@@ -1,11 +1,13 @@
 package diarias
 
 import (
-	"encoding/hex"
 	"strings"
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type DailyWork struct {
@@ -55,11 +57,11 @@ type DailyWorkSummary struct {
 }
 
 func normalizeDailyWorkPeriod(period DailyWorkPeriod) (DailyWorkPeriod, error) {
-	period.StartDate = dailyWorkDate(period.StartDate)
-	period.EndDate = dailyWorkDate(period.EndDate)
-	if period.StartDate.IsZero() || period.EndDate.IsZero() || period.EndDate.Before(period.StartDate) {
+	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
+	if err != nil {
 		return DailyWorkPeriod{}, ErrInvalidDailyWorkPeriod
 	}
+	period.StartDate, period.EndDate = start, end
 	return period, nil
 }
 
@@ -83,33 +85,16 @@ func normalizeDailyWork(work DailyWork) (DailyWork, error) {
 	}
 
 	// A operação é um dia no calendário, não um instante com horário.
-	work.WorkDate = dailyWorkDate(work.WorkDate)
+	work.WorkDate = calendarDate.Normalize(work.WorkDate)
 	work.Notes = strings.TrimSpace(work.Notes)
 
 	return work, nil
 }
 
-func dailyWorkDate(date time.Time) time.Time {
-	if date.IsZero() {
-		return time.Time{}
-	}
-	// DATE não carrega fuso nem horário; reconstruir meia-noite UTC mantém o
-	// mesmo contexto autenticado quando o lançamento sai e volta do PostgreSQL.
-	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
-}
-
 func normalizeDailyWorkEmployeeID(value string) (string, error) {
-	if len(value) != 36 ||
-		value[8] != '-' || value[13] != '-' ||
-		value[18] != '-' || value[23] != '-' ||
-		strings.TrimSpace(value) != value {
+	id, err := uuid.Normalize(value)
+	if err != nil {
 		return "", ErrInvalidEmployeeID
 	}
-
-	decoded, err := hex.DecodeString(strings.ReplaceAll(value, "-", ""))
-	if err != nil || len(decoded) != 16 {
-		return "", ErrInvalidEmployeeID
-	}
-
-	return strings.ToLower(value), nil
+	return id, nil
 }

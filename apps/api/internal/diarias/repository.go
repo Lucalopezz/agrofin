@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 // Repository grava lançamentos de diária usando o pool compartilhado da API.
@@ -119,7 +121,7 @@ func (r *Repository) ListDailyWorks(ctx context.Context, userID string, period D
 		// Reutilizamos o userID confiável usado no filtro SQL ao reconstruir o AAD;
 		// não dependemos de outro campo lido da linha para escolher a conta da cifra.
 		work.UserID = userID
-		work.WorkDate = dailyWorkDate(work.WorkDate)
+		work.WorkDate = calendarDate.Normalize(work.WorkDate)
 		record.Work = work
 		works = append(works, record)
 	}
