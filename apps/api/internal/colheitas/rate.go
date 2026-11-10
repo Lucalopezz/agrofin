@@ -5,6 +5,7 @@ import (
 	"time"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 // BoxType classifica a colheita para pagamento, separado da classificação de venda.
@@ -38,7 +39,7 @@ func normalizeRate(rate Rate) (Rate, error) {
 		return Rate{}, ErrInvalidBoxType
 	}
 
-	if rate.AmountCents <= 0 {
+	if !money.IsPositiveCents(rate.AmountCents) {
 		return Rate{}, ErrInvalidRateAmount
 	}
 	rate.ValidFrom = calendarDate.Normalize(rate.ValidFrom)

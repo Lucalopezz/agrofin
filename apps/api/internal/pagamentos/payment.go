@@ -2,6 +2,8 @@ package pagamentos
 
 import (
 	"time"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 type Payment struct {
@@ -23,4 +25,12 @@ type CreatePaymentInput struct {
 	AmountCents  int64
 	Notes        string
 	RequestedKey string
+}
+
+// normalizePaymentAmount aplica a regra compartilhada e preserva o erro do domínio de pagamentos.
+func normalizePaymentAmount(amountCents int64) (int64, error) {
+	if !money.IsPositiveCents(amountCents) {
+		return 0, ErrInvalidPaymentAmount
+	}
+	return amountCents, nil
 }

@@ -10,4 +10,5 @@ var (
 	ErrPayrollSummaryOverflow = errors.New("pagamentos: total do resumo excede int64")
 	ErrInvalidPaymentPeriod   = errors.New("pagamentos: período de pagamento inválido")
 	ErrInvalidPaymentEmployee = errors.New("pagamentos: funcionário do pagamento inválido")
+	ErrInvalidPaymentAmount   = errors.New("pagamentos: valor do pagamento inválido")
 )

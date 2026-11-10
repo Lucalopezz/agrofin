@@ -7,6 +7,7 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
@@ -80,7 +81,7 @@ func normalizeDailyWork(work DailyWork) (DailyWork, error) {
 		return DailyWork{}, ErrInvalidDailyWorkDate
 	}
 
-	if work.AmountCents <= 0 {
+	if !money.IsPositiveCents(work.AmountCents) {
 		return DailyWork{}, ErrInvalidDailyWorkAmount
 	}
 

@@ -10,6 +10,8 @@ import (
 	"math"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 const (
@@ -155,7 +157,7 @@ func (c *Cipher[P]) Encrypt(context Context[P], amountCents int64) (Amount[P], e
 	if err != nil {
 		return Amount[P]{}, err
 	}
-	if amountCents <= 0 {
+	if !money.IsPositiveCents(amountCents) {
 		return Amount[P]{}, ErrInvalidAmount
 	}
 
