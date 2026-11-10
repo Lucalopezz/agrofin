@@ -288,9 +288,10 @@ func TestRenameEmployeeHandler(t *testing.T) {
 				calls++
 				assert.Same(t, ctx, gotCtx)
 				assert.Equal(t, "gerente-da-sessao", userID)
-				assert.Equal(t, id, gotID)
+				// UUIDs aceitos pelo handler chegam ao domínio na forma canônica minúscula.
+				assert.Equal(t, strings.ToLower(id), gotID)
 				assert.Equal(t, tt.expectedName, name)
-				return Employee{ID: id, UserID: userID, Name: name, Active: false}, tt.serviceErr
+				return Employee{ID: gotID, UserID: userID, Name: name, Active: false}, tt.serviceErr
 			}}
 			mux := http.NewServeMux()
 			RegisterRoutes(mux, NewHandler(service), func(next http.Handler) http.Handler { return next })
@@ -309,7 +310,7 @@ func TestRenameEmployeeHandler(t *testing.T) {
 			if tt.expectedCode == http.StatusOK {
 				var body map[string]any
 				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
-				assert.Equal(t, map[string]any{"id": id, "name": tt.expectedName, "active": false}, body)
+				assert.Equal(t, map[string]any{"id": strings.ToLower(id), "name": tt.expectedName, "active": false}, body)
 			} else {
 				var body map[string]any
 				require.NoError(t, json.Unmarshal(response.Body.Bytes(), &body))
@@ -364,7 +365,8 @@ func TestDeactivateEmployeeHandler(t *testing.T) {
 				calls++
 				assert.Same(t, ctx, gotCtx)
 				assert.Equal(t, "gerente-da-sessao", userID)
-				assert.Equal(t, id, gotID)
+				// A normalização evita IDs equivalentes com representações diferentes no domínio.
+				assert.Equal(t, strings.ToLower(id), gotID)
 				return tt.serviceErr
 			}}
 			mux := http.NewServeMux()
@@ -436,7 +438,8 @@ func TestReactivateEmployeeHandler(t *testing.T) {
 				calls++
 				assert.Same(t, ctx, gotCtx)
 				assert.Equal(t, "gerente-da-sessao", userID)
-				assert.Equal(t, id, gotID)
+				// A normalização evita IDs equivalentes com representações diferentes no domínio.
+				assert.Equal(t, strings.ToLower(id), gotID)
 				return tt.serviceErr
 			}}
 			mux := http.NewServeMux()
