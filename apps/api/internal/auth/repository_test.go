@@ -1,3 +1,4 @@
+// Testa a persistência PostgreSQL de credenciais e sessões.
 package auth
 
 import (

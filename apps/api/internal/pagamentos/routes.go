@@ -1,3 +1,4 @@
+// Registra as rotas privadas de criação de pagamento e resumo da folha.
 package pagamentos
 
 import "net/http"

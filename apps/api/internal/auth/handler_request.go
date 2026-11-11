@@ -1,3 +1,4 @@
+// Decodifica e valida as entradas HTTP de autenticação e perfil.
 package auth
 
 import (

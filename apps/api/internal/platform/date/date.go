@@ -1,4 +1,4 @@
-// Package date normaliza e interpreta datas de calendário sem horário.
+// Package date interpreta datas civis e normaliza períodos inclusivos.
 package date
 
 import (

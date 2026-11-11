@@ -1,3 +1,4 @@
+// Adapta a cifra financeira ao contexto autenticado dos pagamentos.
 package pagamentos
 
 import (

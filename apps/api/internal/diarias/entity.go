@@ -1,3 +1,4 @@
+// Define diárias, períodos de consulta e regras de normalização.
 package diarias
 
 import (

@@ -1,3 +1,4 @@
+// Testa cifra, recuperação e autenticação dos valores de tarifa.
 package colheitas
 
 import (

@@ -1,3 +1,4 @@
+// Normaliza senhas e gera ou verifica seus hashes de armazenamento.
 package auth
 
 import (

@@ -1,3 +1,4 @@
+// Cria, consulta e resume lançamentos de colheita com tarifas protegidas.
 package colheitas
 
 import (

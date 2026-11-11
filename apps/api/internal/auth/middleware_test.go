@@ -1,3 +1,4 @@
+// Testa autenticação por sessão e proteção das rotas privadas.
 package auth
 
 import (

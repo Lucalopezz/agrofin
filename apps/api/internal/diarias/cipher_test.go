@@ -1,3 +1,4 @@
+// Testa cifra e autenticação dos valores de diária.
 package diarias
 
 import (

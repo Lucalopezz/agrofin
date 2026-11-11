@@ -1,3 +1,4 @@
+// Define pagamentos, entradas de criação e entidades protegidas para persistência.
 package pagamentos
 
 import (

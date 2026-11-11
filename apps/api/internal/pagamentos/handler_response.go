@@ -1,3 +1,4 @@
+// Monta respostas financeiras e traduz erros de folha para status HTTP.
 package pagamentos
 
 import (

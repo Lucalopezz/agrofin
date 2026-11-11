@@ -1,3 +1,4 @@
+// Testa transações, restrições e consultas PostgreSQL de colheitas e tarifas.
 package colheitas
 
 import (

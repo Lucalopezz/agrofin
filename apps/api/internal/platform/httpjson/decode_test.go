@@ -1,3 +1,4 @@
+// Testa tipo de mídia, limite, campos desconhecidos e formato dos corpos JSON.
 package httpjson
 
 import (

@@ -1,3 +1,4 @@
+// Aplica regras de cadastro, login, sessão e perfil sem depender do HTTP.
 package auth
 
 import (

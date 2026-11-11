@@ -1,3 +1,4 @@
+// Registra a rota privada de criação de diárias.
 package diarias
 
 import "net/http"

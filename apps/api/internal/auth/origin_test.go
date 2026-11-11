@@ -1,3 +1,4 @@
+// Testa a política de origem e o bloqueio de requisições cross-site.
 package auth
 
 import (

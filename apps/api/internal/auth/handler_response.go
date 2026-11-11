@@ -1,3 +1,4 @@
+// Monta respostas HTTP e traduz erros de autenticação em mensagens públicas.
 package auth
 
 import (

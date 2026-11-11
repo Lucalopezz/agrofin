@@ -71,6 +71,7 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 
 - Sempre adicione comentários próximos de toda lógica não óbvia e das escolhas cuja razão não seja evidente para outro desenvolvedor. Explique **por que** o código foi feito daquela forma, a regra ou invariante que protege e os trade-offs relevantes.
 - Aplique a regra em Go, React, testes e configurações quando houver comportamento que precise de contexto. Escreva comentários em português e mantenha-os atualizados quando o código mudar.
+- Todo arquivo-fonte Go, inclusive testes, deve começar com um comentário imediatamente acima de `package` que explique a responsabilidade específica daquele arquivo. Use uma frase curta, sem apenas repetir o nome do pacote; arquivos de teste descrevem o comportamento que cobrem. Arquivos em formatos que não aceitam comentários, como JSON, ficam fora desta regra.
 - Não use comentários que apenas repitam a instrução visível na linha; eles devem acrescentar o contexto necessário para entender e manter o código.
 
 ## entrega de funcionalidades

@@ -1,3 +1,4 @@
+// Testa normalização e validação do cadastro de funcionário.
 package funcionarios
 
 import (

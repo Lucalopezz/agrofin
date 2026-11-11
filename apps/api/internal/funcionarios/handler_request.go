@@ -1,3 +1,4 @@
+// Decodifica filtros, IDs e corpos HTTP de funcionários.
 package funcionarios
 
 import (

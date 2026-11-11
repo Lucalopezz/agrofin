@@ -1,3 +1,4 @@
+// Testa criação, consulta e cálculo dos lançamentos de colheita.
 package colheitas
 
 import (

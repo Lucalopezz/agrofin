@@ -1,3 +1,4 @@
+// Monta respostas HTTP e traduz erros da criação de diárias.
 package diarias
 
 import (

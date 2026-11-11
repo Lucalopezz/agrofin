@@ -1,4 +1,4 @@
-// Package httpjson reúne regras comuns para decodificar corpos JSON de requisições HTTP.
+// Package httpjson decodifica corpos JSON estritos com limite de tamanho.
 package httpjson
 
 import (

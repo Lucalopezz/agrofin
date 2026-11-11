@@ -1,3 +1,4 @@
+// Decodifica JSON e datas no formato aceito pelo endpoint de diárias.
 package diarias
 
 import (

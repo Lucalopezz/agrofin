@@ -1,3 +1,4 @@
+// Testa validação e normalização das tarifas de colheita.
 package colheitas
 
 import (

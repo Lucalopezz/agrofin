@@ -1,3 +1,4 @@
+// Decodifica filtros e corpos HTTP de tarifas e lançamentos de colheita.
 package colheitas
 
 import (

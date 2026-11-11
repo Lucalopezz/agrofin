@@ -1,3 +1,4 @@
+// Testa regras de criação e consulta das tarifas gerais.
 package colheitas
 
 import (

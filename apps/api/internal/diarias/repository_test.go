@@ -1,3 +1,4 @@
+// Testa transações e consultas PostgreSQL de diárias protegidas.
 package diarias
 
 import (

@@ -1,3 +1,4 @@
+// Testa autenticação, entradas e respostas HTTP do resumo da folha.
 package pagamentos
 
 import (

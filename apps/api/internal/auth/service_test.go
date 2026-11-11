@@ -1,3 +1,4 @@
+// Testa regras do serviço de autenticação e o ciclo de vida das sessões.
 package auth
 
 import (

@@ -1,3 +1,4 @@
+// Testa validação, criação protegida e soma de diárias por período.
 package diarias
 
 import (

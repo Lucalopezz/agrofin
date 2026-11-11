@@ -1,3 +1,4 @@
+// Testa normalização e validação das entidades de diária.
 package diarias
 
 import (

@@ -1,3 +1,4 @@
+// Declara erros de domínio para tarifas e lançamentos de colheita.
 package colheitas
 
 import "errors"

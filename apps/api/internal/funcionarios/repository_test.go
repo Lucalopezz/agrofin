@@ -1,3 +1,4 @@
+// Testa consultas e alterações PostgreSQL do cadastro de funcionários.
 package funcionarios
 
 import (

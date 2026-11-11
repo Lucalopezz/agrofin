@@ -1,3 +1,4 @@
+// Registra as rotas privadas de tarifas e lançamentos de colheita.
 package colheitas
 
 import "net/http"

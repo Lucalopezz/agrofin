@@ -1,3 +1,4 @@
+// Testa combinação de caixas e diárias, ordenação e limites do resumo da folha.
 package pagamentos
 
 import (

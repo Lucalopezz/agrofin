@@ -1,3 +1,4 @@
+// Persiste contas, credenciais e sessões no PostgreSQL.
 package auth
 
 import (

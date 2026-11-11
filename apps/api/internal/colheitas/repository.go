@@ -1,3 +1,4 @@
+// Persiste tarifas e lançamentos protegidos e consulta seus envelopes.
 package colheitas
 
 import (

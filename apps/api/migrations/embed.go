@@ -1,3 +1,4 @@
+// Incorpora as migrações SQL ao binário para execução pelo comando migrate.
 package migrations
 
 import "embed"

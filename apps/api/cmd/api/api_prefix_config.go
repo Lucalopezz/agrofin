@@ -1,3 +1,4 @@
+// Resolve e valida o prefixo público das rotas a partir da configuração de ambiente.
 package main
 
 import (

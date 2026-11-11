@@ -1,3 +1,4 @@
+// Testa o contrato HTTP de criação de diárias.
 package diarias
 
 import (

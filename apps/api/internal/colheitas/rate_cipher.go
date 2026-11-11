@@ -1,3 +1,4 @@
+// Adapta a cifra financeira genérica ao contexto autenticado das tarifas.
 package colheitas
 
 import (

@@ -1,3 +1,4 @@
+// Inicializa o PostgreSQL e aplica ou consulta as migrações embutidas.
 package main
 
 import (

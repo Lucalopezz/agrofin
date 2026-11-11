@@ -1,3 +1,4 @@
+// Responde à verificação HTTP de disponibilidade da API.
 package health
 
 import (

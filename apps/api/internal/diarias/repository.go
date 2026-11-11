@@ -1,3 +1,4 @@
+// Persiste diárias protegidas e consulta envelopes por dono e período.
 package diarias
 
 import (

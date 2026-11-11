@@ -1,3 +1,4 @@
+// Registra rotas públicas e protegidas de autenticação.
 package auth
 
 import "net/http"

@@ -1,3 +1,4 @@
+// Coordena os endpoints HTTP de tarifas e lançamentos de colheita.
 package colheitas
 
 import (

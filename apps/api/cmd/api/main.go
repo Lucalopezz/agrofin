@@ -1,3 +1,4 @@
+// Compõe os serviços, registra as rotas protegidas e inicia o servidor HTTP da API.
 package main
 
 import (

@@ -1,3 +1,4 @@
+// Adapta a cifra autenticada ao valor e à data de cada diária.
 package diarias
 
 import (

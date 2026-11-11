@@ -1,3 +1,4 @@
+// Valida origem e cabeçalhos anti-CSRF nas requisições que alteram estado.
 package auth
 
 import (

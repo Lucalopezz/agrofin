@@ -1,3 +1,4 @@
+// Coordena o endpoint HTTP de criação de diárias.
 package diarias
 
 import (

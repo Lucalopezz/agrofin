@@ -1,3 +1,4 @@
+// Declara erros de domínio para folha, pagamentos e proteção financeira.
 package pagamentos
 
 import "errors"

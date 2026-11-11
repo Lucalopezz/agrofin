@@ -1,3 +1,4 @@
+// Registra a rota pública de verificação de disponibilidade.
 package health
 
 import "net/http"

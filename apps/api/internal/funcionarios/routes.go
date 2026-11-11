@@ -1,3 +1,4 @@
+// Registra as rotas privadas de cadastro e gestão de funcionários.
 package funcionarios
 
 import "net/http"

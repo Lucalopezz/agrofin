@@ -1,3 +1,4 @@
+// Declara os erros de domínio usados pelo serviço e pelos handlers de autenticação.
 package auth
 
 import "errors"

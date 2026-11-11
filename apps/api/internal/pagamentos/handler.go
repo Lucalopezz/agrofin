@@ -1,3 +1,4 @@
+// Coordena os endpoints HTTP de resumo da folha e criação de pagamento.
 package pagamentos
 
 import (

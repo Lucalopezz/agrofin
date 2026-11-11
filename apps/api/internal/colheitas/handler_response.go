@@ -1,3 +1,4 @@
+// Monta respostas HTTP de tarifas, lançamentos e resumos de colheita.
 package colheitas
 
 import (

@@ -1,3 +1,4 @@
+// Valida entradas e aplica regras de cadastro e estado dos funcionários.
 package funcionarios
 
 import "context"

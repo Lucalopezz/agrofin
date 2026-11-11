@@ -1,4 +1,4 @@
-// Package colheitas contém o domínio dos lançamentos de colheita e suas tarifas.
+// Package colheitas define tarifas gerais e valida seus valores e vigências.
 package colheitas
 
 import (

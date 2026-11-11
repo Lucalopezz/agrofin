@@ -1,3 +1,4 @@
+// Monta respostas HTTP e traduz erros de funcionários para status públicos.
 package funcionarios
 
 import (

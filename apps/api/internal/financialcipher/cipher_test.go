@@ -1,3 +1,4 @@
+// Testa geração, abertura e rejeição de envelopes financeiros protegidos.
 package financialcipher
 
 import (

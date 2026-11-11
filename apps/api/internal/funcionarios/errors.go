@@ -1,3 +1,4 @@
+// Declara erros de domínio para cadastro e estado de funcionários.
 package funcionarios
 
 import "errors"

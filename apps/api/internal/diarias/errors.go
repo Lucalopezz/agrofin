@@ -1,3 +1,4 @@
+// Declara erros de domínio para criação e consulta de diárias.
 package diarias
 
 import "errors"

@@ -1,3 +1,4 @@
+// Testa contratos HTTP de cadastro, listagem e gestão de funcionários.
 package funcionarios
 
 import (

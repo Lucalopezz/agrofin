@@ -1,3 +1,4 @@
+// Valida e protege tarifas antes de delegar sua persistência ao repositório.
 package colheitas
 
 import (

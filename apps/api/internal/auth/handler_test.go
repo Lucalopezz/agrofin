@@ -1,3 +1,4 @@
+// Testa os contratos HTTP de autenticação, cadastro e perfil do gerente.
 package auth
 
 import (

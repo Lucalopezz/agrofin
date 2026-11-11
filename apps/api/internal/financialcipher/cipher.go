@@ -1,4 +1,4 @@
-// Package financialcipher protege valores financeiros antes que cheguem à persistência.
+// Package financialcipher implementa envelopes autenticados para valores financeiros.
 package financialcipher
 
 import (

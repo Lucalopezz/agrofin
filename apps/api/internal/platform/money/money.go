@@ -1,4 +1,4 @@
-// Package money compartilha regras para valores representados em centavos inteiros.
+// Package money centraliza verificações comuns de valores em centavos inteiros.
 package money
 
 // IsPositiveCents informa se um valor financeiro é maior que zero.

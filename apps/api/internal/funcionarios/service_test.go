@@ -1,3 +1,4 @@
+// Testa regras de cadastro, renomeação, filtro e estado do funcionário.
 package funcionarios
 
 import (

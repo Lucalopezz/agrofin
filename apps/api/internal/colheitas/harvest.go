@@ -1,3 +1,4 @@
+// Define lançamentos de colheita, itens e regras de normalização do período.
 package colheitas
 
 import (

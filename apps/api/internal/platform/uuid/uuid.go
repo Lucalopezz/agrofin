@@ -1,4 +1,4 @@
-// Package uuid gera e normaliza identificadores UUID usados pela aplicação.
+// Package uuid gera identificadores e normaliza UUIDs recebidos pela aplicação.
 package uuid
 
 import (

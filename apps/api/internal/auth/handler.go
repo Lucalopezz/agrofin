@@ -1,3 +1,4 @@
+// Coordena os endpoints HTTP de cadastro, sessão e perfil do gerente.
 package auth
 
 import (

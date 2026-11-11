@@ -1,3 +1,4 @@
+// Decodifica período de consulta e corpo idempotente de pagamento.
 package pagamentos
 
 import (

@@ -1,3 +1,4 @@
+// Armazena e recupera do contexto o principal autenticado pelo middleware.
 package auth
 
 import "context"

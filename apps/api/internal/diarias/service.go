@@ -1,3 +1,4 @@
+// Valida, cifra, persiste e resume os valores de diárias.
 package diarias
 
 import (

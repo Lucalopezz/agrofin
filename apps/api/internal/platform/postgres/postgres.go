@@ -1,3 +1,4 @@
+// Abre e valida o pool PostgreSQL compartilhado pela API.
 package postgres
 
 import (

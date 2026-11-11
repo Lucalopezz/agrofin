@@ -1,3 +1,4 @@
+// Define e configura cookies HTTP usados para transportar a sessão opaca.
 package auth
 
 import (

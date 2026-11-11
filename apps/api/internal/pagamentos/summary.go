@@ -1,3 +1,4 @@
+// Define períodos e estruturas de resposta do resumo de folha por funcionário.
 package pagamentos
 
 import (

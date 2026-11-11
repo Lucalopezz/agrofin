@@ -1,3 +1,4 @@
+// Testa geração e validação dos UUIDs usados pela aplicação.
 package uuid
 
 import (

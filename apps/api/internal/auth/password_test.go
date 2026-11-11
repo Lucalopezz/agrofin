@@ -1,3 +1,4 @@
+// Testa requisitos de senha e a verificação dos hashes persistidos.
 package auth
 
 import (

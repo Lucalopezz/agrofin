@@ -1,3 +1,4 @@
+// Coordena os endpoints HTTP de cadastro e gestão de funcionários.
 package funcionarios
 
 import (

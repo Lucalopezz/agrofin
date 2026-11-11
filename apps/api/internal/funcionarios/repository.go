@@ -1,3 +1,4 @@
+// Persiste funcionários e aplica filtros sempre limitados pelo gerente.
 package funcionarios
 
 import (

@@ -1,3 +1,4 @@
+// Define gerente, credenciais, sessões e estruturas de entrada da autenticação.
 package auth
 
 import (

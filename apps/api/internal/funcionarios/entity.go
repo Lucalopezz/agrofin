@@ -1,4 +1,4 @@
-// Package funcionarios contém a definição da estrutura Employee e funções relacionadas à validação de nomes de funcionários.
+// Package funcionarios define o cadastro Employee e normaliza seus nomes.
 package funcionarios
 
 import (

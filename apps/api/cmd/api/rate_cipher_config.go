@@ -1,3 +1,4 @@
+// Carrega e valida o chaveiro financeiro compartilhado a partir das variáveis de ambiente.
 package main
 
 import (

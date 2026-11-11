@@ -1,3 +1,4 @@
+// Valida cookies de sessão e injeta o principal autenticado no contexto HTTP.
 package auth
 
 import (
