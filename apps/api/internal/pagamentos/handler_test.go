@@ -16,10 +16,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type payrollSummaryServiceFunc func(context.Context, string, Period) (PeriodSummary, error)
+type payrollServiceFunc func(context.Context, string, Period) (PeriodSummary, error)
 
-func (f payrollSummaryServiceFunc) Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
+func (f payrollServiceFunc) Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
 	return f(ctx, userID, period)
+}
+
+func (f payrollServiceFunc) Create(context.Context, string, CreatePaymentInput) (PaymentCreation, error) {
+	return PaymentCreation{}, nil
 }
 
 func TestPayrollSummaryHandler(t *testing.T) {
@@ -55,7 +59,7 @@ func TestPayrollSummaryHandler(t *testing.T) {
 				ctx = auth.WithPrincipal(ctx, auth.Principal{UserID: "user-from-session"})
 			}
 			calls := 0
-			service := payrollSummaryServiceFunc(func(gotCtx context.Context, userID string, period Period) (PeriodSummary, error) {
+			service := payrollServiceFunc(func(gotCtx context.Context, userID string, period Period) (PeriodSummary, error) {
 				calls++
 				assert.Equal(t, "user-from-session", userID)
 				if tt.wantCalls > 0 && tt.serviceErr != nil {

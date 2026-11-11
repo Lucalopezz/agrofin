@@ -26,6 +26,34 @@ func (f dailyWorkSummarizerFunc) Summarize(ctx context.Context, userID string, p
 	return f(ctx, userID, period)
 }
 
+type emptyPaymentRepository struct{}
+
+func (emptyPaymentRepository) FindPaymentByRequestKey(context.Context, string, string) (ProtectedPayment, bool, error) {
+	return ProtectedPayment{}, false, nil
+}
+
+func (emptyPaymentRepository) withEmployeePaymentLock(context.Context, string, string, string, func(paymentTransaction, *ProtectedPayment) error) error {
+	return errors.New("operação de escrita não esperada no teste de resumo")
+}
+
+func (emptyPaymentRepository) ListPayments(context.Context, string, time.Time, time.Time) ([]ProtectedPayment, error) {
+	return []ProtectedPayment{}, nil
+}
+
+type unusedPaymentProtector struct{}
+
+func (unusedPaymentProtector) EncryptPaymentAmount(Payment) (ProtectedPayment, error) {
+	return ProtectedPayment{}, errors.New("cifra não esperada no teste de resumo")
+}
+
+func (unusedPaymentProtector) DecryptPaymentAmount(ProtectedPayment) (int64, error) {
+	return 0, errors.New("decifra não esperada sem pagamentos")
+}
+
+func newTestPayrollService(harvest harvestSummarizer, daily dailyWorkSummarizer) *PayrollService {
+	return NewPayrollService(harvest, daily, emptyPaymentRepository{}, unusedPaymentProtector{})
+}
+
 func TestServiceSummarizeCombinesHarvestsAndDailyWorks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,7 +63,7 @@ func TestServiceSummarizeCombinesHarvestsAndDailyWorks(t *testing.T) {
 	employeeB := "employee-b"
 	employeeC := "employee-c"
 	harvestCalls, dailyCalls := 0, 0
-	service := NewService(
+	service := newTestPayrollService(
 		harvestSummarizerFunc(func(gotCtx context.Context, userID string, period colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 			harvestCalls++
 			assert.Same(t, ctx, gotCtx)
@@ -69,22 +97,24 @@ func TestServiceSummarizeCombinesHarvestsAndDailyWorks(t *testing.T) {
 	assert.Equal(t, 1, dailyCalls)
 	require.Len(t, got.Employees, 3)
 	assert.Equal(t, EmployeeSummary{
-		EmployeeID: employeeC, EmployeeName: "Ana", DailyWorkAmountCents: 2500, DueAmountCents: 2500,
+		EmployeeID: employeeC, EmployeeName: "Ana", DailyWorkAmountCents: 2500,
+		DueAmountCents: 2500, RemainingAmountCents: 2500,
 	}, got.Employees[0])
 	assert.Equal(t, EmployeeSummary{
-		EmployeeID: employeeB, EmployeeName: "Bruna", HarvestAmountCents: 1200, DueAmountCents: 1200,
+		EmployeeID: employeeB, EmployeeName: "Bruna", HarvestAmountCents: 1200,
+		DueAmountCents: 1200, RemainingAmountCents: 1200,
 	}, got.Employees[1])
 	assert.Equal(t, EmployeeSummary{
 		EmployeeID: employeeA, EmployeeName: "João", NormalBoxes: 10, MillingBoxes: 4,
 		NormalAmountCents: 5000, MillingAmountCents: 800, HarvestAmountCents: 5800,
-		DailyWorkAmountCents: 8000, DueAmountCents: 13800,
+		DailyWorkAmountCents: 8000, DueAmountCents: 13800, RemainingAmountCents: 13800,
 	}, got.Employees[2])
 }
 
 func TestServiceSummarizeRejectsInvalidPeriodBeforeDependencies(t *testing.T) {
 	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
 	calls := 0
-	service := NewService(
+	service := newTestPayrollService(
 		harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 			calls++
 			return nil, nil
@@ -101,7 +131,7 @@ func TestServiceSummarizeRejectsInvalidPeriodBeforeDependencies(t *testing.T) {
 
 func TestServiceSummarizeEmptyPeriodReturnsInitializedList(t *testing.T) {
 	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
-	service := NewService(
+	service := newTestPayrollService(
 		harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 			return []colheitas.HarvestSummary{}, nil
 		}),
@@ -119,7 +149,7 @@ func TestServiceSummarizePropagatesDependencyErrors(t *testing.T) {
 	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
 	failure := errors.New("falha interna")
 	t.Run("colheitas", func(t *testing.T) {
-		service := NewService(
+		service := newTestPayrollService(
 			harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 				return nil, failure
 			}),
@@ -132,7 +162,7 @@ func TestServiceSummarizePropagatesDependencyErrors(t *testing.T) {
 		assert.ErrorIs(t, err, failure)
 	})
 	t.Run("diárias", func(t *testing.T) {
-		service := NewService(
+		service := newTestPayrollService(
 			harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 				return []colheitas.HarvestSummary{}, nil
 			}),
@@ -147,7 +177,7 @@ func TestServiceSummarizePropagatesDependencyErrors(t *testing.T) {
 
 func TestServiceSummarizeRejectsTotalOverflow(t *testing.T) {
 	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
-	service := NewService(
+	service := newTestPayrollService(
 		harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
 			return []colheitas.HarvestSummary{{EmployeeID: "employee-a", HarvestAmountCents: math.MaxInt64}}, nil
 		}),

@@ -1,3 +1,4 @@
+// Coordena cálculo do devido e projeção de valores pagos e restantes.
 package pagamentos
 
 import (
@@ -19,49 +20,86 @@ type dailyWorkSummarizer interface {
 	Summarize(ctx context.Context, userID string, period diarias.DailyWorkPeriod) ([]diarias.DailyWorkSummary, error)
 }
 
-// Service combina projeções já calculadas nos domínios de colheita e diária.
-// Ele não carrega histórico dentro de Employee nem altera os lançamentos de origem.
-type Service struct {
-	harvest harvestSummarizer
-	daily   dailyWorkSummarizer
+// PayrollService cria pagamentos e monta a projeção de devido, pago e restante.
+type PayrollService struct {
+	harvest   harvestSummarizer
+	daily     dailyWorkSummarizer
+	repo      paymentCreatorRepository
+	protector paymentAmountProtector
 }
 
-func NewService(harvest harvestSummarizer, daily dailyWorkSummarizer) *Service {
-	return &Service{harvest: harvest, daily: daily}
+func NewPayrollService(
+	harvest harvestSummarizer,
+	daily dailyWorkSummarizer,
+	repo paymentCreatorRepository,
+	protector paymentAmountProtector,
+) *PayrollService {
+	return &PayrollService{
+		harvest: harvest, daily: daily, repo: repo, protector: protector,
+	}
 }
 
-// Summarize calcula o valor devido antes de pagamentos para cada funcionário
-// com ao menos uma colheita ou diária no intervalo inclusivo.
-func (s *Service) Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
-	// Não iniciamos consultas se o cliente já cancelou ou perdeu o prazo.
+// Summarize combina primeiro pagamentos e depois as fontes de devido para evitar saldo acima do devido
+// quando um pagamento concorre com a consulta. As fontes atuais só recebem novos lançamentos.
+func (s *PayrollService) Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
 	if err := ctx.Err(); err != nil {
 		return PeriodSummary{}, err
 	}
-	// O dono vem da sessão do handler; validar aqui também protege chamadas
-	// internas que usem Service sem passar pelo HTTP.
 	if userID == "" || strings.TrimSpace(userID) != userID {
 		return PeriodSummary{}, ErrInvalidPayrollOwner
 	}
-	// Os dois domínios recebem o mesmo intervalo de dias de calendário, com
-	// limites inclusivos e horários removidos.
 	period, err := normalizePeriod(period)
 	if err != nil {
 		return PeriodSummary{}, err
 	}
-	// Falhar antes de qualquer leitura deixa uma configuração parcial visível
-	// como erro, em vez de produzir um resumo que omita uma das fontes.
 	if s == nil || s.harvest == nil || s.daily == nil {
 		return PeriodSummary{}, ErrInvalidPayrollConfig
 	}
+	if s.repo == nil || s.protector == nil {
+		return PeriodSummary{}, ErrInvalidPaymentConfig
+	}
 
-	// Cada serviço filtra por gerente/período e autentica seus próprios envelopes.
-	// Propagamos a falha sem devolver os totais parciais da outra fonte.
+	paidByEmployee, err := s.summarizePayments(ctx, userID, period)
+	if err != nil {
+		return PeriodSummary{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return PeriodSummary{}, err
+	}
+	dueSummary, err := s.summarizeDue(ctx, userID, period)
+	if err != nil {
+		return PeriodSummary{}, err
+	}
+
+	for index := range dueSummary.Employees {
+		employee := &dueSummary.Employees[index]
+		paid := paidByEmployee[employee.EmployeeID]
+		if paid < 0 || paid > employee.DueAmountCents {
+			// Não limitamos o saldo a zero: pagar acima do devido indica histórico inconsistente.
+			return PeriodSummary{}, ErrInvalidPaymentBalance
+		}
+		employee.PaidAmountCents = paid
+		employee.RemainingAmountCents = employee.DueAmountCents - paid
+		delete(paidByEmployee, employee.EmployeeID)
+	}
+	if len(paidByEmployee) > 0 {
+		// Todo pagamento precisa corresponder a um funcionário com devido no intervalo exato.
+		return PeriodSummary{}, ErrInvalidPaymentBalance
+	}
+	return dueSummary, nil
+}
+
+// summarizeDue calcula somente caixas e diárias para um período já normalizado.
+// Create usa esse resultado antes de abrir a transação.
+func (s *PayrollService) summarizeDue(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
+	if err := ctx.Err(); err != nil {
+		return PeriodSummary{}, err
+	}
+
 	harvests, err := s.harvest.Summarize(ctx, userID, period.harvestPeriod())
 	if err != nil {
 		return PeriodSummary{}, err
 	}
-	// A primeira consulta pode ter demorado; evitar começar a segunda quando o
-	// chamador já abandonou o resumo economiza leitura e descriptografia.
 	if err := ctx.Err(); err != nil {
 		return PeriodSummary{}, err
 	}
@@ -75,12 +113,8 @@ func (s *Service) Summarize(ctx context.Context, userID string, period Period) (
 		return PeriodSummary{}, err
 	}
 
-	// Cada domínio mantém os próprios dados e a própria cifra. Aqui apenas juntamos
-	// os totais por funcionário para produzir uma visão de leitura da folha.
 	byEmployee := make(map[string]EmployeeSummary, len(harvests)+len(dailyWorks))
 	for _, harvest := range harvests {
-		// O serviço de colheitas já verifica cada multiplicação e soma; este
-		// limite protege a fronteira desta projeção caso outra fonte seja adicionada.
 		if harvest.HarvestAmountCents < 0 {
 			return PeriodSummary{}, ErrInvalidPayrollAmount
 		}
@@ -97,14 +131,11 @@ func (s *Service) Summarize(ctx context.Context, userID string, period Period) (
 		if daily.DailyWorkAmountCents < 0 {
 			return PeriodSummary{}, ErrInvalidPayrollAmount
 		}
-		// O ID é a chave, não o nome: funcionários homônimos continuam separados,
-		// e um funcionário que só recebeu diárias também aparece no resumo.
 		summary, exists := byEmployee[daily.EmployeeID]
 		if !exists {
 			summary = EmployeeSummary{EmployeeID: daily.EmployeeID, EmployeeName: daily.EmployeeName}
 		}
-		// Valor devido é o gerado pelas caixas mais as diárias; pagamentos ainda
-		// não entram nesta feature e serão subtraídos por um fluxo posterior.
+		// O ID agrupa lançamentos de funcionários homônimos sem misturar seus totais.
 		due, err := addAmount(summary.DueAmountCents, daily.DailyWorkAmountCents)
 		if err != nil {
 			return PeriodSummary{}, err
@@ -118,7 +149,6 @@ func (s *Service) Summarize(ctx context.Context, userID string, period Period) (
 	for _, summary := range byEmployee {
 		employees = append(employees, summary)
 	}
-	// A ordem dos mapas varia; nome e ID mantêm a lista previsível e distinguem homônimos.
 	sort.Slice(employees, func(i, j int) bool {
 		if employees[i].EmployeeName != employees[j].EmployeeName {
 			return employees[i].EmployeeName < employees[j].EmployeeName
@@ -129,8 +159,7 @@ func (s *Service) Summarize(ctx context.Context, userID string, period Period) (
 }
 
 func normalizePeriod(period Period) (Period, error) {
-	// DATE não representa um instante. Normalizar os campos para meia-noite UTC
-	// faz colheitas e diárias consultarem exatamente os mesmos dias inclusivos.
+	// DATE não representa um instante. Normalizar ambos os limites preserva os mesmos dias civis.
 	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
 	if err != nil {
 		return Period{}, ErrInvalidPayrollPeriod

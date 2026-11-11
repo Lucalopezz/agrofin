@@ -31,7 +31,7 @@ func NewCipher(keyring *financialcipher.Keyring) (*Cipher, error) {
 	return &Cipher{amounts: amounts}, nil
 }
 
-// EncryptPaymentAmount cifra o valor de um pagamento já validado pelo Service.
+// EncryptPaymentAmount cifra o valor de um pagamento já validado pelo PayrollService.
 // O ID precisa existir antes desta chamada porque também autentica o valor cifrado.
 func (c *Cipher) EncryptPaymentAmount(payment Payment) (ProtectedPayment, error) {
 	if c == nil || c.amounts == nil {
@@ -63,7 +63,7 @@ func (c *Cipher) DecryptPaymentAmount(payment ProtectedPayment) (int64, error) {
 	return amount, mapPaymentCipherError(err)
 }
 
-// paymentAmountContext serializa em ordem estável os campos já normalizados pelo Service.
+// paymentAmountContext serializa em ordem estável os campos já normalizados pelo PayrollService.
 // Essa ordem integra o formato autenticado persistido e precisa permanecer estável.
 func paymentAmountContext(payment Payment) financialcipher.Context[paymentCipherPurpose] {
 	return financialcipher.Context[paymentCipherPurpose]{

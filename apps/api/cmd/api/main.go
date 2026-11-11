@@ -57,6 +57,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	paymentCipher, err := pagamentos.NewCipher(financialKeyring)
+	if err != nil {
+		return err
+	}
 
 	// Só inicia HTTP após confirmar o banco; o prazo limita a espera na inicialização.
 	// Este contexto pertence à inicialização (ponto de entrada), não a uma
@@ -103,11 +107,12 @@ func run() error {
 	dailyWorkHandler := diarias.NewHandler(dailyWorkService)
 	diarias.RegisterRoutes(apiMux, dailyWorkHandler, sessionMiddleware.RequireSession)
 
-	// O resumo combina projeções dos domínios de colheitas e diárias; o pacote
-	// pagamentos só coordena a leitura e não transforma esses lançamentos em um agregado único.
-	payrollSummaryService := pagamentos.NewService(harvestService, dailyWorkService)
-	payrollSummaryHandler := pagamentos.NewHandler(payrollSummaryService)
-	pagamentos.RegisterRoutes(apiMux, payrollSummaryHandler, sessionMiddleware.RequireSession)
+	// Um único PayrollService coordena a criação e o resumo, reutilizando as projeções
+	// de colheitas e diárias sem transferir para ele a persistência desses domínios.
+	paymentRepository := pagamentos.NewRepository(pool)
+	payrollService := pagamentos.NewPayrollService(harvestService, dailyWorkService, paymentRepository, paymentCipher)
+	payrollHandler := pagamentos.NewHandler(payrollService)
+	pagamentos.RegisterRoutes(apiMux, payrollHandler, sessionMiddleware.RequireSession)
 
 	mux := http.NewServeMux()
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))

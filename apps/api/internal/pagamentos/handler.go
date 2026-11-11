@@ -8,16 +8,17 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 )
 
-type payrollSummaryService interface {
+type payrollService interface {
 	Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error)
+	Create(ctx context.Context, userID string, input CreatePaymentInput) (PaymentCreation, error)
 }
 
 // Handler coordena a consulta HTTP sem conhecer SQL nem abrir cifras diretamente.
 type Handler struct {
-	service payrollSummaryService
+	service payrollService
 }
 
-func NewHandler(service payrollSummaryService) *Handler {
+func NewHandler(service payrollService) *Handler {
 	return &Handler{service: service}
 }
 
@@ -33,4 +34,18 @@ func (h *Handler) summarizePeriod(w http.ResponseWriter, r *http.Request) {
 	}
 	summary, err := h.service.Summarize(r.Context(), principal.UserID, period)
 	writePeriodSummaryResponse(w, summary, err)
+}
+
+func (h *Handler) createPayment(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+	input, ok := decodeCreatePaymentRequest(w, r)
+	if !ok {
+		return
+	}
+	creation, err := h.service.Create(r.Context(), principal.UserID, input)
+	writeCreatePaymentResponse(w, creation, err)
 }

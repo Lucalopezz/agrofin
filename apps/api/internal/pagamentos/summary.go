@@ -25,6 +25,8 @@ type EmployeeSummary struct {
 	HarvestAmountCents   int64
 	DailyWorkAmountCents int64
 	DueAmountCents       int64
+	PaidAmountCents      int64
+	RemainingAmountCents int64
 }
 
 // PeriodSummary mostra o intervalo exato usado para produzir o total por pessoa.
