@@ -72,8 +72,20 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 `GET /api/v1/payroll-periods/summary` exige sessão e recebe `start_date` e `end_date` em `AAAA-MM-DD`, inclusivos. O intervalo é explícito e não presume o início da semana de pagamento.
 
 - A resposta inclui o período consultado e funcionários com ao menos uma colheita ou diária nele; dias sem lançamento não criam falta nem valor.
-- Os valores de caixas normais, caixas de moagem e diárias aparecem separados. `due_amount_cents` é a soma do valor gerado pelas caixas com as diárias, antes de pagamentos; ainda não representa o saldo pendente depois de pagar.
+- Os valores de caixas normais, caixas de moagem e diárias aparecem separados. `due_amount_cents` é a soma do valor gerado pelas caixas com as diárias; `paid_amount_cents` soma pagamentos do mesmo funcionário e intervalo exato; `remaining_amount_cents` é o devido menos o pago.
 - Os envelopes financeiros só são lidos depois do filtro por gerente e período. A API descriptografa os dados no serviço, soma em centavos inteiros e retorna `500` sem lista parcial se um envelope falhar.
+- Sem pagamento no intervalo, `paid_amount_cents` é zero e `remaining_amount_cents` é igual ao devido. Sem lançamentos e pagamentos, `employees` retorna `[]`.
+
+### HU-05 — registrar pagamento idempotente por intervalo
+
+`POST /api/v1/employee-payments` exige sessão e recebe `Idempotency-Key` como UUID no cabeçalho. O corpo estrito recebe `employee_id`, `start_date`, `end_date`, `amount_cents` positivo e `notes` opcional. As datas são inclusivas, como no resumo; a entidade usa o fim exclusivo na persistência. `paid_at` é gerado pelo servidor e `user_id` vem da sessão.
+
+- O funcionário deve pertencer à conta autenticada. Um registro existente pode receber pagamento mesmo depois de ficar inativo, preservando a possibilidade de quitar valores históricos.
+- O serviço calcula o devido com caixas e diárias do intervalo e subtrai pagamentos anteriores ligados ao mesmo funcionário e intervalo exato. Centavos são somados como inteiros com detecção de overflow.
+- O repositório mantém a soma dos pagamentos e a inserção na mesma transação serializada por funcionário. Duas requisições diferentes concorrentes não podem usar o mesmo saldo disponível.
+- A primeira aceitação retorna `201`; repetir a mesma chave e os mesmos campos retorna o pagamento original com `200`. Reutilizar a chave com funcionário, período, valor ou observação diferentes retorna `409`. Pagar acima do restante também retorna `409`.
+- O valor é cifrado antes de gravar. O resumo abre os envelopes somente depois do filtro por dono e intervalo; `Cache-Control: no-store` é enviado nas respostas financeiras.
+- UUID, período, valor ou chave inválidos retornam `400`; funcionário inexistente ou de outra conta retorna `404`; falta de sessão retorna `401`. `paid_at` não pode ser enviado pelo cliente.
 - Período vazio retorna `200` com `employees: []`. Datas inválidas, ausentes, repetidas, extras ou fim anterior ao início retornam `400`; sem sessão, `401`. A resposta usa `Cache-Control: no-store`.
 
 ### HU-04 — registro de diária implementado
@@ -153,11 +165,11 @@ A reativação e o filtro de estado estão implementados na API; sua integraçã
 
 - Dadas 10 caixas normais a R$ 5,00 e 4 caixas de moagem a R$ 2,00, o total por caixas é R$ 58,00.
 - Se houver uma diária de R$ 80,00 na mesma semana, o valor devido fica R$ 138,00, com caixas e diária em linhas separadas.
-- Se forem pagos R$ 100,00, o resumo mostra R$ 100,00 pagos e R$ 38,00 pendentes. Uma segunda tentativa de registrar o mesmo pagamento não deve gerar duplicidade.
+- Se forem pagos R$ 100,00, o resumo mostra `paid_amount_cents: 10000` e `remaining_amount_cents: 3800`. Uma segunda tentativa com a mesma `Idempotency-Key` e o mesmo conteúdo retorna o pagamento já criado sem gerar duplicidade; uma tentativa acima do restante é rejeitada.
 - Um dia sem lançamento não cria falta, desconto ou alerta de ausência.
 - O resumo deixa claro o intervalo de datas da semana e permite voltar ao detalhe que formou o total.
 
-O resumo por período implementado é a base de cálculo; ainda faltam a definição do início semanal e o registro de pagamentos para informar valores pagos e saldo restante.
+O registro de pagamentos e o saldo por intervalo explícito estão implementados. Ainda falta definir o início automático da semana; o fluxo atual não presume um calendário semanal.
 
 ## Venda, despesas e painel
 

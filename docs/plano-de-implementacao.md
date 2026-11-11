@@ -49,7 +49,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias e os resumos por período de caixas e valores devidos estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Registro de pagamentos, saldo após pagamentos, definição do início da semana, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias, pagamentos idempotentes e resumo de saldo por período estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Definição do início automático da semana, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
 
 ### Organização interna do cadastro de funcionários
 
@@ -348,17 +348,28 @@ O domínio normaliza o UUID e a data antes de chamar as dependências. O serviç
 
 A resposta `201` devolve o valor em centavos para a sessão autenticada e usa `Cache-Control: no-store`. UUID, data, valor, JSON ou campos desconhecidos inválidos retornam `400`; `415` indica tipo de mídia incorreto; `413`, corpo acima de 4 KiB; cancelamento e prazo esgotado retornam `408` e `504`. Falhas internas retornam mensagem genérica sem registrar o valor financeiro.
 
-A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos de origem e proteção CSRF. O envio é persistente e repetido cria outro lançamento; teste manualmente, não execute a coleção inteira pelo runner. A diária permanece fora de `/harvest-entries/summary`, mas entra em `/payroll-periods/summary`; pagamentos ainda não são descontados.
+A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos de origem e proteção CSRF. O envio é persistente e repetido cria outro lançamento; teste manualmente, não execute a coleção inteira pelo runner. A diária permanece fora de `/harvest-entries/summary` e entra em `/payroll-periods/summary`, onde também entram os pagamentos do intervalo.
 
 ### Resumo de valores devidos por período
 
 `GET /api/v1/payroll-periods/summary` exige sessão e recebe `start_date` e `end_date` inclusivos em `AAAA-MM-DD`. A rota usa datas explícitas porque ainda não há decisão sobre o dia em que começa a semana de pagamento.
 
-- `internal/pagamentos` combina duas projeções: a soma das caixas já calculada por `colheitas` e a soma das diárias calculada por `diarias`. Nenhum pacote passa a guardar o histórico do outro dentro do funcionário.
+- `PayrollService` oferece criação e resumo sem transferir o histórico de caixas ou diárias para o cadastro de funcionário. Ele coordena os serviços de origem e abre envelopes de pagamentos somente depois do filtro do repositório.
 - A consulta de diárias filtra `user_id` e período no PostgreSQL, mas devolve os envelopes cifrados. O serviço de diárias reconstrói o contexto autenticado e descriptografa os valores antes de somá-los; a consulta de colheitas faz o mesmo com as tarifas aplicadas.
-- A resposta contém o intervalo e, para cada funcionário com lançamentos, quantidades e valores de caixas normais e de moagem, total das diárias e `due_amount_cents`, que soma caixas e diárias antes de pagamentos. Ainda não há pagamentos nem saldo pendente nessa projeção.
+- A resposta contém o intervalo e, para cada funcionário com lançamentos, quantidades e valores de caixas normais e de moagem, total das diárias, `due_amount_cents`, `paid_amount_cents` e `remaining_amount_cents`. Pagamentos só são associados ao mesmo funcionário e intervalo exato.
 - Valores são somados como centavos inteiros, com detecção de overflow. Se um envelope não autenticar ou uma consulta falhar, a API não devolve um resultado parcial. A resposta usa `Cache-Control: no-store`.
 - A coleção Postman v2.1 contém **07.6 - Resumir valores devidos no período**, utilizável no Postman ou importável no Bruno e no Insomnia.
+
+### Registro idempotente de pagamentos
+
+`POST /api/v1/employee-payments` exige sessão, `Origin`, `X-Agrofin-Request: 1` e um UUID no cabeçalho `Idempotency-Key`. O JSON estrito recebe `employee_id`, `start_date`, `end_date`, `amount_cents` positivo e `notes` opcional. As datas são inclusivas como no resumo; na tabela, `period_end` fica exclusivo. `paid_at` é gerado no servidor com precisão de microssegundos e não pode vir do cliente.
+
+- `PayrollService` normaliza proprietário, funcionário, chave, período e centavos; calcula o devido com os serviços de caixas e diárias; abre envelopes dos pagamentos anteriores e rejeita valor acima do saldo.
+- O repositório usa uma trava transacional por chave de idempotência e bloqueia a linha do funcionário para pagamento novo. A leitura dos pagamentos anteriores, a verificação do saldo e a inserção ficam na mesma transação serializada. A restrição `UNIQUE (user_id, request_key)` permanece como defesa final.
+- Para a mesma chave, funcionário, período, valor e observação, a repetição retorna o pagamento original (`200`). A chave reutilizada com dados diferentes e uma tentativa acima do saldo retornam `409`; o primeiro registro retorna `201`.
+- A tabela recebe somente envelope cifrado e metadados. A cifra autentica conta, ID, funcionário, período, data do pagamento e chave de requisição. `Cache-Control: no-store` protege as respostas financeiras.
+- A trava do funcionário também conflita com o `FOR SHARE` usado pelas criações de colheita e diária. Como essas fontes são append-only nesta versão, o devido é consultado antes da transação para evitar exigir uma segunda conexão do pool dentro da transação. Uma nova colheita concorrente pode aumentar o devido e provocar uma rejeição conservadora que o cliente pode repetir; não pode permitir pagamento acima do devido anterior. Se correções que reduzam lançamentos forem introduzidas, o cálculo do devido deverá participar da mesma transação/snapshot.
+- A pasta **Manual - Registrar pagamento** da coleção Postman v2.1 contém o POST; reutilize a chave apenas para repetir o mesmo corpo e escolha outra chave para outro pagamento. Não execute a coleção inteira pelo runner.
 
 ### Respostas para a tela
 
@@ -382,9 +393,9 @@ Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 ]
 ```
 
-O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina esses valores com diárias para mostrar o devido antes de pagamentos. O fechamento semanal completo ainda precisa definir o início da semana, registrar pagamentos e calcular o saldo restante; ajustes não fazem parte desta projeção.
+O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina caixas e diárias com pagamentos para mostrar devido, pago e restante no intervalo explícito. A definição do início da semana e os ajustes não fazem parte desta projeção.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas e `POST /daily-work` registra diárias; `GET /payroll-periods/summary` combina caixas e diárias para um intervalo explícito. O saldo depois de pagamentos e `/payroll-weeks/{week}/summary` continuam pendentes até implementar pagamentos e definir o início da semana. A edição de colheita foi adiada para depois da V1.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas, `POST /daily-work` registra diárias, `POST /employee-payments` registra pagamentos idempotentes e `GET /payroll-periods/summary` combina devido, pago e restante em intervalo explícito. A semana automática continua pendente até definir seu dia inicial; a edição de colheita foi adiada para depois da V1.
 
 ## Sequência sugerida
 
@@ -392,9 +403,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas, colheitas e diárias — criação e consultas iniciais implementadas:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas, criação de diárias e resumo de valores devidos por período. Seguem pendentes pagamentos, saldo após pagamento, semana automática e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
+3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas, criação de diárias, registro idempotente de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes semana automática e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, resumo inicial de produção e registro de diárias funcionam com sessão e proteção financeira. Edição de colheita foi adiada para depois da V1; o saldo semanal após pagamentos continua pendente.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, diárias, pagamentos e resumos funcionam com sessão e proteção financeira. Edição de colheita foi adiada para depois da V1; a definição de uma semana automática continua pendente.
 
 | etapa | entrega verificável |
 | --- | --- |
@@ -418,12 +429,12 @@ PATCH          ${API_PREFIX}/employees/{id}/reactivate # reativar, sem corpo
 GET/POST       ${API_PREFIX}/harvest-rates       # implementados; tarifa geral por conta
 GET            ${API_PREFIX}/harvest-entries       # consulta inicial por período implementada
 GET            ${API_PREFIX}/harvest-entries/summary # resumo de caixas por funcionário implementado
-GET            ${API_PREFIX}/payroll-periods/summary # resumo de caixas + diárias por período implementado
+GET            ${API_PREFIX}/payroll-periods/summary # devido, pago e restante por período implementado
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 POST           ${API_PREFIX}/daily-work            # registro de diária implementado
+POST           ${API_PREFIX}/employee-payments     # pagamento protegido e idempotente implementado
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
-POST           ${API_PREFIX}/employee-payments
 ```
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.
