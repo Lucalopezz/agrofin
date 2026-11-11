@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, criação e consulta de colheitas, resumo de valores devidos por período e registro de diárias. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes e sensíveis ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, colheitas, diárias, pagamentos idempotentes e resumo do saldo por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -44,6 +44,10 @@
     {
       "key": "payroll_end_date",
       "value": "2026-11-30"
+    },
+    {
+      "key": "payment_request_key",
+      "value": "68be7967-1eb6-4d71-91c4-d5f8ccf481cb"
     }
   ],
   "item": [
@@ -234,7 +238,7 @@
     {
       "name": "07.6 - Resumir valores devidos no período",
       "request": {
-        "description": "Exige sessão. Informe payroll_start_date e payroll_end_date como AAAA-MM-DD; os limites são inclusivos e não definem uma semana automática. Agrupa por funcionário os valores das caixas e das diárias. due_amount_cents é o total antes de pagamentos, não o saldo restante. Sem lançamentos no período, employees retorna [].",
+        "description": "Exige sessão. Informe payroll_start_date e payroll_end_date como AAAA-MM-DD; os limites são inclusivos e não definem uma semana automática. Agrupa caixas, diárias, pagamentos do mesmo intervalo e saldo restante por funcionário. Sem lançamentos e pagamentos, employees retorna [].",
         "method": "GET",
         "url": "{{base_url}}/payroll-periods/summary?start_date={{payroll_start_date}}&end_date={{payroll_end_date}}"
       }
@@ -498,6 +502,47 @@
             "body": {
               "mode": "raw",
               "raw": "{\"employee_id\":\"{{employee_id}}\",\"work_date\":\"2026-11-04\",\"amount_cents\":8000,\"notes\":\"Diária de teste\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Registrar pagamento",
+      "description": "Registra um pagamento persistente e protegido. Reutilize a mesma Idempotency-Key ao repetir exatamente o mesmo pedido; altere a chave para um novo pagamento. Envie somente manualmente.",
+      "item": [
+        {
+          "name": "Registrar pagamento do funcionário",
+          "request": {
+            "description": "Exige sessão ativa, Origin e X-Agrofin-Request. O funcionário deve pertencer à conta. O corpo usa start_date/end_date inclusivos e amount_cents em centavos. A primeira gravação retorna 201; a repetição idêntica retorna 200 e o registro original. Reutilizar a chave com dados diferentes ou tentar pagar acima do saldo retorna 409. O servidor gera paid_at e cifra o valor.",
+            "method": "POST",
+            "url": "{{base_url}}/employee-payments",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{payment_request_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"employee_id\":\"{{employee_id}}\",\"start_date\":\"{{payroll_start_date}}\",\"end_date\":\"{{payroll_end_date}}\",\"amount_cents\":10000,\"notes\":\"Pagamento de teste\"}",
               "options": {
                 "raw": {
                   "language": "json"
