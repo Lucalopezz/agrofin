@@ -31,18 +31,13 @@ func decodeCreateDailyWorkRequest(w http.ResponseWriter, r *http.Request) (Creat
 		return CreateDailyWorkInput{}, false
 	}
 
-	employeeID, err := normalizeDailyWorkEmployeeID(request.EmployeeID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "employee_id deve ser um UUID válido"})
-		return CreateDailyWorkInput{}, false
-	}
 	workDate, err := calendarDate.Parse(request.WorkDate)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "work_date deve usar o formato AAAA-MM-DD"})
 		return CreateDailyWorkInput{}, false
 	}
 	return CreateDailyWorkInput{
-		EmployeeID: employeeID, WorkDate: workDate,
+		EmployeeID: request.EmployeeID, WorkDate: workDate,
 		AmountCents: request.AmountCents, Notes: request.Notes,
 	}, true
 }

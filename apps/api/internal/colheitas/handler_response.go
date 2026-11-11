@@ -94,8 +94,9 @@ func writeListRatesResponse(w http.ResponseWriter, rates []Rate, err error) {
 
 func writeCreateHarvestResponse(w http.ResponseWriter, harvest Harvest, err error) {
 	switch {
-	case errors.Is(err, ErrInvalidHarvestOwner), errors.Is(err, ErrInvalidHarvestEmployee),
-		errors.Is(err, ErrInvalidHarvestDate), errors.Is(err, ErrInvalidHarvestItems),
+	case errors.Is(err, ErrInvalidHarvestEmployee):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O campo employee_id deve ser um UUID válido"})
+	case errors.Is(err, ErrInvalidHarvestOwner), errors.Is(err, ErrInvalidHarvestDate), errors.Is(err, ErrInvalidHarvestItems),
 		errors.Is(err, ErrInvalidHarvestQuantity), errors.Is(err, ErrDuplicateHarvestItem),
 		errors.Is(err, ErrInvalidBoxType):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira funcionário, data, tipos e quantidades do lançamento"})

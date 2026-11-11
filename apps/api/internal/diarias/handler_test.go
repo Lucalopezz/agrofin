@@ -42,7 +42,7 @@ func TestCreateDailyWorkHandler(t *testing.T) {
 		{name: "corpo nulo", body: `null`, contentType: "application/json", expectedCode: http.StatusBadRequest},
 		{name: "campo desconhecido", body: `{"employee_id":"` + validEmployeeID + `","user_id":"outro"}`, contentType: "application/json", expectedCode: http.StatusBadRequest},
 		{name: "mais de um objeto", body: `{} {}`, contentType: "application/json", expectedCode: http.StatusBadRequest},
-		{name: "uuid inválido", body: `{"employee_id":"x","work_date":"2026-11-04","amount_cents":1}`, contentType: "application/json", expectedCode: http.StatusBadRequest},
+		{name: "uuid inválido validado pelo serviço", body: `{"employee_id":"x","work_date":"2026-11-04","amount_cents":1}`, contentType: "application/json", serviceErr: ErrInvalidEmployeeID, expectedCode: http.StatusBadRequest, expectedCalls: 1},
 		{name: "data inválida", body: `{"employee_id":"` + validEmployeeID + `","work_date":"2026-02-30","amount_cents":1}`, contentType: "application/json", expectedCode: http.StatusBadRequest},
 		{name: "data com formato diferente", body: `{"employee_id":"` + validEmployeeID + `","work_date":"04-11-2026","amount_cents":1}`, contentType: "application/json", expectedCode: http.StatusBadRequest},
 		{name: "corpo excede limite", body: `{"employee_id":"` + validEmployeeID + `","work_date":"2026-11-04","amount_cents":1,"notes":"` + strings.Repeat("a", 4096) + `"}`, contentType: "application/json", expectedCode: http.StatusRequestEntityTooLarge},

@@ -79,11 +79,6 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Envie um único objeto JSON com os campos do lançamento"})
 		return CreateHarvestInput{}, false
 	}
-	employeeID, err := normalizeHarvestEmployeeID(request.EmployeeID)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "employee_id deve ser um UUID válido"})
-		return CreateHarvestInput{}, false
-	}
 	harvestDate, err := calendarDate.Parse(request.HarvestDate)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "harvest_date deve usar o formato AAAA-MM-DD"})
@@ -94,7 +89,7 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 		items = append(items, HarvestItemInput{BoxType: item.BoxType, Quantity: item.Quantity})
 	}
 	return CreateHarvestInput{
-		EmployeeID: employeeID, HarvestDate: harvestDate, Items: items,
+		EmployeeID: request.EmployeeID, HarvestDate: harvestDate, Items: items,
 	}, true
 }
 

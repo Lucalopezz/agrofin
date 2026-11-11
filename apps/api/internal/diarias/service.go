@@ -38,9 +38,6 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateDailyWo
 	if err := ctx.Err(); err != nil {
 		return DailyWork{}, err
 	}
-	if strings.TrimSpace(userID) != userID || userID == "" {
-		return DailyWork{}, ErrInvalidDailyWorkOwner
-	}
 
 	work, err := normalizeDailyWork(DailyWork{
 		UserID: userID, EmployeeID: input.EmployeeID,

@@ -25,8 +25,10 @@ type dailyWorkResponse struct {
 
 func writeCreateDailyWorkResponse(w http.ResponseWriter, work DailyWork, err error) {
 	switch {
-	case errors.Is(err, ErrInvalidDailyWorkOwner), errors.Is(err, ErrInvalidEmployeeID),
-		errors.Is(err, ErrInvalidDailyWorkDate), errors.Is(err, ErrInvalidDailyWorkAmount):
+	case errors.Is(err, ErrInvalidEmployeeID):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O campo employee_id deve ser um UUID válido"})
+	case errors.Is(err, ErrInvalidDailyWorkOwner), errors.Is(err, ErrInvalidDailyWorkDate),
+		errors.Is(err, ErrInvalidDailyWorkAmount):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira funcionário, data e valor da diária"})
 	case errors.Is(err, ErrEmployeeNotFound):
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Funcionário não encontrado"})
