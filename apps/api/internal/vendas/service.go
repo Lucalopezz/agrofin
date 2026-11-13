@@ -219,17 +219,23 @@ func (s *Service) Receive(ctx context.Context, userID string, input CreateReceip
 	return creation, replayed, nil
 }
 
+// openSale abre os valores protegidos e recompõe os totais para devolver a venda legível.
+// A consulta já foi limitada ao dono no repositório; o userID também vincula a decifra.
 func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, error) {
 	p := record.Sale
 	sale := Sale{ID: p.ID, UserID: userID, SoldAt: calendarDate.Normalize(p.SoldAt), BuyerName: p.BuyerName, Notes: p.Notes}
 	for _, item := range p.Items {
+		// Tipo e data fazem parte do contexto da cifra; repetir os valores aqui
+		// detecta troca de envelope entre itens ou vendas.
 		amount, err := s.protector.decrypt("agrofin.sale.unit-price.v1", userID, p.ID, item.ID, []string{string(item.SaleType), saleDateAttribute(sale.SoldAt)}, item.UnitPrice)
 		if err != nil {
 			return Sale{}, err
 		}
+		// Dados inválidos no banco não podem virar totais aparentemente válidos.
 		if item.Quantity <= 0 || amount <= 0 {
 			return Sale{}, ErrInvalidProtectedSaleAmount
 		}
+		// Calcula cada linha em centavos e soma com proteção contra estouro.
 		line, err := multiplyCents(amount, int64(item.Quantity))
 		if err != nil {
 			return Sale{}, err
@@ -241,6 +247,7 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 		sale.Items = append(sale.Items, SaleItem{ID: item.ID, SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: amount, LineAmountCents: line})
 	}
 	if p.Discount != nil {
+		// A justificativa também faz parte do contexto autenticado da cifra.
 		discount, err := s.protector.decrypt("agrofin.sale.discount.v1", userID, p.ID, p.Discount.ID, []string{saleDateAttribute(sale.SoldAt), p.Discount.Reason}, p.Discount.Amount)
 		if err != nil {
 			return Sale{}, err
@@ -251,8 +258,11 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 		sale.Discount = &SaleDiscount{ID: p.Discount.ID, Reason: p.Discount.Reason, AmountCents: discount}
 		sale.DiscountCents = discount
 	}
+	// Desconto reduz o valor vendido; recebimentos são eventos separados e
+	// entram no cálculo do saldo logo abaixo.
 	sale.NetCents = sale.GrossCents - sale.DiscountCents
 	for _, p := range record.Receipts {
+		// Abre cada recebimento para somar somente valores conferidos pela cifra.
 		receipt, err := s.openReceipt(p)
 		if err != nil {
 			return Sale{}, err
@@ -262,6 +272,7 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 			return Sale{}, err
 		}
 	}
+	// Dados protegidos inconsistentes não podem gerar saldo negativo.
 	if sale.ReceivedCents > sale.NetCents {
 		return Sale{}, ErrReceiptExceedsBalance
 	}
@@ -269,7 +280,11 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 	return sale, nil
 }
 
+// openReceipt decifra um recebimento para que o serviço possa exibi-lo e somá-lo ao saldo.
+// Os dados da venda, do recebimento e da data autenticam o contexto da cifra.
 func (s *Service) openReceipt(p ProtectedReceipt) (Receipt, error) {
+	// A data e os IDs autenticam o valor; isso detecta envelope trocado entre
+	// recebimentos ou entre vendas.
 	amount, err := s.protector.decrypt("agrofin.sale.receipt.v1", p.UserID, p.SaleID, p.ID, []string{p.ReceivedAt.Format(time.RFC3339Nano)}, p.Amount)
 	if err != nil {
 		return Receipt{}, err
@@ -277,7 +292,10 @@ func (s *Service) openReceipt(p ProtectedReceipt) (Receipt, error) {
 	return Receipt{ID: p.ID, UserID: p.UserID, SaleID: p.SaleID, ReceivedAt: p.ReceivedAt, AmountCents: amount, RequestKey: p.RequestKey}, nil
 }
 
+// multiplyCents calcula o total da linha sem permitir valores inválidos ou estouro de int64.
 func multiplyCents(unit, quantity int64) (int64, error) {
+	// Confere os operandos e o limite antes de multiplicar para evitar que um
+	// overflow em int64 transforme o valor da linha em um número incorreto.
 	if quantity <= 0 || unit <= 0 || unit > math.MaxInt64/quantity {
 		return 0, ErrSaleOverflow
 	}
