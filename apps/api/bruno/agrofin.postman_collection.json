@@ -30,6 +30,10 @@
       "value": ""
     },
     {
+      "key": "harvest_id",
+      "value": ""
+    },
+    {
       "key": "harvest_start_date",
       "value": "2026-11-01"
     },
@@ -440,7 +444,7 @@
     },
     {
       "name": "Manual - Registrar colheita",
-      "description": "Cria um lançamento persistente para um funcionário ativo. Configure uma tarifa válida para cada tipo informado e não execute esta pasta pelo runner.",
+      "description": "Cria e altera lançamentos persistentes. Configure tarifas válidas e envie estas operações manualmente, sem executar a pasta pelo runner.",
       "item": [
         {
           "name": "Registrar caixas do funcionário",
@@ -470,6 +474,24 @@
                   "language": "json"
                 }
               }
+            }
+          }
+        },
+        {
+          "name": "Alterar quantidades da colheita",
+          "request": {
+            "description": "Exige sessão, Origin e X-Agrofin-Request. Altera somente itens/quantidades; funcionário, data e tarifas aplicadas são preservados. Retorna 409 se a mudança afetar intervalo quitado ou deixar período parcialmente pago abaixo do valor já pago.",
+            "method": "PATCH",
+            "url": "{{base_url}}/harvest-entries/{{harvest_id}}",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Origin", "value": "{{origin}}" },
+              { "key": "X-Agrofin-Request", "value": "1" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\":[{\"box_type\":\"normal\",\"quantity\":12},{\"box_type\":\"moagem\",\"quantity\":3}]}",
+              "options": { "raw": { "language": "json" } }
             }
           }
         }
