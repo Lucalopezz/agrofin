@@ -18,6 +18,7 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/health"
 	"github.com/lucalopezz/agrofin/apps/api/internal/pagamentos"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
+	"github.com/lucalopezz/agrofin/apps/api/internal/vendas"
 )
 
 const defaultAPIPrefix = "/api/v1"
@@ -61,6 +62,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	saleCipher, err := vendas.NewCipher(financialKeyring)
+	if err != nil {
+		return err
+	}
 
 	// Só inicia HTTP após confirmar o banco; o prazo limita a espera na inicialização.
 	// Este contexto pertence à inicialização (ponto de entrada), não a uma
@@ -101,6 +106,11 @@ func run() error {
 	harvestService := colheitas.NewHarvestService(rateRepository, rateCipher)
 	rateHandler := colheitas.NewHandler(rateService, harvestService)
 	colheitas.RegisterRoutes(apiMux, rateHandler, sessionMiddleware.RequireSession)
+
+	saleRepository := vendas.NewRepository(pool)
+	saleService := vendas.NewService(saleRepository, saleCipher)
+	saleHandler := vendas.NewHandler(saleService)
+	vendas.RegisterRoutes(apiMux, saleHandler, sessionMiddleware.RequireSession)
 
 	dailyWorkRepository := diarias.NewRepository(pool)
 	dailyWorkService := diarias.NewService(dailyWorkRepository, dailyWorkCipher)
