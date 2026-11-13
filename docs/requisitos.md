@@ -14,9 +14,9 @@
 
 ### Vendas e despesas
 
-- **RF-08** Registrar venda ao barracão por data, com linhas de exportação, mercado e moagem; cada linha contém quantidade e preço unitário.
-- **RF-09** Registrar desconto da venda com valor e motivo; mostrar total bruto, desconto e total líquido. Um desconto não pode exceder o valor bruto da venda.
-- **RF-10** Registrar recebimentos da venda, inclusive parciais, e distinguir valor vendido de valor recebido.
+- **RF-08** Registrar venda ao barracão por data, com linhas de exportação, mercado e moagem; cada linha contém quantidade e preço unitário. A API oferece criação e consulta por período em `POST /sales` e `GET /sales`.
+- **RF-09** Registrar desconto da venda com valor e motivo; mostrar total bruto, desconto e total líquido. Um desconto não pode exceder o valor bruto. A API aceita desconto opcional no cadastro e calcula os totais no servidor.
+- **RF-10** Registrar recebimentos da venda e distinguir valor vendido de valor recebido. A API oferece `POST /sales/{id}/receipts` idempotente, que aceita recebimento parcial ou integral; a confirmação de que recebimentos parciais ocorrem na prática continua pendente.
 - **RF-11** Registrar despesas por categoria, data de pagamento, valor e descrição; incluir energia de irrigação, fertilizantes, defensivos e outras despesas. Uma compra registrada como despesa não deve gerar outra saída de caixa quando o insumo for usado.
 - **RF-12** Exibir indicadores por período: caixas colhidas por tipo e funcionário, caixas vendidas por classificação, preço médio de venda por caixa, remuneração de funcionários, descontos, despesas, valor vendido, valor recebido e saldo de caixa. Não chamar o saldo de caixa de lucro.
 

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Agrofin - API local",
-    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, colheitas, diárias, pagamentos idempotentes e resumo do saldo por período. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
+    "description": "Coleção Postman v2.1 de rotas implementadas, incluindo tarifas, colheitas, diárias, pagamentos, vendas e recebimentos protegidos. Pode ser usada no Postman ou importada no Bruno e no Insomnia. Qualquer cliente pode criar sua conta e gerenciar seus próprios dados. Funcionários não possuem login. Envie as requisições individualmente; operações persistentes ficam em pastas Manual. O login usa cookie de sessão. As credenciais são exemplos para desenvolvimento local.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -34,6 +34,10 @@
       "value": ""
     },
     {
+      "key": "sale_id",
+      "value": ""
+    },
+    {
       "key": "harvest_start_date",
       "value": "2026-11-01"
     },
@@ -52,6 +56,18 @@
     {
       "key": "payment_request_key",
       "value": "68be7967-1eb6-4d71-91c4-d5f8ccf481cb"
+    },
+    {
+      "key": "receipt_request_key",
+      "value": "5a9e105a-b09e-4149-a093-a9bb24a4053c"
+    },
+    {
+      "key": "sale_start_date",
+      "value": "2026-11-01"
+    },
+    {
+      "key": "sale_end_date",
+      "value": "2026-11-30"
     }
   ],
   "item": [
@@ -245,6 +261,14 @@
         "description": "Exige sessão. Informe payroll_start_date e payroll_end_date como AAAA-MM-DD; os limites são inclusivos e não definem uma semana automática. Agrupa caixas, diárias, pagamentos do mesmo intervalo e saldo restante por funcionário. Sem lançamentos e pagamentos, employees retorna [].",
         "method": "GET",
         "url": "{{base_url}}/payroll-periods/summary?start_date={{payroll_start_date}}&end_date={{payroll_end_date}}"
+      }
+    },
+    {
+      "name": "07.7 - Listar vendas do período",
+      "request": {
+        "description": "Exige sessão. Informe sale_start_date e sale_end_date como AAAA-MM-DD, inclusivos. Retorna valor bruto, desconto, líquido, recebido e a receber por venda.",
+        "method": "GET",
+        "url": "{{base_url}}/sales?start_date={{sale_start_date}}&end_date={{sale_end_date}}"
       }
     },
     {
@@ -570,6 +594,49 @@
                   "language": "json"
                 }
               }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Registrar venda",
+      "description": "Cria venda e registra recebimentos persistentes. Execute manualmente, nunca pelo runner.",
+      "item": [
+        {
+          "name": "Registrar venda ao barracão",
+          "request": {
+            "description": "Exige sessão, Origin e X-Agrofin-Request. Os preços e descontos são cifrados. O corpo aceita linhas de exportacao, mercado e moagem; o desconto é opcional e não pode exceder o bruto. Copie o ID da resposta para sale_id.",
+            "method": "POST",
+            "url": "{{base_url}}/sales",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Origin", "value": "{{origin}}" },
+              { "key": "X-Agrofin-Request", "value": "1" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"sold_at\":\"2026-11-12\",\"buyer_name\":\"Barracão\",\"items\":[{\"sale_type\":\"exportacao\",\"quantity\":10,\"unit_price_cents\":4000},{\"sale_type\":\"mercado\",\"quantity\":5,\"unit_price_cents\":3000}],\"discount\":{\"reason\":\"Desconto informado pelo barracão\",\"amount_cents\":2000}}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Registrar recebimento da venda",
+          "request": {
+            "description": "Registra um recebimento parcial ou integral com Idempotency-Key. Reutilize a chave somente ao repetir o mesmo pedido. Receber acima do saldo retorna 409.",
+            "method": "POST",
+            "url": "{{base_url}}/sales/{{sale_id}}/receipts",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Origin", "value": "{{origin}}" },
+              { "key": "X-Agrofin-Request", "value": "1" },
+              { "key": "Idempotency-Key", "value": "{{receipt_request_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount_cents\":30000}",
+              "options": { "raw": { "language": "json" } }
             }
           }
         }

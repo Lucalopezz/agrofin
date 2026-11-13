@@ -404,6 +404,7 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
 3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação, consulta e edição protegida de colheitas, resumo de caixas, criação de diárias, registro idempotente de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes controles globais de uso/rotação das chaves.
+4. **Vendas e despesas — em andamento:** `POST /sales`, `GET /sales` e `POST /sales/{id}/receipts` estão disponíveis na API com sessão e proteção dos valores financeiros. O cadastro de despesas e o painel consolidado ainda estão pendentes. Recebimentos parciais são aceitos pelo desenho inicial; confirmar se ocorrem na prática.
 
 Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, diárias, pagamentos e resumos funcionam com sessão e proteção financeira. A API recebe o intervalo escolhido pelo front, sem semana automática; colheitas ficam bloqueadas para edição depois da quitação total do período do funcionário.
 
@@ -435,6 +436,9 @@ POST           ${API_PREFIX}/daily-work            # registro de diária impleme
 POST           ${API_PREFIX}/employee-payments     # pagamento protegido e idempotente implementado
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
+POST           ${API_PREFIX}/sales                # venda com linhas classificadas e desconto opcional implementada
+GET            ${API_PREFIX}/sales?start_date=...&end_date=... # consulta inclusiva implementada
+POST           ${API_PREFIX}/sales/{id}/receipts   # recebimento protegido e idempotente implementado
 ```
 
 O servidor calcula totais e saldos; o frontend apresenta o resultado e não é a fonte de verdade dos valores. As operações de escrita precisam de validação, autorização, transação e proteção contra envio duplicado. Detalhar os demais endpoints quando as primeiras telas e regras estiverem validadas.

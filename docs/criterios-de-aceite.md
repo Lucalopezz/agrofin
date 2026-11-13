@@ -177,10 +177,17 @@ O registro de pagamentos e o saldo por intervalo explícito estão implementados
 
 ### HU-06 e HU-07 — acerto com o barracão
 
+- `POST /sales` exige sessão e recebe `sold_at` no formato `AAAA-MM-DD`, linhas com `sale_type` (`exportacao`, `mercado` ou `moagem`), `quantity` e `unit_price_cents`; `discount` é opcional e contém `reason` e `amount_cents`. A resposta `201` informa os totais calculados pela API.
+- `GET /sales?start_date=AAAA-MM-DD&end_date=AAAA-MM-DD` exige as duas datas inclusivas e retorna `200` com `[]` quando não há vendas. Linhas e desconto aparecem no detalhe; os recebimentos aparecem agregados nos totais recebido e a receber, sempre restritos ao cliente autenticado.
+- `POST /sales/{id}/receipts` exige `Idempotency-Key` UUID e um `amount_cents` positivo. A primeira gravação retorna `201`; repetir a mesma chave e conteúdo retorna `200` sem duplicar. Valor acima do saldo ou reutilização da chave com outro conteúdo retorna `409`.
 - Dadas 10 caixas de exportação a R$ 40,00 e 5 de mercado a R$ 30,00, o valor bruto é R$ 550,00.
 - Com desconto de R$ 20,00, o valor líquido vendido é R$ 530,00; o motivo do desconto aparece no detalhe.
 - Se houver recebimento de R$ 300,00, o sistema mostra R$ 230,00 a receber. Não apresenta R$ 530,00 como dinheiro já recebido.
 - A quantidade por classificação da venda não é presumida a partir das caixas registradas para pagamento dos funcionários; são registros de etapas diferentes.
+- A API aceita uma linha por classificação em uma venda. A confirmação de que um mesmo acerto do barracão pode reunir classificações diferentes continua pendente; validar esse formato com o cliente antes de tratá-lo como regra operacional definitiva.
+- Preços unitários, desconto e recebimentos são cifrados antes da persistência; os totais são recalculados pela API e não são armazenados como valores financeiros em texto claro.
+
+Na coleção Postman v2.1, a consulta de período está em **07.7 - Listar vendas do período**. Cadastro e recebimentos ficam em **Manual - Registrar venda**, pois gravam dados persistentes; execute as requisições individualmente pelo Postman ou Bruno.
 
 ### HU-08, HU-09 e HU-10 — indicadores
 
