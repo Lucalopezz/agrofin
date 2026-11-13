@@ -6,8 +6,8 @@
 
 - **RF-01** Cadastrar e renomear funcionários informando apenas o nome, sem criar acesso ao sistema para eles. O sistema gera o identificador e controla o estado ativo/inativo; a exclusão na interface desativa o registro e preserva seu histórico. Permitir reativar o mesmo cadastro e filtrar a listagem por ativos ou inativos. A equipe de uma semana é formada pelos funcionários com lançamentos naquele período, sem cadastro semanal ou desativação automática dos demais. A reativação e o filtro estão implementados na API, conforme o plano de implementação.
 - **RF-02** Configurar tarifas gerais por conta e tipo de caixa normal ou moagem, iguais para todos os funcionários da conta na mesma vigência, em centavos inteiros maiores que zero. Não há exceções individuais. O início é obrigatório e inclusivo; o fim é opcional e exclusivo, sempre posterior ao início quando informado. Alterações futuras não recalculam pagamentos anteriores. Domínio, serviço, proteção, repositório PostgreSQL, criação e listagem via API estão implementados. Os controles operacionais globais de uso e rotação de chaves continuam pendentes.
-- **RF-03** Registrar colheita por data, funcionário, tipo de caixa e quantidade inteira positiva; gravar o valor unitário aplicado no lançamento. A criação está disponível em `POST /harvest-entries` e a consulta por intervalo inclusivo em `GET /harvest-entries`. Edição foi adiada para depois da V1; sua regra será revista quando o fluxo de pagamentos estiver implementado.
-- **RF-04** Consolidar colheita e diárias por funcionário no período, mostrando componentes, total devido, valor pago e saldo restante. A API oferece `GET /payroll-periods/summary` com limites de datas inclusivos explícitos; o início automático da semana continua pendente. `GET /harvest-entries/summary` segue disponível para o resumo exclusivo de caixas.
+- **RF-03** Registrar colheita por data, funcionário, tipo de caixa e quantidade inteira positiva; gravar o valor unitário aplicado no lançamento. Criação, consulta por intervalo inclusivo e edição de itens estão disponíveis em `POST /harvest-entries`, `GET /harvest-entries` e `PATCH /harvest-entries/{id}`. A edição preserva funcionário, data e tarifas fotografadas. A API recebe períodos explícitos; o front usa a semana como período padrão e permite ao cliente selecionar outro intervalo. Uma alteração fica bloqueada se afetar qualquer período do funcionário que já esteja totalmente pago. Em período com pagamento parcial, só é permitida se o devido continuar igual ou acima do total já pago.
+- **RF-04** Consolidar colheita e diárias por funcionário no período, mostrando componentes, total devido, valor pago e saldo restante. A API oferece `GET /payroll-periods/summary` com limites de datas inclusivos explícitos. O front escolhe o período e envia as datas; resumo e pagamento usam o mesmo intervalo. `GET /harvest-entries/summary` segue disponível para o resumo exclusivo de caixas.
 - **RF-05** Registrar pagamento parcial ou integral com data gerada pelo servidor e observação; mostrar saldo pendente sem duplicar pagamentos. A API exige `Idempotency-Key` UUID e não permite pagar além do saldo devido sem um ajuste explícito.
 - **RF-06** Registrar diária como lançamento excepcional, com funcionário, data e valor; sua contabilização é separada das caixas. A API implementa `POST /daily-work`, protegido por sessão, e persiste o valor cifrado.
 - **RF-07** Não criar faltas, penalidades ou descontos automáticos quando não houver registro de colheita em um dia.
@@ -40,19 +40,18 @@
 - **RNF-04 — acesso:** permitir cadastro público e autenticação de vários clientes, cada um gerente da própria produção. Cada usuário acessa somente os próprios funcionários e lançamentos. Funcionários cadastrados não possuem login nem acesso às telas.
 - **RNF-05 — segurança:** usar HTTPS, controle de acesso no servidor, validação de entradas, backups protegidos e exclusão de dados financeiros dos logs.
 - **RNF-06 — criptografia:** cifrar valores financeiros sensíveis na aplicação antes de persistir, com criptografia autenticada e chaves gerenciadas fora do banco; prever rotação e recuperação das chaves. Senhas devem usar hash próprio para senhas. A proteção cobre vazamento isolado do banco, não comprometimento simultâneo da aplicação e das chaves.
-- **RNF-07 — integridade:** operações de colheita, diárias, pagamentos, vendas e estoque devem preservar a integridade dos registros. Criação de caixas e diárias grava seus dados relacionados em transação. Edição de colheitas está fora da V1.
+- **RNF-07 — integridade:** operações de colheita, diárias, pagamentos, vendas e estoque devem preservar a integridade dos registros. Criação e edição de caixas e criação de diárias gravam seus dados relacionados em transação; edição respeita períodos de pagamento.
 - **RNF-08 — desempenho:** telas de lançamento devem responder bem em conexão móvel comum; indicadores podem ser calculados no servidor por período.
 - **RNF-09 — recuperação:** manter backups restauráveis e testar periodicamente a restauração, inclusive das chaves necessárias para ler os valores cifrados.
 
 ## Regras e definições pendentes
 
-- Definir se a semana de pagamento começa na segunda-feira ou em outro dia.
 - Confirmar se a classificação da venda é informada diretamente pelo barracão e se uma venda pode reunir vários tipos de caixa.
 - Definir se o estoque admite unidades diferentes e conversões (por exemplo, litro e mililitro).
 - Definir a origem dos dados das fases da Lua e se basta exibir a fase ou também o horário exato da mudança.
 - Confirmar se haverá uso sem internet.
 - Confirmar se os pagamentos e recebimentos parciais acontecem na prática; o desenho inicial os admite para evitar perda de informação.
-- Confirmar como lançar correções feitas após uma semana já paga ou uma venda já recebida.
+- Definir como lançar correções de vendas após recebimento.
 - Confirmar se compras de insumos podem ser feitas a prazo. O desenho inicial de saldo de caixa considera despesas registradas como já pagas.
 
 ## Fora do primeiro escopo

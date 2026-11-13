@@ -49,7 +49,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias, pagamentos idempotentes e resumo de saldo por período estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. Definição do início automático da semana, demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias, pagamentos idempotentes, edição protegida de colheitas e resumo de saldo por período estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. O front escolhe o período (semana por padrão, com seleção de outro intervalo) e envia as datas à API para resumo e pagamento. Demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
 
 ### Organização interna do cadastro de funcionários
 
@@ -209,7 +209,7 @@ type Item struct {
 }
 ```
 
-O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A consulta por período também está implementada; edição foi adiada para depois da V1 e o fechamento semanal continua pendente. A colheita não cria diária nem pagamento automaticamente.
+O primeiro recorte de criação está implementado em `POST /harvest-entries`: o serviço valida data, funcionário, tipos e quantidades, busca a tarifa geral vigente e prepara a fotografia cifrada de cada item. O repositório verifica o estado e o dono do funcionário com bloqueio e grava cabeçalho e itens em uma transação. A consulta por período e a edição de quantidades também estão implementadas; a edição preserva as tarifas fotografadas e respeita os períodos pagos. A colheita não cria diária nem pagamento automaticamente.
 
 Se o serviço de colheitas precisar de uma operação do cadastro, a dependência deve ser explícita. Uma interface pequena, declarada junto do consumidor em `colheitas`, pode ser conectada na composição da aplicação. Não criar a interface antes de conhecer a operação necessária nem fazer o cadastro depender de todo o histórico de colheitas.
 
@@ -318,7 +318,7 @@ Exemplo:
 
 O serviço consulta a tarifa geral vigente para cada tipo na data do lançamento. Se faltar tarifa, responde `409` sem gravar. O UUID v4 do lançamento é gerado na aplicação antes da cifra, pois também autentica cada fotografia vinculada ao dono, funcionário, data, tipo e quantidade. Mudanças posteriores na tarifa não alteram lançamentos existentes. O repositório segura um bloqueio do funcionário e grava cabeçalho e itens na mesma transação. A resposta `201` inclui o ID, funcionário, data, tipos, quantidades e tarifas unitárias em centavos; usa `Cache-Control: no-store`. Funcionário inexistente ou de outra conta retorna `404`; funcionário inativo retorna `409`; dados inválidos retornam `400`.
 
-Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. A edição está fora da V1, e o resumo semanal de pagamento continua pendente. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém a requisição; configure um funcionário e tarifas válidas para a data antes de enviá-la. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
+Esta criação ainda não oferece chave de idempotência: repetir um POST aceito pode criar outro lançamento. A edição está disponível no `PATCH /harvest-entries/{id}` e altera quantidades sem mudar funcionário, data ou tarifa aplicada. O front escolhe o período do resumo (semana como padrão), e a API recebe as datas explícitas. A pasta **Manual - Registrar colheita** da coleção Postman v2.1 contém as requisições; configure um funcionário e tarifas válidas para a data antes de enviá-las. As requisições **07.4** e **07.5** consultam os lançamentos e o resumo do período. O mesmo arquivo pode ser usado no Postman ou importado no Bruno.
 
 ### Consulta inicial de lançamentos
 
@@ -393,9 +393,9 @@ Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 ]
 ```
 
-O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina caixas e diárias com pagamentos para mostrar devido, pago e restante no intervalo explícito. A definição do início da semana e os ajustes não fazem parte desta projeção.
+O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina caixas e diárias com pagamentos para mostrar devido, pago e restante no intervalo explícito enviado pelo front. A API não calcula semanas automaticamente. `PATCH /harvest-entries/{id}` altera somente itens, preserva tarifas históricas e verifica todos os intervalos de pagamento do funcionário afetados, inclusive intervalos personalizados sobrepostos.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `GET /harvest-entries/summary` agrupa caixas, `POST /daily-work` registra diárias, `POST /employee-payments` registra pagamentos idempotentes e `GET /payroll-periods/summary` combina devido, pago e restante em intervalo explícito. A semana automática continua pendente até definir seu dia inicial; a edição de colheita foi adiada para depois da V1.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `PATCH /harvest-entries/{id}` corrige quantidades sem alterar funcionário, data ou tarifas aplicadas, e `GET /harvest-entries/summary` agrupa caixas. `POST /daily-work` registra diárias, `POST /employee-payments` registra pagamentos idempotentes e `GET /payroll-periods/summary` combina devido, pago e restante em intervalo explícito. O front envia o intervalo escolhido, com semana como padrão; a API não calcula semanas automaticamente.
 
 ## Sequência sugerida
 
@@ -403,9 +403,9 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação e consulta de tarifas e colheitas, resumo de caixas, criação de diárias, registro idempotente de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes semana automática e controles globais de uso/rotação das chaves. Edição de colheita está fora da V1.
+3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação, consulta e edição protegida de colheitas, resumo de caixas, criação de diárias, registro idempotente de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes controles globais de uso/rotação das chaves.
 
-Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, diárias, pagamentos e resumos funcionam com sessão e proteção financeira. Edição de colheita foi adiada para depois da V1; a definição de uma semana automática continua pendente.
+Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, diárias, pagamentos e resumos funcionam com sessão e proteção financeira. A API recebe o intervalo escolhido pelo front, sem semana automática; colheitas ficam bloqueadas para edição depois da quitação total do período do funcionário.
 
 | etapa | entrega verificável |
 | --- | --- |

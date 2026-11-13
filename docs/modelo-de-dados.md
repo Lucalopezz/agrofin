@@ -2,7 +2,7 @@
 
 Este documento descreve o esquema relacional inicial implementado nas migrações SQL em `apps/api/migrations/`. PostgreSQL é o banco do desenvolvimento local; o provedor de produção continua em aberto. `users` representa o gerente que autentica na API, e `employees` representa pessoas sem login. Os funcionários ficam vinculados ao gerente por `user_id`; não existe tabela `accounts`. Cadastro, login, sessões, cookies e middleware estão implementados. Tarifas e diárias têm criptografia autenticada e persistência PostgreSQL; a consulta de tarifas descriptografa valores somente depois de filtrar pelo gerente autenticado. As chaves são fornecidas por variáveis de ambiente; gerenciamento operacional global das chaves e gravação dos demais fluxos continuam pendentes.
 
-O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. `GET /harvest-entries/summary` projeta essas linhas por funcionário e soma as quantidades e valores gerados pelas caixas. `POST /daily-work` registra uma diária separada das caixas e cifra o valor antes da persistência. `POST /employee-payments` registra pagamentos protegidos e idempotentes; `GET /payroll-periods/summary` combina devido, pago e saldo restante para intervalo explícito. O início automático da semana continua pendente.
+O pacote de colheitas também implementa `GET /harvest-entries`: filtra os lançamentos pelo gerente autenticado e por intervalo de datas, agrupa seus itens e descriptografa a fotografia da tarifa aplicada somente para montar a resposta autorizada. `GET /harvest-entries/summary` projeta essas linhas por funcionário e soma as quantidades e valores gerados pelas caixas. `POST /daily-work` registra uma diária separada das caixas e cifra o valor antes da persistência. `POST /employee-payments` registra pagamentos protegidos e idempotentes; `GET /payroll-periods/summary` combina devido, pago e saldo restante para o intervalo explícito que o front selecionou. A semana é o padrão inicial do front, que pode enviar outro intervalo; a API não define um calendário semanal.
 
 ## Princípios do modelo
 
@@ -114,8 +114,8 @@ As tabelas de negócio usam `user_id` para ligar os dados ao gerente autenticado
 - Colheita usa apenas `normal` e `moagem`; venda usa apenas `exportação`, `mercado` e `moagem`. São classificações de etapas distintas.
 - Um dia sem colheita não cria falta, penalidade ou desconto.
 - Uma tarifa tem vigência. Uma alteração não recalcula colheitas anteriores. A regra confirmada usa tarifa geral por conta e tipo, igual para todos os funcionários. A possibilidade técnica de employee_id no esquema não habilita tarifas individuais.
-- Pagamento semanal é calculado por funcionário e período: caixas + diárias − pagamentos + ajustes aplicáveis. O início da semana ainda precisa ser escolhido.
-- O servidor deve bloquear pagamento acima do saldo devido, salvo ajuste explícito. Edição de lançamentos e seu efeito em períodos pagos foram adiados para depois da V1.
+- Pagamento é calculado por funcionário e período explícito: caixas + diárias − pagamentos + ajustes aplicáveis. O front usa a semana como intervalo padrão, permite selecionar outro intervalo e envia as mesmas datas para resumo e pagamento; a API não calcula a semana.
+- O servidor deve bloquear pagamento acima do saldo devido, salvo ajuste explícito. Uma edição de colheita não pode afetar nenhum intervalo do funcionário já quitado. Em intervalos parcialmente pagos, a edição não pode reduzir o devido abaixo do valor pago.
 - Venda bruta é a soma das linhas; venda líquida é o bruto menos descontos; a receber é o líquido menos recebimentos. Valores vendidos e recebidos aparecem separadamente.
 - Saldo de caixa soma somente dinheiro efetivamente recebido e pago no período. Não deve ser apresentado como lucro contábil.
 - Compras de insumos geram entrada de estoque. Pulverizações geram saídas de estoque, mas não uma nova despesa pela compra já registrada.
@@ -147,7 +147,7 @@ As migrações `00001` a `00009` criam as tabelas em ordem de dependência e adi
 
 No desenvolvimento local, `docker compose up -d --wait` inicia PostgreSQL, aplica as versões pendentes e depois inicia a API. Após adicionar outra migração, execute `docker compose run --rm migrate` para aplicá-la mesmo que o contêiner anterior já tenha terminado. Use `docker compose run --rm migrate go run ./cmd/migrate status` para consultar as versões.
 
-Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente para impedir que uma repetição da mesma requisição crie outra saída ou entrada. Esse índice não substitui a validação do valor devido ou recebido na API. `period_end` é o limite exclusivo dos períodos de pagamento; o dia que inicia a semana ainda precisa ser definido.
+Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente para impedir que uma repetição da mesma requisição crie outra saída ou entrada. Esse índice não substitui a validação do valor devido ou recebido na API. `period_end` é o limite exclusivo dos períodos de pagamento. O front escolhe e envia o intervalo; a API não presume início de semana.
 
 ## Decisões confirmadas e pontos em aberto
 
@@ -170,13 +170,11 @@ Cada `request_key` em pagamentos, recebimentos e despesas é único por gerente 
 
 ### Decisões que continuam pendentes
 
-- Qual dia inicia a semana de pagamento.
 - Se o barracão informa diretamente a classificação da venda e se há mais de um comprador.
 - Se compras a prazo ou pagamentos parciais de compra acontecem na prática.
 - Quais unidades são usadas no estoque e se serão necessárias conversões.
 - Qual fonte lunar será usada e se é preciso exibir o horário exato das transições.
 - Se haverá uso sem internet.
-- Como tratar crédito ou débito de funcionário quando uma semana já paga for corrigida.
 - Qual serviço de banco e qual mecanismo de gerenciamento/recuperação de chaves serão usados no deploy.
 
 ## Ordem sugerida para implementar

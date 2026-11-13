@@ -22,7 +22,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Uma conta não pode renomear funcionários de outra; a resposta é a mesma de um funcionário inexistente e nenhum registro é alterado.
 - Dado um funcionário ativo e uma tarifa vigente de R$ 5,00 por caixa normal, ao registrar 10 caixas normais em um dia, o lançamento mostra R$ 50,00.
 - Se a tarifa mudar para R$ 6,00 no dia seguinte, o lançamento anterior continua valendo R$ 50,00.
-- Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição de lançamentos está fora do escopo da V1.
+- Uma colheita exige data, funcionário, tipo e quantidade maior que zero. A edição altera as quantidades dos tipos existentes, mantendo funcionário, data e tarifas aplicadas.
 - Desativar um funcionário marca o cadastro como inativo e registra a data, preservando ID, dono, nome e histórico. A listagem do cadastro continua retornando o registro com `active=false`.
 - Repetir a desativação retorna o mesmo sucesso sem alterar a primeira data. Funcionário inexistente ou de outra conta recebe a mesma resposta `404`, sem alterar registros.
 - Funcionários desativados deixam de aparecer na lista principal de novo lançamento, mas continuam visíveis no histórico.
@@ -30,7 +30,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 ### HU-02 — criação inicial de lançamento implementada
 
-`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação. A consulta inicial de lançamentos está disponível em `GET /api/v1/harvest-entries`; edição foi adiada para depois da V1.
+`POST /api/v1/harvest-entries` cria o cabeçalho e seus itens em uma transação. A consulta está disponível em `GET /api/v1/harvest-entries`; `PATCH /api/v1/harvest-entries/{id}` corrige quantidades sem alterar funcionário, data ou tarifa unitária aplicada.
 
 - A sessão define o dono do lançamento. O corpo contém somente `employee_id`, `harvest_date` e `items`; campos extras, UUID inválido, data fora de `AAAA-MM-DD` e quantidade fora do intervalo de inteiro positivo são rejeitados.
 - O funcionário precisa pertencer à conta e estar ativo. Registro ausente ou de outra conta retorna `404`; funcionário inativo retorna `409`.
@@ -39,13 +39,15 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Cabeçalho e itens são persistidos juntos. Se a gravação de qualquer item falhar, nenhum cabeçalho parcial permanece.
 - Cada tarifa aplicada é gravada cifrada como fotografia do item; mudar tarifas futuras não recalcula esse lançamento. A resposta `201` devolve os tipos, quantidades e tarifas unitárias aplicadas à sessão autenticada, com `Cache-Control: no-store`.
 - A verificação de estado do funcionário permanece bloqueada até a conclusão da gravação, evitando aceitar uma colheita que concorra com a desativação.
-- Não há chave de idempotência nesta etapa; repetir uma requisição aceita pode criar outro lançamento. Edição foi adiada para depois da V1.
+- Não há chave de idempotência na criação; repetir um POST aceito pode criar outro lançamento.
 
-### Edição de colheita — fora da V1
+### Edição de colheita implementada
 
-- A API da V1 não altera nem apaga lançamentos já criados; não há rota de edição.
-- Ao retomar a feature, a preferência atual é permitir a edição antes do pagamento do período do funcionário e bloqueá-la depois. Esse comportamento será confirmado junto com o fluxo de pagamentos.
-- Não há decisão atual de adicionar uma auditoria específica para cada correção. Se a edição voltar ao escopo, rever a necessidade antes de implementá-la.
+- O `PATCH` exige sessão, UUID no caminho, `Origin` e `X-Agrofin-Request: 1`; o corpo estrito contém `items` com os mesmos tipos existentes e novas quantidades positivas.
+- A API preserva funcionário, data e tarifas históricas. A cifra dos valores aplicados é refeita porque a quantidade participa do contexto autenticado.
+- A alteração retorna `409` se afetar qualquer intervalo personalizado já quitado do funcionário. Em intervalo parcialmente pago, só é aceita se o devido recalculado permanecer maior ou igual ao total pago.
+- Lançamento inexistente ou de outra conta retorna `404`; caminho ou corpo inválido retorna `400`.
+- A atualização e a validação dos pagamentos são coordenadas pelo bloqueio da linha do funcionário. O pagamento recalcula o devido depois de obter esse mesmo bloqueio, para não usar um total desatualizado.
 
 ### HU-02 — consulta inicial de lançamentos implementada
 
@@ -169,7 +171,7 @@ A reativação e o filtro de estado estão implementados na API; sua integraçã
 - Um dia sem lançamento não cria falta, desconto ou alerta de ausência.
 - O resumo deixa claro o intervalo de datas da semana e permite voltar ao detalhe que formou o total.
 
-O registro de pagamentos e o saldo por intervalo explícito estão implementados. Ainda falta definir o início automático da semana; o fluxo atual não presume um calendário semanal.
+O registro de pagamentos e o saldo por intervalo explícito estão implementados. O front usa a semana como período padrão, permite selecionar outro intervalo e envia as mesmas datas para resumo e pagamento; a API não calcula a semana automaticamente. Uma alteração de colheita é rejeitada se afetar qualquer intervalo do funcionário já quitado. Em intervalos parcialmente pagos, a edição só é aceita se o devido recalculado não ficar abaixo do valor já pago.
 
 ## Venda, despesas e painel
 
