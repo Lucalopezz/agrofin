@@ -111,6 +111,7 @@ func run() error {
 	// de colheitas e diárias sem transferir para ele a persistência desses domínios.
 	paymentRepository := pagamentos.NewRepository(pool)
 	payrollService := pagamentos.NewPayrollService(harvestService, dailyWorkService, paymentRepository, paymentCipher)
+	harvestService.SetPaymentGuard(payrollService)
 	payrollHandler := pagamentos.NewHandler(payrollService)
 	pagamentos.RegisterRoutes(apiMux, payrollHandler, sessionMiddleware.RequireSession)
 

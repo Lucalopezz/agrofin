@@ -120,6 +120,33 @@ func writeCreateHarvestResponse(w http.ResponseWriter, harvest Harvest, err erro
 	}
 }
 
+func writeUpdateHarvestResponse(w http.ResponseWriter, harvest Harvest, err error) {
+	switch {
+	case errors.Is(err, ErrInvalidHarvestID):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O ID da colheita deve ser um UUID válido"})
+	case errors.Is(err, ErrInvalidHarvestOwner), errors.Is(err, ErrInvalidHarvestItems), errors.Is(err, ErrInvalidHarvestQuantity),
+		errors.Is(err, ErrDuplicateHarvestItem), errors.Is(err, ErrInvalidBoxType):
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira os tipos e as quantidades do lançamento"})
+	case errors.Is(err, ErrHarvestNotFound):
+		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Lançamento de colheita não encontrado"})
+	case errors.Is(err, ErrHarvestPaidPeriod), errors.Is(err, ErrHarvestBelowPaidAmount):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "A alteração afetaria um período já pago ou reduziria o devido abaixo do valor pago"})
+	case errors.Is(err, ErrHarvestChangedConflict):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "O lançamento mudou enquanto era editado; consulte novamente e tente outra vez"})
+	case errors.Is(err, ErrEmployeeInactive):
+		writeJSON(w, http.StatusConflict, errorResponse{Error: "Não é possível alterar colheita de funcionário inativo"})
+	case errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para alterar a colheita esgotado"})
+	case errors.Is(err, context.Canceled):
+		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
+	case err != nil:
+		log.Print("erro ao alterar lançamento de colheita")
+		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível alterar a colheita"})
+	default:
+		writeJSON(w, http.StatusOK, newHarvestResponse(harvest))
+	}
+}
+
 func writeListHarvestEntriesResponse(w http.ResponseWriter, harvests []Harvest, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidHarvestPeriod):

@@ -89,6 +89,92 @@ func (s *PayrollService) Summarize(ctx context.Context, userID string, period Pe
 	return dueSummary, nil
 }
 
+// CheckHarvestUpdate protege todos os intervalos personalizados atingidos pela data do lançamento.
+func (s *PayrollService) CheckHarvestUpdate(ctx context.Context, current, updated colheitas.Harvest) error {
+	if s == nil || s.repo == nil || s.protector == nil || s.harvest == nil || s.daily == nil {
+		return ErrInvalidPaymentConfig
+	}
+	if current.EmployeeID != updated.EmployeeID || !current.HarvestDate.Equal(updated.HarvestDate) {
+		return colheitas.ErrInvalidHarvestItems
+	}
+	periodPayments, err := s.repo.ListPaymentsCoveringDate(ctx, current.UserID, current.EmployeeID, current.HarvestDate)
+	if err != nil {
+		return err
+	}
+	if len(periodPayments) == 0 {
+		return nil
+	}
+	oldAmount, err := harvestValue(current)
+	if err != nil {
+		return err
+	}
+	newAmount, err := harvestValue(updated)
+	if err != nil {
+		return err
+	}
+	periods := make(map[[2]int64]Period)
+	for _, protected := range periodPayments {
+		payment, err := s.openProtectedPayment(protected, current.UserID)
+		if err != nil {
+			return err
+		}
+		key := [2]int64{payment.PeriodStart.Unix(), payment.PeriodEnd.Unix()}
+		periods[key] = Period{StartDate: payment.PeriodStart, EndDate: payment.PeriodEnd.AddDate(0, 0, -1)}
+	}
+	for _, period := range periods {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		paidByEmployee, err := s.summarizePayments(ctx, current.UserID, period)
+		if err != nil {
+			return err
+		}
+		paid := paidByEmployee[current.EmployeeID]
+		dueSummary, err := s.summarizeDue(ctx, current.UserID, period)
+		if err != nil {
+			return err
+		}
+		due, err := dueAmountForEmployee(dueSummary, current.EmployeeID)
+		if err != nil {
+			return err
+		}
+		if paid > due {
+			return ErrInvalidPaymentBalance
+		}
+		if paid == due {
+			return colheitas.ErrHarvestPaidPeriod
+		}
+		updatedDue := due - oldAmount
+		updatedDue, err = addAmount(updatedDue, newAmount)
+		if err != nil {
+			return err
+		}
+		if updatedDue < paid {
+			return colheitas.ErrHarvestBelowPaidAmount
+		}
+	}
+	return nil
+}
+
+func harvestValue(harvest colheitas.Harvest) (int64, error) {
+	var total int64
+	for _, item := range harvest.Items {
+		if item.Quantity <= 0 || item.AppliedRateCents <= 0 {
+			return 0, ErrInvalidPayrollAmount
+		}
+		quantity := int64(item.Quantity)
+		if item.AppliedRateCents > math.MaxInt64/quantity {
+			return 0, ErrPayrollSummaryOverflow
+		}
+		amount, err := addAmount(total, item.AppliedRateCents*quantity)
+		if err != nil {
+			return 0, err
+		}
+		total = amount
+	}
+	return total, nil
+}
+
 // summarizeDue calcula somente caixas e diárias para um período já normalizado.
 // Create usa esse resultado antes de abrir a transação.
 func (s *PayrollService) summarizeDue(ctx context.Context, userID string, period Period) (PeriodSummary, error) {

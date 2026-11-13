@@ -10,4 +10,5 @@ func RegisterRoutes(mux *http.ServeMux, handler *Handler, requireSession func(ht
 	mux.Handle("GET /harvest-entries", requireSession(http.HandlerFunc(handler.listHarvestEntries)))
 	mux.Handle("GET /harvest-entries/summary", requireSession(http.HandlerFunc(handler.summarizeHarvestEntries)))
 	mux.Handle("POST /harvest-entries", requireSession(http.HandlerFunc(handler.createHarvest)))
+	mux.Handle("PATCH /harvest-entries/{id}", requireSession(http.HandlerFunc(handler.updateHarvest)))
 }

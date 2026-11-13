@@ -136,6 +136,38 @@ func (r *Repository) ListPayments(ctx context.Context, userID string, periodStar
 	return payments, nil
 }
 
+// ListPaymentsCoveringDate localiza intervalos personalizados que incluem a data alterada.
+func (r *Repository) ListPaymentsCoveringDate(ctx context.Context, userID, employeeID string, date time.Time) ([]ProtectedPayment, error) {
+	if r == nil || r.pool == nil {
+		return nil, ErrInvalidPaymentConfig
+	}
+	rows, err := r.pool.Query(ctx, `
+		SELECT id::text, employee_id::text, period_start, period_end, paid_at,
+		       amount_ciphertext, amount_nonce, amount_key_version,
+		       COALESCE(notes, ''), request_key::text
+		FROM employee_payments
+		WHERE user_id=$1 AND employee_id=$2
+		  AND period_start <= $3::date AND period_end > $3::date
+		ORDER BY period_start, period_end, paid_at, id
+	`, userID, employeeID, date)
+	if err != nil {
+		return nil, fmt.Errorf("listar pagamentos que incluem a data da colheita: %w", err)
+	}
+	defer rows.Close()
+	payments := make([]ProtectedPayment, 0)
+	for rows.Next() {
+		payment, err := scanProtectedPayment(rows, userID)
+		if err != nil {
+			return nil, fmt.Errorf("ler pagamento protegido: %w", err)
+		}
+		payments = append(payments, payment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listar períodos pagos: %w", err)
+	}
+	return payments, nil
+}
+
 func (tx paymentTx) ListPayments(ctx context.Context, employeeID string, periodStart, periodEnd time.Time) ([]ProtectedPayment, error) {
 	rows, err := tx.tx.Query(ctx, `
 		SELECT id::text, employee_id::text, period_start, period_end, paid_at,
@@ -206,7 +238,8 @@ type paymentRowScanner interface {
 
 func findPaymentByRequestKey(ctx context.Context, queryer interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
-}, userID, requestKey string) (ProtectedPayment, bool, error) {
+}, userID, requestKey string,
+) (ProtectedPayment, bool, error) {
 	payment, err := scanProtectedPayment(queryer.QueryRow(ctx, `
 		SELECT id::text, employee_id::text, period_start, period_end, paid_at,
 		       amount_ciphertext, amount_nonce, amount_key_version,

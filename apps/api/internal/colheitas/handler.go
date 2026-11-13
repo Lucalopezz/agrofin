@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type rateService interface {
@@ -15,6 +16,7 @@ type rateService interface {
 
 type harvestService interface {
 	Create(ctx context.Context, userID string, input CreateHarvestInput) (Harvest, error)
+	Update(ctx context.Context, userID, harvestID string, input UpdateHarvestInput) (Harvest, error)
 	List(ctx context.Context, userID string, period HarvestPeriod) ([]Harvest, error)
 	Summarize(ctx context.Context, userID string, period HarvestPeriod) ([]HarvestSummary, error)
 }
@@ -109,4 +111,25 @@ func (h *Handler) summarizeHarvestEntries(w http.ResponseWriter, r *http.Request
 
 	summaries, err := h.harvestService.Summarize(r.Context(), principal.UserID, period)
 	writeHarvestSummaryResponse(w, summaries, err)
+}
+
+func (h *Handler) updateHarvest(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
+		return
+	}
+
+	harvestID, err := uuid.Normalize(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O ID da colheita deve ser um UUID válido"})
+		return
+	}
+	input, ok := decodeUpdateHarvestRequest(w, r)
+	if !ok {
+		return
+	}
+
+	harvest, err := h.harvestService.Update(r.Context(), principal.UserID, harvestID, input)
+	writeUpdateHarvestResponse(w, harvest, err)
 }

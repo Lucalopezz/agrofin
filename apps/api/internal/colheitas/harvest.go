@@ -16,6 +16,10 @@ type CreateHarvestInput struct {
 	Items       []HarvestItemInput
 }
 
+type UpdateHarvestInput struct {
+	Items []HarvestItemInput
+}
+
 type HarvestItemInput struct {
 	BoxType  BoxType
 	Quantity int32

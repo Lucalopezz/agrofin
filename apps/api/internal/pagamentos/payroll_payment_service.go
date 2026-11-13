@@ -18,6 +18,7 @@ type paymentCreatorRepository interface {
 		operation func(paymentTransaction, *ProtectedPayment) error,
 	) error
 	ListPayments(ctx context.Context, userID string, periodStart, periodEnd time.Time) ([]ProtectedPayment, error)
+	ListPaymentsCoveringDate(ctx context.Context, userID, employeeID string, date time.Time) ([]ProtectedPayment, error)
 }
 
 type paymentAmountProtector interface {
@@ -85,24 +86,6 @@ func (s *PayrollService) Create(ctx context.Context, userID string, input Create
 		return PaymentCreation{Payment: payment, Replayed: true}, nil
 	}
 
-	// O resumo é lido antes de abrir a transação para não depender de uma segunda
-	// conexão do pool enquanto a transação mantém uma conexão ocupada. Colheitas e
-	// diárias são append-only nesta versão: uma gravação concorrente só pode elevar
-	// o devido, portanto este valor pode rejeitar conservadoramente, mas nunca liberar
-	// pagamento acima do saldo. A soma de pagamentos e a inserção ficam serializadas abaixo.
-	duePeriod := request.inclusivePeriod()
-	dueSummary, err := s.summarizeDue(ctx, request.UserID, duePeriod)
-	if err != nil {
-		return PaymentCreation{}, err
-	}
-	if err := ctx.Err(); err != nil {
-		return PaymentCreation{}, err
-	}
-	dueAmount, err := dueAmountForEmployee(dueSummary, request.EmployeeID)
-	if err != nil {
-		return PaymentCreation{}, err
-	}
-
 	var creation PaymentCreation
 	err = s.repo.withEmployeePaymentLock(ctx, request.UserID, request.EmployeeID, request.RequestKey,
 		func(tx paymentTransaction, existing *ProtectedPayment) error {
@@ -116,6 +99,16 @@ func (s *PayrollService) Create(ctx context.Context, userID string, input Create
 				}
 				creation = PaymentCreation{Payment: payment, Replayed: true}
 				return nil
+			}
+			// O devido é recalculado depois do bloqueio do funcionário: agora colheitas
+			// podem ser editadas, então o total lido antes da transação poderia ficar obsoleto.
+			dueSummary, err := s.summarizeDue(ctx, request.UserID, request.inclusivePeriod())
+			if err != nil {
+				return err
+			}
+			dueAmount, err := dueAmountForEmployee(dueSummary, request.EmployeeID)
+			if err != nil {
+				return err
 			}
 
 			previous, err := tx.ListPayments(ctx, request.EmployeeID, request.PeriodStart, request.PeriodEnd)

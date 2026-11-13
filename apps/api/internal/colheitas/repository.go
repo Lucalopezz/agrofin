@@ -286,3 +286,115 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 	}
 	return harvests, nil
 }
+
+// GetHarvest lê um lançamento completo somente quando pertence ao gerente autenticado.
+func (r *Repository) GetHarvest(ctx context.Context, userID, harvestID string) (ProtectedHarvestRecord, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT h.id::text, h.employee_id::text, e.name, h.harvest_date,
+		       hi.box_type, hi.quantity, hi.applied_rate_ciphertext,
+		       hi.applied_rate_nonce, hi.applied_rate_key_version
+		FROM harvests h
+		JOIN harvest_items hi ON hi.user_id = h.user_id AND hi.harvest_id = h.id
+		JOIN employees e ON e.user_id = h.user_id AND e.id = h.employee_id
+		WHERE h.user_id = $1 AND h.id = $2
+		ORDER BY hi.box_type
+	`, userID, harvestID)
+	if err != nil {
+		return ProtectedHarvestRecord{}, fmt.Errorf("consultar lançamento protegido: %w", err)
+	}
+	defer rows.Close()
+	var result ProtectedHarvestRecord
+	for rows.Next() {
+		var id, employeeID, employeeName, boxType string
+		var date time.Time
+		var item ProtectedHarvestItem
+		if err := rows.Scan(&id, &employeeID, &employeeName, &date, &boxType, &item.Quantity,
+			&item.AppliedAmount.Ciphertext, &item.AppliedAmount.Nonce, &item.AppliedAmount.KeyVersion); err != nil {
+			return ProtectedHarvestRecord{}, fmt.Errorf("ler lançamento protegido: %w", err)
+		}
+		if result.Harvest.ID == "" {
+			result.Harvest = ProtectedHarvest{ID: id, UserID: userID, EmployeeID: employeeID, HarvestDate: date}
+			result.EmployeeName = employeeName
+		}
+		item.BoxType = BoxType(boxType)
+		result.Harvest.Items = append(result.Harvest.Items, item)
+	}
+	if err := rows.Err(); err != nil {
+		return ProtectedHarvestRecord{}, fmt.Errorf("ler lançamento protegido: %w", err)
+	}
+	if result.Harvest.ID == "" {
+		return ProtectedHarvestRecord{}, ErrHarvestNotFound
+	}
+	return result, nil
+}
+
+// UpdateHarvest troca os itens numa transação e mantém estável o funcionário até a validação da folha.
+func (r *Repository) UpdateHarvest(ctx context.Context, expected, harvest ProtectedHarvest, validate func() error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("iniciar edição da colheita: %w", err)
+	}
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+	var employeeID string
+	err = tx.QueryRow(ctx, `SELECT id::text FROM employees WHERE user_id=$1 AND id=$2 FOR UPDATE`, harvest.UserID, harvest.EmployeeID).Scan(&employeeID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrEmployeeNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("bloquear funcionário para editar colheita: %w", err)
+	}
+	var foundID string
+	err = tx.QueryRow(ctx, `SELECT id::text FROM harvests WHERE user_id=$1 AND id=$2 FOR UPDATE`, harvest.UserID, harvest.ID).Scan(&foundID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrHarvestNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("bloquear lançamento para edição: %w", err)
+	}
+	rows, err := tx.Query(ctx, `SELECT box_type, quantity FROM harvest_items WHERE user_id=$1 AND harvest_id=$2 ORDER BY box_type`, harvest.UserID, harvest.ID)
+	if err != nil {
+		return fmt.Errorf("ler itens atuais da colheita: %w", err)
+	}
+	currentItems := make(map[BoxType]int32)
+	for rows.Next() {
+		var boxType string
+		var quantity int32
+		if err := rows.Scan(&boxType, &quantity); err != nil {
+			rows.Close()
+			return fmt.Errorf("ler item atual da colheita: %w", err)
+		}
+		currentItems[BoxType(boxType)] = quantity
+	}
+	rowsErr := rows.Err()
+	rows.Close()
+	if rowsErr != nil {
+		return fmt.Errorf("ler itens atuais da colheita: %w", rowsErr)
+	}
+	if len(currentItems) != len(expected.Items) {
+		return ErrHarvestChangedConflict
+	}
+	for _, item := range expected.Items {
+		if currentItems[item.BoxType] != item.Quantity {
+			return ErrHarvestChangedConflict
+		}
+	}
+	if err := validate(); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM harvest_items WHERE user_id=$1 AND harvest_id=$2`, harvest.UserID, harvest.ID); err != nil {
+		return fmt.Errorf("substituir itens da colheita: %w", err)
+	}
+	for _, item := range harvest.Items {
+		if _, err := tx.Exec(ctx, `INSERT INTO harvest_items (user_id, harvest_id, box_type, quantity, applied_rate_ciphertext, applied_rate_nonce, applied_rate_key_version) VALUES ($1,$2,$3,$4,$5,$6,$7)`, harvest.UserID, harvest.ID, string(item.BoxType), item.Quantity, item.AppliedAmount.Ciphertext, item.AppliedAmount.Nonce, item.AppliedAmount.KeyVersion); err != nil {
+			return fmt.Errorf("gravar item atualizado da colheita: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("confirmar edição da colheita: %w", err)
+	}
+	return nil
+}

@@ -17,6 +17,12 @@ type harvestRepository interface {
 	RateForDate(ctx context.Context, userID string, boxType BoxType, date time.Time) (ProtectedRate, error)
 	CreateHarvest(ctx context.Context, harvest ProtectedHarvest) error
 	ListHarvests(ctx context.Context, userID string, period HarvestPeriod) ([]ProtectedHarvestRecord, error)
+	GetHarvest(ctx context.Context, userID, harvestID string) (ProtectedHarvestRecord, error)
+	UpdateHarvest(ctx context.Context, expected, harvest ProtectedHarvest, validate func() error) error
+}
+
+type harvestPaymentGuard interface {
+	CheckHarvestUpdate(ctx context.Context, current, updated Harvest) error
 }
 
 type harvestRateProtector interface {
@@ -37,10 +43,88 @@ type harvestReadRecord struct {
 type HarvestService struct {
 	repo      harvestRepository
 	protector harvestRateProtector
+	guard     harvestPaymentGuard
 }
 
 func NewHarvestService(repo harvestRepository, protector harvestRateProtector) *HarvestService {
 	return &HarvestService{repo: repo, protector: protector}
+}
+
+// SetPaymentGuard conecta a regra transversal de folha após a composição dos serviços.
+func (s *HarvestService) SetPaymentGuard(guard harvestPaymentGuard) {
+	s.guard = guard
+}
+
+// Update altera as quantidades sem recalcular as tarifas históricas do lançamento.
+func (s *HarvestService) Update(ctx context.Context, userID, harvestID string, input UpdateHarvestInput) (Harvest, error) {
+	if err := ctx.Err(); err != nil {
+		return Harvest{}, err
+	}
+	ownerID, err := uuid.Normalize(userID)
+	if err != nil {
+		return Harvest{}, ErrInvalidHarvestOwner
+	}
+	id, err := uuid.Normalize(harvestID)
+	if err != nil {
+		return Harvest{}, ErrInvalidHarvestID
+	}
+	if s == nil || s.repo == nil || s.protector == nil || s.guard == nil {
+		return Harvest{}, ErrInvalidHarvestConfig
+	}
+	stored, err := s.repo.GetHarvest(ctx, ownerID, id)
+	if err != nil {
+		return Harvest{}, err
+	}
+	current, err := s.openHarvestRecord(ownerID, stored)
+	if err != nil {
+		return Harvest{}, err
+	}
+	items := make([]HarvestItem, 0, len(input.Items))
+	for _, item := range input.Items {
+		items = append(items, HarvestItem{BoxType: item.BoxType, Quantity: item.Quantity})
+	}
+	updated, err := normalizeHarvest(Harvest{
+		ID: current.ID, UserID: ownerID, EmployeeID: current.EmployeeID,
+		HarvestDate: current.HarvestDate, Items: items,
+	})
+	if err != nil {
+		return Harvest{}, err
+	}
+	oldRates := make(map[BoxType]int64, len(current.Items))
+	for _, item := range current.Items {
+		oldRates[item.BoxType] = item.AppliedRateCents
+	}
+	if len(updated.Items) != len(oldRates) {
+		return Harvest{}, ErrInvalidHarvestItems
+	}
+	protected := ProtectedHarvest{
+		ID: id, UserID: ownerID, EmployeeID: current.EmployeeID,
+		HarvestDate: current.HarvestDate,
+		Items:       make([]ProtectedHarvestItem, 0, len(updated.Items)),
+	}
+	for index := range updated.Items {
+		item := &updated.Items[index]
+		rate, exists := oldRates[item.BoxType]
+		if !exists {
+			return Harvest{}, ErrInvalidHarvestItems
+		}
+		item.AppliedRateCents = rate
+		envelope, err := s.protector.EncryptHarvestItemRate(ownerID, id, current.EmployeeID,
+			current.HarvestDate, item.BoxType, item.Quantity, rate)
+		if err != nil {
+			return Harvest{}, err
+		}
+		protected.Items = append(protected.Items, ProtectedHarvestItem{
+			BoxType: item.BoxType, Quantity: item.Quantity, AppliedAmount: envelope,
+		})
+	}
+	validate := func() error {
+		return s.guard.CheckHarvestUpdate(ctx, current, updated)
+	}
+	if err := s.repo.UpdateHarvest(ctx, stored.Harvest, protected, validate); err != nil {
+		return Harvest{}, err
+	}
+	return updated, nil
 }
 
 func (s *HarvestService) Create(ctx context.Context, userID string, input CreateHarvestInput) (Harvest, error) {
@@ -201,6 +285,32 @@ func (s *HarvestService) listRecords(ctx context.Context, userID string, period 
 		return nil, err
 	}
 	return results, nil
+}
+
+func (s *HarvestService) openHarvestRecord(userID string, record ProtectedHarvestRecord) (Harvest, error) {
+	protected := record.Harvest
+	harvest := Harvest{
+		ID: protected.ID, UserID: userID, EmployeeID: protected.EmployeeID,
+		HarvestDate: calendarDate.Normalize(protected.HarvestDate),
+		Items:       make([]HarvestItem, 0, len(protected.Items)),
+	}
+	for _, item := range protected.Items {
+		harvest.Items = append(harvest.Items, HarvestItem{BoxType: item.BoxType, Quantity: item.Quantity})
+	}
+	var err error
+	harvest, err = normalizeHarvest(harvest)
+	if err != nil {
+		return Harvest{}, err
+	}
+	for index, item := range protected.Items {
+		amount, err := s.protector.DecryptHarvestItemRate(userID, harvest.ID, harvest.EmployeeID,
+			harvest.HarvestDate, item.BoxType, item.Quantity, item.AppliedAmount)
+		if err != nil {
+			return Harvest{}, err
+		}
+		harvest.Items[index].AppliedRateCents = amount
+	}
+	return harvest, nil
 }
 
 // Summarize agrupa os lançamentos autorizados por funcionário. O valor soma

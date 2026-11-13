@@ -29,6 +29,10 @@ type createHarvestItemRequest struct {
 	Quantity int32   `json:"quantity"`
 }
 
+type updateHarvestEntryRequest struct {
+	Items []createHarvestItemRequest `json:"items"`
+}
+
 func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRateInput, bool) {
 	request, err := httpjson.Decode[createRateRequest](w, r)
 	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
@@ -119,4 +123,25 @@ func decodeHarvestPeriodQuery(w http.ResponseWriter, r *http.Request) (HarvestPe
 		return HarvestPeriod{}, false
 	}
 	return HarvestPeriod{StartDate: startDate, EndDate: endDate}, true
+}
+
+func decodeUpdateHarvestRequest(w http.ResponseWriter, r *http.Request) (UpdateHarvestInput, bool) {
+	request, err := httpjson.Decode[updateHarvestEntryRequest](w, r)
+	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
+		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
+		return UpdateHarvestInput{}, false
+	}
+	if errors.Is(err, httpjson.ErrBodyTooLarge) {
+		writeJSON(w, http.StatusRequestEntityTooLarge, errorResponse{Error: "Corpo da requisição excede 4 KiB"})
+		return UpdateHarvestInput{}, false
+	}
+	if err != nil || request == nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Envie um único objeto JSON com os itens do lançamento"})
+		return UpdateHarvestInput{}, false
+	}
+	items := make([]HarvestItemInput, 0, len(request.Items))
+	for _, item := range request.Items {
+		items = append(items, HarvestItemInput{BoxType: item.BoxType, Quantity: item.Quantity})
+	}
+	return UpdateHarvestInput{Items: items}, true
 }

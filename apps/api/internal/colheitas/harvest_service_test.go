@@ -37,6 +37,14 @@ func (r harvestRepositoryStub) ListHarvests(ctx context.Context, userID string, 
 	return r.list(ctx, userID, period)
 }
 
+func (r harvestRepositoryStub) GetHarvest(context.Context, string, string) (ProtectedHarvestRecord, error) {
+	return ProtectedHarvestRecord{}, ErrHarvestNotFound
+}
+
+func (r harvestRepositoryStub) UpdateHarvest(context.Context, ProtectedHarvest, ProtectedHarvest, func() error) error {
+	return nil
+}
+
 func TestHarvestServiceCreateGeneratesIDBeforeProtectingItems(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

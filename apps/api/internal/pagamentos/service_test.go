@@ -40,6 +40,10 @@ func (emptyPaymentRepository) ListPayments(context.Context, string, time.Time, t
 	return []ProtectedPayment{}, nil
 }
 
+func (emptyPaymentRepository) ListPaymentsCoveringDate(context.Context, string, string, time.Time) ([]ProtectedPayment, error) {
+	return []ProtectedPayment{}, nil
+}
+
 type unusedPaymentProtector struct{}
 
 func (unusedPaymentProtector) EncryptPaymentAmount(Payment) (ProtectedPayment, error) {
