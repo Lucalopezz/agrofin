@@ -50,6 +50,25 @@ func (r *Repository) HasRateOverlap(ctx context.Context, period RatePeriod) (boo
 
 // CreateRate grava a entidade protegida sem normalizar dados ou cifrar valores.
 func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("iniciar criação de tarifa: %w", err)
+	}
+	defer func() {
+		// A limpeza precisa funcionar mesmo se a requisição que abriu a transação for cancelada.
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		_ = tx.Rollback(cleanupCtx)
+	}()
+
+	// Serializa criações do mesmo tipo e cliente. Sem isso, duas inserções que
+	// passaram pela consulta de sobreposição podem disputar a exclusão do banco
+	// ao mesmo tempo e o PostgreSQL pode abortá-las com deadlock.
+	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, rate.UserID+":"+string(rate.BoxType))
+	if err != nil {
+		return fmt.Errorf("serializar criação de tarifa: %w", err)
+	}
+
 	const query = `
 		INSERT INTO harvest_rates (
 			id, user_id, employee_id, box_type,
@@ -59,7 +78,7 @@ func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
 	`
 	// Uma única instrução persiste metadados e envelope juntos. NULL fixa a tarifa
 	// geral; a entidade de entrada não permite escolher um funcionário individual.
-	_, err := r.pool.Exec(ctx, query,
+	_, err = tx.Exec(ctx, query,
 		rate.ID, rate.UserID, string(rate.BoxType), rate.Amount.Ciphertext,
 		rate.Amount.Nonce, rate.Amount.KeyVersion, rate.ValidFrom, rate.ValidUntil,
 	)
@@ -71,6 +90,9 @@ func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
 			return ErrRateOverlap
 		}
 		return fmt.Errorf("criar tarifa protegida: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("confirmar criação de tarifa: %w", err)
 	}
 	return nil
 }
