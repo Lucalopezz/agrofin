@@ -214,6 +214,7 @@ type saleReceiptTx struct{ tx pgx.Tx }
 func (t saleReceiptTx) List(ctx context.Context, userID, saleID string) ([]ProtectedReceipt, error) {
 	return listReceiptsTx(ctx, t.tx, userID, saleID)
 }
+
 func (t saleReceiptTx) Insert(ctx context.Context, p ProtectedReceipt) (ProtectedReceipt, bool, error) {
 	var id string
 	err := t.tx.QueryRow(ctx, `INSERT INTO sale_receipts(id,user_id,sale_id,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(user_id,request_key) DO NOTHING RETURNING id::text`, p.ID, p.UserID, p.SaleID, p.ReceivedAt, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion, p.RequestKey).Scan(&id)
@@ -235,7 +236,8 @@ func (t saleReceiptTx) Insert(ctx context.Context, p ProtectedReceipt) (Protecte
 
 func listReceiptsTx(ctx context.Context, q interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
-}, userID, saleID string) ([]ProtectedReceipt, error) {
+}, userID, saleID string,
+) ([]ProtectedReceipt, error) {
 	rows, err := q.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
 	if err != nil {
 		return nil, fmt.Errorf("listar recebimentos na transação: %w", err)
@@ -256,9 +258,11 @@ func listReceiptsTx(ctx context.Context, q interface {
 	}
 	return out, nil
 }
+
 func findReceipt(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
-}, userID, requestKey string) (ProtectedReceipt, bool, error) {
+}, userID, requestKey string,
+) (ProtectedReceipt, bool, error) {
 	var p ProtectedReceipt
 	err := q.QueryRow(ctx, `SELECT id::text,sale_id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND request_key=$2`, userID, requestKey).Scan(&p.ID, &p.SaleID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion, &p.RequestKey)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -270,6 +274,7 @@ func findReceipt(ctx context.Context, q interface {
 	p.UserID = userID
 	return p, true, nil
 }
+
 func rollbackSale(ctx context.Context, tx pgx.Tx) {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
