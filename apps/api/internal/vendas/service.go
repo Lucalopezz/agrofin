@@ -285,7 +285,9 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 func (s *Service) openReceipt(p ProtectedReceipt) (Receipt, error) {
 	// A data e os IDs autenticam o valor; isso detecta envelope trocado entre
 	// recebimentos ou entre vendas.
-	amount, err := s.protector.decrypt("agrofin.sale.receipt.v1", p.UserID, p.SaleID, p.ID, []string{p.ReceivedAt.Format(time.RFC3339Nano)}, p.Amount)
+	// O PostgreSQL pode devolver o mesmo instante em outro fuso; a cifra foi
+	// criada em UTC e exige exatamente a mesma representação ao abrir.
+	amount, err := s.protector.decrypt("agrofin.sale.receipt.v1", p.UserID, p.SaleID, p.ID, []string{p.ReceivedAt.UTC().Format(time.RFC3339Nano)}, p.Amount)
 	if err != nil {
 		return Receipt{}, err
 	}
