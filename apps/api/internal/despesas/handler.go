@@ -69,7 +69,11 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	e, err := h.service.Update(r.Context(), p.UserID, r.PathValue("id"), in)
+	id, ok := decodeExpenseID(w, r)
+	if !ok {
+		return
+	}
+	e, err := h.service.Update(r.Context(), p.UserID, id, in)
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -83,7 +87,11 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "Autenticação necessária")
 		return
 	}
-	if err := h.service.Delete(r.Context(), p.UserID, r.PathValue("id")); err != nil {
+	id, ok := decodeExpenseID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.service.Delete(r.Context(), p.UserID, id); err != nil {
 		writeServiceError(w, err)
 		return
 	}

@@ -50,7 +50,7 @@ func TestExpenseIntegration(t *testing.T) {
 	require.NoError(t, err)
 	service := NewService(NewRepository(pool), cipher)
 	date := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
-	in := Input{PaidAt: date, Category: " Energia ", Description: " Irrigação ", AmountCents: 12345}
+	in := Input{PaidAt: date, Category: "Energia", Description: "Irrigação", AmountCents: 12345}
 	first, err := service.Create(ctx, users[0], in)
 	require.NoError(t, err)
 	id := first.ID

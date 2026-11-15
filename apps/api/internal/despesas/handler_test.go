@@ -46,12 +46,14 @@ func TestExpenseHTTP(t *testing.T) {
 		{"criar sem chave", "POST", "/expenses", valid, "application/json", true, nil, 201},
 		{"campo desconhecido", "POST", "/expenses", `{"paid_at":"2026-11-15","user_id":"outra"}`, "application/json", true, nil, 400},
 		{"sem tipo de mídia", "POST", "/expenses", valid, "", true, nil, 415},
+		{"categoria vazia", "POST", "/expenses", `{"paid_at":"2026-11-15","category":" ","amount_cents":100}`, "application/json", true, nil, 400},
+		{"valor zero", "POST", "/expenses", `{"paid_at":"2026-11-15","category":"Energia","amount_cents":0}`, "application/json", true, nil, 400},
 		{"corpo grande", "POST", "/expenses", strings.Repeat(" ", 5000), "application/json", true, nil, 413},
 		{"lista vazia", "GET", "/expenses?start_date=2026-11-15&end_date=2026-11-15", "", "", true, nil, 200},
 		{"período repetido", "GET", "/expenses?start_date=2026-11-15&start_date=2026-11-16&end_date=2026-11-16", "", "", true, nil, 400},
-		{"edição", "PUT", "/expenses/id", valid, "application/json", true, nil, 200},
-		{"exclusão", "DELETE", "/expenses/id", "", "", true, nil, 204},
-		{"despesa alheia", "DELETE", "/expenses/id", "", "", true, ErrNotFound, 404},
+		{"edição", "PUT", "/expenses/11111111-1111-4111-8111-111111111111", valid, "application/json", true, nil, 200},
+		{"exclusão", "DELETE", "/expenses/11111111-1111-4111-8111-111111111111", "", "", true, nil, 204},
+		{"despesa alheia", "DELETE", "/expenses/11111111-1111-4111-8111-111111111111", "", "", true, ErrNotFound, 404},
 		{"dados inválidos", "POST", "/expenses", valid, "application/json", true, ErrInvalid, 400},
 	}
 	for _, tt := range tests {

@@ -1,12 +1,10 @@
-// Valida despesas e protege valores antes da persistência.
+// Coordena despesas e protege valores antes da persistência.
 package despesas
 
 import (
 	"context"
-	"strings"
 	"time"
 
-	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
@@ -32,28 +30,13 @@ func NewService(repo repository, protector expenseProtector) *Service {
 	return &Service{repo: repo, protector: protector}
 }
 
-func normalize(owner string, in Input) (Expense, error) {
-	id, err := uuid.Normalize(owner)
-	if err != nil {
-		return Expense{}, ErrInvalid
-	}
-	date := calendarDate.Normalize(in.PaidAt)
-	category := strings.TrimSpace(in.Category)
-	description := strings.TrimSpace(in.Description)
-	if date.IsZero() || category == "" || in.AmountCents <= 0 {
-		return Expense{}, ErrInvalid
-	}
-	return Expense{UserID: id, PaidAt: date, Category: category, Description: description, AmountCents: in.AmountCents}, nil
-}
-
 func (s *Service) Create(ctx context.Context, owner string, in Input) (Expense, error) {
 	if err := ctx.Err(); err != nil {
 		return Expense{}, err
 	}
-	e, err := normalize(owner, in)
-	if err != nil {
-		return Expense{}, err
-	}
+	// O request entrega os campos já validados e normalizados.
+	e := Expense{UserID: owner, PaidAt: in.PaidAt, Category: in.Category, Description: in.Description, AmountCents: in.AmountCents}
+	var err error
 	// O ID já existe antes da cifra para vincular o envelope à despesa.
 	e.ID, err = uuid.New()
 	if err != nil {
@@ -70,14 +53,6 @@ func (s *Service) Create(ctx context.Context, owner string, in Input) (Expense, 
 }
 
 func (s *Service) List(ctx context.Context, owner string, start, end time.Time) ([]Expense, error) {
-	owner, err := uuid.Normalize(owner)
-	if err != nil {
-		return nil, ErrInvalid
-	}
-	start, end, err = calendarDate.NormalizeInclusivePeriod(start, end)
-	if err != nil {
-		return nil, ErrInvalid
-	}
 	rows, err := s.repo.List(ctx, owner, start, end)
 	if err != nil {
 		return nil, err
@@ -97,14 +72,7 @@ func (s *Service) List(ctx context.Context, owner string, start, end time.Time) 
 }
 
 func (s *Service) Update(ctx context.Context, owner, id string, in Input) (Expense, error) {
-	e, err := normalize(owner, in)
-	if err != nil {
-		return Expense{}, err
-	}
-	e.ID, err = uuid.Normalize(id)
-	if err != nil {
-		return Expense{}, ErrInvalid
-	}
+	e := Expense{ID: id, UserID: owner, PaidAt: in.PaidAt, Category: in.Category, Description: in.Description, AmountCents: in.AmountCents}
 	p, err := s.protector.protect(e)
 	if err != nil {
 		return Expense{}, err
@@ -119,14 +87,6 @@ func (s *Service) Update(ctx context.Context, owner, id string, in Input) (Expen
 func (s *Service) Delete(ctx context.Context, owner, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	owner, err := uuid.Normalize(owner)
-	if err != nil {
-		return ErrInvalid
-	}
-	id, err = uuid.Normalize(id)
-	if err != nil {
-		return ErrInvalid
 	}
 	return s.repo.Delete(ctx, owner, id)
 }

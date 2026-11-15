@@ -5,8 +5,10 @@ import (
 	"errors"
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -35,7 +37,12 @@ func decodeInput(w http.ResponseWriter, r *http.Request) (Input, bool) {
 		writeError(w, 400, "paid_at deve usar AAAA-MM-DD")
 		return Input{}, false
 	}
-	return Input{PaidAt: date, Category: v.Category, Description: v.Description, AmountCents: v.AmountCents}, true
+	category := strings.TrimSpace(v.Category)
+	if category == "" || v.AmountCents <= 0 {
+		writeError(w, 400, "Confira categoria e valor da despesa")
+		return Input{}, false
+	}
+	return Input{PaidAt: date, Category: category, Description: strings.TrimSpace(v.Description), AmountCents: v.AmountCents}, true
 }
 func decodePeriod(w http.ResponseWriter, r *http.Request) (time.Time, time.Time, bool) {
 	q, err := url.ParseQuery(r.URL.RawQuery)
@@ -53,5 +60,19 @@ func decodePeriod(w http.ResponseWriter, r *http.Request) (time.Time, time.Time,
 		writeError(w, 400, "end_date deve usar AAAA-MM-DD")
 		return time.Time{}, time.Time{}, false
 	}
+	if end.Before(start) {
+		writeError(w, 400, "O fim do período deve ser igual ou posterior ao início")
+		return time.Time{}, time.Time{}, false
+	}
 	return start, end, true
+}
+
+// decodeExpenseID valida o identificador fornecido no caminho HTTP.
+func decodeExpenseID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Normalize(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 400, "O ID da despesa deve ser um UUID válido")
+		return "", false
+	}
+	return id, true
 }
