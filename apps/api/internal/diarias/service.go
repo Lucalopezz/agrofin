@@ -5,7 +5,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"strings"
 	"time"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
@@ -23,7 +22,7 @@ type dailyWorkProtector interface {
 	DecryptDailyWorkAmount(userID, dailyWorkID, employeeID string, workDate time.Time, amount ProtectedAmount) (int64, error)
 }
 
-// Service valida a entrada, protege o valor e envia ao Repository uma entidade
+// Service recebe a entrada validada, protege o valor e envia ao Repository uma entidade
 // pronta para gravação, sem depender de HTTP ou de detalhes do PostgreSQL.
 type Service struct {
 	repo      dailyWorkRepository
@@ -39,14 +38,9 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateDailyWo
 		return DailyWork{}, err
 	}
 
-	work, err := normalizeDailyWork(DailyWork{
-		UserID: userID, EmployeeID: input.EmployeeID,
-		WorkDate: input.WorkDate, AmountCents: input.AmountCents,
-		Notes: input.Notes,
-	})
-	if err != nil {
-		return DailyWork{}, err
-	}
+	// Os dados recebidos já foram validados e normalizados no request.
+	work := DailyWork{UserID: userID, EmployeeID: input.EmployeeID, WorkDate: input.WorkDate, AmountCents: input.AmountCents, Notes: input.Notes}
+	var err error
 	if s == nil || s.repo == nil || s.protector == nil {
 		return DailyWork{}, ErrInvalidDailyWorkConfig
 	}
@@ -86,13 +80,6 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateDailyWo
 // O repositório restringe a leitura ao gerente e ao intervalo recebido.
 func (s *Service) Summarize(ctx context.Context, userID string, period DailyWorkPeriod) ([]DailyWorkSummary, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return nil, ErrInvalidDailyWorkOwner
-	}
-	period, err := normalizeDailyWorkPeriod(period)
-	if err != nil {
 		return nil, err
 	}
 	if s == nil || s.repo == nil || s.protector == nil {

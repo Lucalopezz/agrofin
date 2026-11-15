@@ -28,7 +28,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	input, ok := decodeCreateDailyWorkRequest(w, r)
+	input, ok := decodeCreateDailyWorkRequest(w, r, principal.UserID)
 	if !ok {
 		return
 	}
