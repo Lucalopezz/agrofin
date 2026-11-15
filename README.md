@@ -2,10 +2,6 @@
 
 O agrofin é uma aplicação para ajudar o cliente a administrar a produção de limão pelo celular. A proposta é reunir registros de colheita por funcionário, pagamentos, vendas, despesas, insumos e pulverizações em uma interface simples e rápida de usar.
 
-## Estado do projeto
-
-O projeto está em desenvolvimento. Existe uma página inicial e uma API conectada ao PostgreSQL, com migrações do banco. A rota de saúde, o cadastro público e a autenticação de clientes/gerentes e o cadastro, a listagem persistida, a renomeação, a desativação e a reativação de funcionários estão implementados. As rotas de funcionários exigem sessão; o frontend ainda usa dados mockados. Cada cliente pode criar sua conta e acessa somente os próprios funcionários. A listagem aceita o filtro opcional `active=true` ou `active=false`; sem filtro, retorna ambos os estados. Tarifas gerais podem ser criadas e listadas pelas rotas protegidas `POST` e `GET /api/v1/harvest-rates`. A API também cria lançamentos de caixas e diárias em rotas protegidas; os valores financeiros são cifrados no banco. Pagamentos, fechamento semanal, controles operacionais de rotação e integração com o frontend ainda estão pendentes.
-
 ## Tecnologias
 
 - **Frontend:** React, TypeScript, Vite, Tailwind CSS e componentes shadcn.
