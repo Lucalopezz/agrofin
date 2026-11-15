@@ -3,10 +3,14 @@ package vendas
 
 import (
 	"errors"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type createSaleRequest struct {
@@ -29,7 +33,7 @@ type receiptRequest struct {
 	AmountCents int64 `json:"amount_cents"`
 }
 
-func decodeCreateSaleRequest(w http.ResponseWriter, r *http.Request) (CreateSaleInput, bool) {
+func decodeCreateSaleRequest(w http.ResponseWriter, r *http.Request, userID string) (CreateSaleInput, bool) {
 	request, err := httpjson.Decode[createSaleRequest](w, r)
 	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, 415, errorResponse{Error: "Envie o corpo como application/json"})
@@ -56,7 +60,18 @@ func decodeCreateSaleRequest(w http.ResponseWriter, r *http.Request) (CreateSale
 	if request.Discount != nil {
 		discount = &SaleDiscountInput{Reason: request.Discount.Reason, AmountCents: request.Discount.AmountCents}
 	}
-	return CreateSaleInput{SoldAt: soldAt, BuyerName: request.BuyerName, Notes: request.Notes, Items: items, Discount: discount}, true
+	input := CreateSaleInput{SoldAt: soldAt, BuyerName: request.BuyerName, Notes: request.Notes, Items: items, Discount: discount}
+	// Validamos a entrada antes do serviço; o cálculo no serviço monta a resposta.
+	sale, err := normalizeSale(userID, input)
+	if err != nil {
+		writeSaleResponse(w, Sale{}, err)
+		return CreateSaleInput{}, false
+	}
+	input.BuyerName, input.Notes = sale.BuyerName, sale.Notes
+	if input.Discount != nil {
+		input.Discount.Reason = sale.Discount.Reason
+	}
+	return input, true
 }
 func decodeReceiptRequest(w http.ResponseWriter, r *http.Request) (CreateReceiptInput, bool) {
 	request, err := httpjson.Decode[receiptRequest](w, r)
@@ -70,6 +85,10 @@ func decodeReceiptRequest(w http.ResponseWriter, r *http.Request) (CreateReceipt
 	}
 	if err != nil || request == nil {
 		writeJSON(w, 400, errorResponse{Error: "Envie um único objeto JSON com o recebimento"})
+		return CreateReceiptInput{}, false
+	}
+	if request.AmountCents <= 0 {
+		writeJSON(w, 400, errorResponse{Error: "O valor do recebimento deve ser maior que zero"})
 		return CreateReceiptInput{}, false
 	}
 	return CreateReceiptInput{AmountCents: request.AmountCents}, true
@@ -96,5 +115,76 @@ func decodeSalePeriod(w http.ResponseWriter, r *http.Request) (SalePeriod, bool)
 		writeJSON(w, 400, errorResponse{Error: "end_date deve usar AAAA-MM-DD"})
 		return SalePeriod{}, false
 	}
+	if end.Before(start) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve ser igual ou posterior a start_date"})
+		return SalePeriod{}, false
+	}
 	return SalePeriod{StartDate: start, EndDate: end}, true
+}
+
+// decodeSaleID valida o identificador recebido no caminho antes de chamar o serviço.
+func decodeSaleID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Normalize(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, 400, errorResponse{Error: "O ID da venda deve ser um UUID válido"})
+		return "", false
+	}
+	return id, true
+}
+
+func normalizeSale(userID string, input CreateSaleInput) (Sale, error) {
+	ownerID, err := uuid.Normalize(userID)
+	if err != nil {
+		return Sale{}, ErrInvalidSaleOwner
+	}
+	if input.SoldAt.IsZero() {
+		return Sale{}, ErrInvalidSaleDate
+	}
+	if len(input.Items) == 0 {
+		return Sale{}, ErrInvalidSaleItems
+	}
+	sale := Sale{UserID: ownerID, SoldAt: date.Normalize(input.SoldAt), BuyerName: strings.TrimSpace(input.BuyerName), Notes: strings.TrimSpace(input.Notes)}
+	seen := make(map[SaleType]struct{}, len(input.Items))
+	for _, in := range input.Items {
+		switch in.SaleType {
+		case SaleTypeExportacao, SaleTypeMercado, SaleTypeMoagem:
+		default:
+			return Sale{}, ErrInvalidSaleType
+		}
+		if _, ok := seen[in.SaleType]; ok {
+			return Sale{}, ErrDuplicateSaleType
+		}
+		seen[in.SaleType] = struct{}{}
+		if in.Quantity <= 0 {
+			return Sale{}, ErrInvalidSaleQuantity
+		}
+		if !money.IsPositiveCents(in.UnitPriceCents) {
+			return Sale{}, ErrInvalidSalePrice
+		}
+		q := int64(in.Quantity)
+		if in.UnitPriceCents > int64(^uint64(0)>>1)/q {
+			return Sale{}, ErrSaleOverflow
+		}
+		line := in.UnitPriceCents * q
+		gross, err := addCents(sale.GrossCents, line)
+		if err != nil {
+			return Sale{}, err
+		}
+		sale.GrossCents = gross
+		sale.Items = append(sale.Items, SaleItem{SaleType: in.SaleType, Quantity: in.Quantity, UnitPriceCents: in.UnitPriceCents, LineAmountCents: line})
+	}
+	if input.Discount != nil {
+		reason := strings.TrimSpace(input.Discount.Reason)
+		if reason == "" || !money.IsPositiveCents(input.Discount.AmountCents) {
+			return Sale{}, ErrInvalidSaleDiscount
+		}
+		if input.Discount.AmountCents > sale.GrossCents {
+			return Sale{}, ErrDiscountExceedsGross
+		}
+		sale.Discount = &SaleDiscount{Reason: reason, AmountCents: input.Discount.AmountCents}
+		sale.DiscountCents = input.Discount.AmountCents
+	}
+	sale.NetCents = sale.GrossCents - sale.DiscountCents
+	sale.ReceivableCents = sale.NetCents
+	return sale, nil
 }

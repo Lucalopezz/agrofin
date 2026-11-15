@@ -82,7 +82,7 @@ func writeSaleListResponse(w http.ResponseWriter, sales []Sale, err error) {
 func writeReceiptResponse(w http.ResponseWriter, receipt Receipt, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidSaleID), errors.Is(err, ErrInvalidReceipt):
-		writeJSON(w, 400, errorResponse{Error: "Confira o ID da venda, a chave e o valor do recebimento"})
+		writeJSON(w, 400, errorResponse{Error: "Confira o ID da venda e o valor do recebimento"})
 	case errors.Is(err, ErrSaleNotFound):
 		writeJSON(w, 404, errorResponse{Error: "Venda não encontrada"})
 	case errors.Is(err, ErrReceiptExceedsBalance):

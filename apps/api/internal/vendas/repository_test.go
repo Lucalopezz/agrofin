@@ -53,7 +53,9 @@ func TestSalesRepositoryIntegration(t *testing.T) {
 	cipher, err := NewCipher(keys)
 	require.NoError(t, err)
 	service := NewService(NewRepository(pool), cipher)
-	sale, err := service.Create(ctx, users[0], exampleSale())
+	saleInput := exampleSale()
+	saleInput.Discount.Reason = "Desconto"
+	sale, err := service.Create(ctx, users[0], saleInput)
 	require.NoError(t, err)
 	assert.EqualValues(t, 53000, sale.ReceivableCents)
 	input := CreateReceiptInput{SaleID: sale.ID, AmountCents: 30000}
@@ -136,7 +138,7 @@ func TestSalesRepositoryIntegration(t *testing.T) {
 	assert.Equal(t, 2, count)
 
 	// Envios iguais que cabem no saldo são eventos distintos.
-	second, err := service.Create(ctx, users[0], exampleSale())
+	second, err := service.Create(ctx, users[0], saleInput)
 	require.NoError(t, err)
 	firstReceipt, err := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: second.ID, AmountCents: 10000})
 	require.NoError(t, err)

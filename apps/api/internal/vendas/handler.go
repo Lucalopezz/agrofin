@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type saleService interface {
@@ -24,7 +23,7 @@ func (h *Handler) createSale(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, errorResponse{Error: "Autenticação necessária"})
 		return
 	}
-	in, ok := decodeCreateSaleRequest(w, r)
+	in, ok := decodeCreateSaleRequest(w, r, p.UserID)
 	if !ok {
 		return
 	}
@@ -52,9 +51,8 @@ func (h *Handler) createReceipt(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, errorResponse{Error: "Autenticação necessária"})
 		return
 	}
-	saleID, err := uuid.Normalize(r.PathValue("id"))
-	if err != nil {
-		writeJSON(w, 400, errorResponse{Error: "O ID da venda deve ser um UUID válido"})
+	saleID, ok := decodeSaleID(w, r)
+	if !ok {
 		return
 	}
 	in, ok := decodeReceiptRequest(w, r)

@@ -1,10 +1,9 @@
-// Valida vendas, protege valores e calcula valores vendidos e recebidos.
+// Protege valores de vendas e calcula valores vendidos e recebidos.
 package vendas
 
 import (
 	"context"
 	"math"
-	"strings"
 	"time"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
@@ -36,10 +35,20 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateSaleInp
 	if err := ctx.Err(); err != nil {
 		return Sale{}, err
 	}
-	sale, err := normalizeSale(userID, input)
-	if err != nil {
-		return Sale{}, err
+	// O request já validou classificações, valores, desconto e limites da soma.
+	sale := Sale{UserID: userID, SoldAt: input.SoldAt, BuyerName: input.BuyerName, Notes: input.Notes}
+	for _, item := range input.Items {
+		line := int64(item.Quantity) * item.UnitPriceCents
+		sale.GrossCents += line
+		sale.Items = append(sale.Items, SaleItem{SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: item.UnitPriceCents, LineAmountCents: line})
 	}
+	if input.Discount != nil {
+		sale.Discount = &SaleDiscount{Reason: input.Discount.Reason, AmountCents: input.Discount.AmountCents}
+		sale.DiscountCents = input.Discount.AmountCents
+	}
+	sale.NetCents = sale.GrossCents - sale.DiscountCents
+	sale.ReceivableCents = sale.NetCents
+	var err error
 	if s == nil || s.repo == nil || s.protector == nil {
 		return Sale{}, ErrInvalidSaleConfig
 	}
@@ -84,17 +93,10 @@ func (s *Service) List(ctx context.Context, userID string, period SalePeriod) ([
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(userID) != userID || userID == "" {
-		return nil, ErrInvalidSaleOwner
-	}
-	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
-	if err != nil {
-		return nil, ErrInvalidSaleDate
-	}
 	if s == nil || s.repo == nil || s.protector == nil {
 		return nil, ErrInvalidSaleConfig
 	}
-	records, err := s.repo.ListSales(ctx, userID, start, end)
+	records, err := s.repo.ListSales(ctx, userID, period.StartDate, period.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -117,20 +119,8 @@ func (s *Service) Receive(ctx context.Context, userID string, input CreateReceip
 	if err := ctx.Err(); err != nil {
 		return Receipt{}, err
 	}
-	ownerID, err := uuid.Normalize(userID)
-	if err != nil {
-		return Receipt{}, ErrInvalidSaleOwner
-	}
-	saleID, err := uuid.Normalize(input.SaleID)
-	if err != nil {
-		return Receipt{}, ErrInvalidSaleID
-	}
-	if input.AmountCents <= 0 {
-		return Receipt{}, ErrInvalidReceipt
-	}
-	if s == nil || s.repo == nil || s.protector == nil {
-		return Receipt{}, ErrInvalidSaleConfig
-	}
+	// O request valida o ID e o valor; a conta vem da sessão autenticada.
+	ownerID, saleID := userID, input.SaleID
 	record, err := s.repo.GetSale(ctx, ownerID, saleID)
 	if err != nil {
 		return Receipt{}, err
