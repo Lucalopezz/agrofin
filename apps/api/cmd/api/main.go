@@ -13,6 +13,7 @@ import (
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
+	"github.com/lucalopezz/agrofin/apps/api/internal/despesas"
 	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/health"
@@ -111,6 +112,13 @@ func run() error {
 	saleService := vendas.NewService(saleRepository, saleCipher)
 	saleHandler := vendas.NewHandler(saleService)
 	vendas.RegisterRoutes(apiMux, saleHandler, sessionMiddleware.RequireSession)
+
+	expenseCipher, err := despesas.NewCipher(financialKeyring)
+	if err != nil {
+		return err
+	}
+	expenseService := despesas.NewService(despesas.NewRepository(pool), expenseCipher)
+	despesas.RegisterRoutes(apiMux, despesas.NewHandler(expenseService), sessionMiddleware.RequireSession)
 
 	dailyWorkRepository := diarias.NewRepository(pool)
 	dailyWorkService := diarias.NewService(dailyWorkRepository, dailyWorkCipher)
