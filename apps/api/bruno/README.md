@@ -57,3 +57,9 @@ Para testar a reativação isoladamente, faça login, preencha `employee_id` e e
 As três consultas exigem sessão e retornam somente dados do gerente autenticado, ordenados por nome e ID; sem resultados, retornam `[]`. Envie `active` uma única vez, com `true` ou `false` em minúsculas. Valor vazio, diferente ou repetido e query malformada retornam `400`.
 
 Para conferir, cadastre um funcionário e execute **07.1**; depois desative-o com **09** e execute **07.2**. Reative-o com **10** e confirme que ele volta a aparecer em **07.1**. A consulta **07** continua mostrando o mesmo cadastro nos dois estados. Tente o filtro nas duas contas para conferir o isolamento; enviar `user_id` na query não altera o dono derivado da sessão.
+
+## Despesas pagas
+
+Com uma sessão ativa, envie **Manual - Gerenciar despesas → Cadastrar despesa**. O corpo contém `paid_at` em `AAAA-MM-DD`, `category`, `description` opcional e `amount_cents` positivo; `12345` representa R$ 123,45. Cada envio aceito cria uma despesa, sem chave de idempotência. Copie o ID para `expense_id` e consulte **07.8 - Listar despesas do período**, com limites inclusivos.
+
+Em **Manual - Gerenciar despesas**, a atualização por `PUT` substitui todos os campos do corpo e a exclusão por `DELETE` retorna `204`. Despesa de outra conta ou inexistente retorna `404`. Execute as operações manualmente e não execute a coleção inteira pelo runner: elas alteram dados persistidos. As despesas representam saídas já pagas; o painel consolidado de caixa ainda não está implementado.

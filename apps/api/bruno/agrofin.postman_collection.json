@@ -68,6 +68,18 @@
     {
       "key": "sale_end_date",
       "value": "2026-11-30"
+    },
+    {
+      "key": "expense_id",
+      "value": ""
+    },
+    {
+      "key": "expense_start_date",
+      "value": "2026-11-01"
+    },
+    {
+      "key": "expense_end_date",
+      "value": "2026-11-30"
     }
   ],
   "item": [
@@ -269,6 +281,14 @@
         "description": "Exige sessão. Informe sale_start_date e sale_end_date como AAAA-MM-DD, inclusivos. Retorna valor bruto, desconto, líquido, recebido e a receber por venda.",
         "method": "GET",
         "url": "{{base_url}}/sales?start_date={{sale_start_date}}&end_date={{sale_end_date}}"
+      }
+    },
+    {
+      "name": "07.8 - Listar despesas do período",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/expenses?start_date={{expense_start_date}}&end_date={{expense_end_date}}",
+        "description": "Datas inclusivas em AAAA-MM-DD; lista somente despesas da sessão."
       }
     },
     {
@@ -508,14 +528,27 @@
             "method": "PATCH",
             "url": "{{base_url}}/harvest-entries/{{harvest_id}}",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{origin}}" },
-              { "key": "X-Agrofin-Request", "value": "1" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\"items\":[{\"box_type\":\"normal\",\"quantity\":12},{\"box_type\":\"moagem\",\"quantity\":3}]}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         }
@@ -610,14 +643,27 @@
             "method": "POST",
             "url": "{{base_url}}/sales",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{origin}}" },
-              { "key": "X-Agrofin-Request", "value": "1" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\"sold_at\":\"2026-11-12\",\"buyer_name\":\"Barracão\",\"items\":[{\"sale_type\":\"exportacao\",\"quantity\":10,\"unit_price_cents\":4000},{\"sale_type\":\"mercado\",\"quantity\":5,\"unit_price_cents\":3000}],\"discount\":{\"reason\":\"Desconto informado pelo barracão\",\"amount_cents\":2000}}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
           }
         },
@@ -628,16 +674,115 @@
             "method": "POST",
             "url": "{{base_url}}/sales/{{sale_id}}/receipts",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Origin", "value": "{{origin}}" },
-              { "key": "X-Agrofin-Request", "value": "1" },
-              { "key": "Idempotency-Key", "value": "{{receipt_request_key}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{receipt_request_key}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\"amount_cents\":30000}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual - Gerenciar despesas",
+      "description": "Escritas persistentes; execute individualmente, nunca pelo runner. Copie o ID para expense_id. Cada cadastro cria uma despesa.",
+      "item": [
+        {
+          "name": "Cadastrar despesa",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/expenses",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"paid_at\":\"2026-11-15\",\"category\":\"Energia\",\"description\":\"Irrigação\",\"amount_cents\":12345}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Atualizar despesa",
+          "request": {
+            "method": "PUT",
+            "url": "{{base_url}}/expenses/{{expense_id}}",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"paid_at\":\"2026-11-15\",\"category\":\"Energia\",\"description\":\"Irrigação\",\"amount_cents\":12345}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Excluir despesa",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/expenses/{{expense_id}}",
+            "header": [
+              {
+                "key": "Origin",
+                "value": "{{origin}}"
+              },
+              {
+                "key": "X-Agrofin-Request",
+                "value": "1"
+              }
+            ]
           }
         }
       ]
