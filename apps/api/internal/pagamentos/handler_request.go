@@ -1,4 +1,4 @@
-// Decodifica período de consulta e corpo idempotente de pagamento.
+// Decodifica período de consulta e corpo de pagamento.
 package pagamentos
 
 import (
@@ -19,16 +19,6 @@ type createPaymentRequest struct {
 }
 
 func decodeCreatePaymentRequest(w http.ResponseWriter, r *http.Request) (CreatePaymentInput, bool) {
-	// A chave identifica uma operação lógica: o cliente a reutiliza ao repetir o mesmo
-	// envio após timeout e gera outra para um pagamento novo. Values permite rejeitar
-	// cabeçalhos duplicados, que poderiam tornar essa identidade ambígua.
-	keys := r.Header.Values("Idempotency-Key")
-	if len(keys) != 1 {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Envie uma única chave no cabeçalho Idempotency-Key"})
-		return CreatePaymentInput{}, false
-	}
-	requestKey := keys[0]
-
 	request, err := httpjson.Decode[createPaymentRequest](w, r)
 	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
@@ -54,7 +44,7 @@ func decodeCreatePaymentRequest(w http.ResponseWriter, r *http.Request) (CreateP
 	}
 	return CreatePaymentInput{
 		EmployeeID: request.EmployeeID, PeriodStart: startDate, PeriodEnd: endDate,
-		AmountCents: request.AmountCents, Notes: request.Notes, RequestKey: requestKey,
+		AmountCents: request.AmountCents, Notes: request.Notes,
 	}, true
 }
 

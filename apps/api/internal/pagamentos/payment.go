@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type Payment struct {
@@ -17,7 +16,6 @@ type Payment struct {
 	PaidAt      time.Time
 	AmountCents int64
 	Notes       string
-	RequestKey  string
 }
 
 // PaidAt será da aplicação, não do cliente, para evitar que o usuário force
@@ -29,14 +27,6 @@ type CreatePaymentInput struct {
 	PeriodEnd   time.Time
 	AmountCents int64
 	Notes       string
-	RequestKey  string // UUID recebido no cabeçalho Idempotency-Key.
-}
-
-// PaymentCreation informa se o resultado foi criado agora ou veio de uma repetição idempotente.
-type PaymentCreation struct {
-	Payment Payment
-	// Replayed indica que a chave já existia e o serviço devolveu o pagamento original, sem criar outro.
-	Replayed bool
 }
 
 // ProtectedPayment é a entidade pronta para gravação; ela transporta o envelope,
@@ -50,7 +40,6 @@ type ProtectedPayment struct {
 	PaidAt      time.Time
 	Amount      ProtectedPaymentAmount
 	Notes       string
-	RequestKey  string
 }
 
 // normalizePaymentAmount aplica a regra compartilhada e preserva o erro do domínio de pagamentos.
@@ -59,14 +48,6 @@ func normalizePaymentAmount(amountCents int64) (int64, error) {
 		return 0, ErrInvalidPaymentAmount
 	}
 	return amountCents, nil
-}
-
-func normalizePaymentRequestKey(requestKey string) (string, error) {
-	key, err := uuid.Normalize(requestKey)
-	if err != nil {
-		return "", ErrInvalidPaymentRequestKey
-	}
-	return key, nil
 }
 
 // inclusivePeriod converte o intervalo semiaberto persistido para a forma usada nas consultas HTTP.

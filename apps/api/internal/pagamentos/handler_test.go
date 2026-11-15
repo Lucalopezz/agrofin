@@ -22,8 +22,8 @@ func (f payrollServiceFunc) Summarize(ctx context.Context, userID string, period
 	return f(ctx, userID, period)
 }
 
-func (f payrollServiceFunc) Create(context.Context, string, CreatePaymentInput) (PaymentCreation, error) {
-	return PaymentCreation{}, nil
+func (f payrollServiceFunc) Create(context.Context, string, CreatePaymentInput) (Payment, error) {
+	return Payment{}, nil
 }
 
 func TestPayrollSummaryHandler(t *testing.T) {
@@ -106,4 +106,16 @@ func TestPayrollSummaryHandler(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreatePaymentWithoutIdempotencyHeader(t *testing.T) {
+	service := payrollServiceFunc(func(context.Context, string, Period) (PeriodSummary, error) { return PeriodSummary{}, nil })
+	mux := http.NewServeMux()
+	RegisterRoutes(mux, NewHandler(service), func(h http.Handler) http.Handler { return h })
+	req := httptest.NewRequest(http.MethodPost, "/employee-payments", strings.NewReader(`{"employee_id":"11111111-1111-4111-8111-111111111111","start_date":"2026-11-01","end_date":"2026-11-01","amount_cents":1000}`))
+	req.Header.Set("Content-Type", "application/json")
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: "conta"}))
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 }

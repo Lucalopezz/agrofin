@@ -134,7 +134,7 @@ func (r *Repository) getSale(ctx context.Context, userID, saleID string) (Protec
 }
 
 func (r *Repository) listReceipts(ctx context.Context, userID, saleID string) ([]ProtectedReceipt, error) {
-	rows, err := r.pool.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
+	rows, err := r.pool.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
 	if err != nil {
 		return nil, fmt.Errorf("listar recebimentos protegidos: %w", err)
 	}
@@ -142,7 +142,7 @@ func (r *Repository) listReceipts(ctx context.Context, userID, saleID string) ([
 	out := make([]ProtectedReceipt, 0)
 	for rows.Next() {
 		var p ProtectedReceipt
-		if err := rows.Scan(&p.ID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion, &p.RequestKey); err != nil {
+		if err := rows.Scan(&p.ID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion); err != nil {
 			return nil, fmt.Errorf("ler recebimento protegido: %w", err)
 		}
 		p.UserID = userID
@@ -155,52 +155,27 @@ func (r *Repository) listReceipts(ctx context.Context, userID, saleID string) ([
 	return out, nil
 }
 
-func (r *Repository) FindReceiptByRequestKey(ctx context.Context, userID, requestKey string) (ProtectedReceipt, bool, error) {
-	var p ProtectedReceipt
-	err := r.pool.QueryRow(ctx, `SELECT id::text,sale_id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND request_key=$2`, userID, requestKey).Scan(&p.ID, &p.SaleID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion, &p.RequestKey)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ProtectedReceipt{}, false, nil
-	}
-	if err != nil {
-		return ProtectedReceipt{}, false, fmt.Errorf("consultar chave do recebimento: %w", err)
-	}
-	p.UserID = userID
-	return p, true, nil
-}
-
 type receiptTx interface {
 	List(ctx context.Context, userID, saleID string) ([]ProtectedReceipt, error)
-	Insert(ctx context.Context, receipt ProtectedReceipt) (ProtectedReceipt, bool, error)
+	Insert(ctx context.Context, receipt ProtectedReceipt) error
 }
 
-func (r *Repository) withSaleReceiptLock(ctx context.Context, userID, saleID, requestKey string, fn func(receiptTx, *ProtectedReceipt) error) error {
+func (r *Repository) withSaleReceiptLock(ctx context.Context, userID, saleID string, fn func(receiptTx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar recebimento: %w", err)
 	}
 	defer rollbackSale(ctx, tx)
-	_, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, userID+":"+requestKey)
+	// A linha da venda serializa recebimentos para evitar exceder o saldo.
+	var locked string
+	err = tx.QueryRow(ctx, `SELECT id::text FROM sales WHERE user_id=$1 AND id=$2 FOR UPDATE`, userID, saleID).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrSaleNotFound
+	}
 	if err != nil {
-		return fmt.Errorf("serializar chave do recebimento: %w", err)
+		return fmt.Errorf("bloquear venda para recebimento: %w", err)
 	}
-	existing, found, err := findReceipt(ctx, tx, userID, requestKey)
-	if err != nil {
-		return err
-	}
-	var existingPtr *ProtectedReceipt
-	if found {
-		existingPtr = &existing
-	} else {
-		var locked string
-		err = tx.QueryRow(ctx, `SELECT id::text FROM sales WHERE user_id=$1 AND id=$2 FOR UPDATE`, userID, saleID).Scan(&locked)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrSaleNotFound
-		}
-		if err != nil {
-			return fmt.Errorf("bloquear venda para recebimento: %w", err)
-		}
-	}
-	if err := fn(saleReceiptTx{tx: tx}, existingPtr); err != nil {
+	if err := fn(saleReceiptTx{tx: tx}); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -215,30 +190,19 @@ func (t saleReceiptTx) List(ctx context.Context, userID, saleID string) ([]Prote
 	return listReceiptsTx(ctx, t.tx, userID, saleID)
 }
 
-func (t saleReceiptTx) Insert(ctx context.Context, p ProtectedReceipt) (ProtectedReceipt, bool, error) {
-	var id string
-	err := t.tx.QueryRow(ctx, `INSERT INTO sale_receipts(id,user_id,sale_id,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(user_id,request_key) DO NOTHING RETURNING id::text`, p.ID, p.UserID, p.SaleID, p.ReceivedAt, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion, p.RequestKey).Scan(&id)
-	if err == nil {
-		return p, true, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return ProtectedReceipt{}, false, fmt.Errorf("gravar recebimento protegido: %w", err)
-	}
-	existing, found, err := findReceipt(ctx, t.tx, p.UserID, p.RequestKey)
+func (t saleReceiptTx) Insert(ctx context.Context, p ProtectedReceipt) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO sale_receipts(id,user_id,sale_id,received_at,amount_ciphertext,amount_nonce,amount_key_version) VALUES($1,$2,$3,$4,$5,$6,$7)`, p.ID, p.UserID, p.SaleID, p.ReceivedAt, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion)
 	if err != nil {
-		return ProtectedReceipt{}, false, err
+		return fmt.Errorf("gravar recebimento protegido: %w", err)
 	}
-	if !found {
-		return ProtectedReceipt{}, false, fmt.Errorf("chave do recebimento conflitou sem registro")
-	}
-	return existing, false, nil
+	return nil
 }
 
 func listReceiptsTx(ctx context.Context, q interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, userID, saleID string,
 ) ([]ProtectedReceipt, error) {
-	rows, err := q.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
+	rows, err := q.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
 	if err != nil {
 		return nil, fmt.Errorf("listar recebimentos na transação: %w", err)
 	}
@@ -246,7 +210,7 @@ func listReceiptsTx(ctx context.Context, q interface {
 	out := make([]ProtectedReceipt, 0)
 	for rows.Next() {
 		var p ProtectedReceipt
-		if err := rows.Scan(&p.ID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion, &p.RequestKey); err != nil {
+		if err := rows.Scan(&p.ID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion); err != nil {
 			return nil, err
 		}
 		p.UserID = userID
@@ -257,22 +221,6 @@ func listReceiptsTx(ctx context.Context, q interface {
 		return nil, err
 	}
 	return out, nil
-}
-
-func findReceipt(ctx context.Context, q interface {
-	QueryRow(context.Context, string, ...any) pgx.Row
-}, userID, requestKey string,
-) (ProtectedReceipt, bool, error) {
-	var p ProtectedReceipt
-	err := q.QueryRow(ctx, `SELECT id::text,sale_id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version,request_key::text FROM sale_receipts WHERE user_id=$1 AND request_key=$2`, userID, requestKey).Scan(&p.ID, &p.SaleID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion, &p.RequestKey)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ProtectedReceipt{}, false, nil
-	}
-	if err != nil {
-		return ProtectedReceipt{}, false, fmt.Errorf("consultar recebimento: %w", err)
-	}
-	p.UserID = userID
-	return p, true, nil
 }
 
 func rollbackSale(ctx context.Context, tx pgx.Tx) {

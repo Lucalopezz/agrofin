@@ -13,8 +13,7 @@ import (
 )
 
 type salesHandlerStub struct {
-	err    error
-	replay bool
+	err error
 }
 
 func (s salesHandlerStub) Create(_ context.Context, _ string, in CreateSaleInput) (Sale, error) {
@@ -23,8 +22,8 @@ func (s salesHandlerStub) Create(_ context.Context, _ string, in CreateSaleInput
 func (s salesHandlerStub) List(context.Context, string, SalePeriod) ([]Sale, error) {
 	return nil, s.err
 }
-func (s salesHandlerStub) Receive(context.Context, string, CreateReceiptInput) (Receipt, bool, error) {
-	return Receipt{}, s.replay, s.err
+func (s salesHandlerStub) Receive(context.Context, string, CreateReceiptInput) (Receipt, error) {
+	return Receipt{}, s.err
 }
 
 func TestSalesHTTP(t *testing.T) {
@@ -32,7 +31,6 @@ func TestSalesHTTP(t *testing.T) {
 		name, method, path, body, contentType string
 		authenticated                         bool
 		err                                   error
-		replay                                bool
 		status                                int
 	}{
 		{name: "sem sessão", method: "GET", path: "/sales?start_date=2026-11-01&end_date=2026-11-30", status: 401},
@@ -45,13 +43,12 @@ func TestSalesHTTP(t *testing.T) {
 		{name: "falha de domínio", method: "POST", path: "/sales", body: `{"sold_at":"2026-11-12"}`, contentType: "application/json", authenticated: true, err: ErrInvalidSaleItems, status: 400},
 		{name: "id inválido", method: "POST", path: "/sales/erro/receipts", body: `{}`, contentType: "application/json", authenticated: true, status: 400},
 		{name: "recebimento criado", method: "POST", path: "/sales/11111111-1111-4111-8111-111111111111/receipts", body: `{"amount_cents":100}`, contentType: "application/json", authenticated: true, status: 201},
-		{name: "repetição", method: "POST", path: "/sales/11111111-1111-4111-8111-111111111111/receipts", body: `{"amount_cents":100}`, contentType: "application/json", authenticated: true, replay: true, status: 200},
 		{name: "saldo insuficiente", method: "POST", path: "/sales/11111111-1111-4111-8111-111111111111/receipts", body: `{"amount_cents":100}`, contentType: "application/json", authenticated: true, err: ErrReceiptExceedsBalance, status: 409},
 		{name: "venda não encontrada", method: "POST", path: "/sales/11111111-1111-4111-8111-111111111111/receipts", body: `{"amount_cents":100}`, contentType: "application/json", authenticated: true, err: ErrSaleNotFound, status: 404},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewHandler(salesHandlerStub{err: tc.err, replay: tc.replay})
+			h := NewHandler(salesHandlerStub{err: tc.err})
 			mux := http.NewServeMux()
 			RegisterRoutes(mux, h, func(next http.Handler) http.Handler { return next })
 			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))

@@ -3,15 +3,16 @@ package vendas
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
-	"net/http"
 )
 
 type saleService interface {
 	Create(context.Context, string, CreateSaleInput) (Sale, error)
 	List(context.Context, string, SalePeriod) ([]Sale, error)
-	Receive(context.Context, string, CreateReceiptInput) (Receipt, bool, error)
+	Receive(context.Context, string, CreateReceiptInput) (Receipt, error)
 }
 type Handler struct{ service saleService }
 
@@ -30,6 +31,7 @@ func (h *Handler) createSale(w http.ResponseWriter, r *http.Request) {
 	sale, err := h.service.Create(r.Context(), p.UserID, in)
 	writeSaleResponse(w, sale, err)
 }
+
 func (h *Handler) listSales(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
@@ -43,6 +45,7 @@ func (h *Handler) listSales(w http.ResponseWriter, r *http.Request) {
 	sales, err := h.service.List(r.Context(), p.UserID, period)
 	writeSaleListResponse(w, sales, err)
 }
+
 func (h *Handler) createReceipt(w http.ResponseWriter, r *http.Request) {
 	p, ok := auth.PrincipalFromContext(r.Context())
 	if !ok {
@@ -59,6 +62,6 @@ func (h *Handler) createReceipt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in.SaleID = saleID
-	receipt, replayed, err := h.service.Receive(r.Context(), p.UserID, in)
-	writeReceiptResponse(w, receipt, replayed, err)
+	receipt, err := h.service.Receive(r.Context(), p.UserID, in)
+	writeReceiptResponse(w, receipt, err)
 }

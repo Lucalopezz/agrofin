@@ -28,11 +28,7 @@ func (f dailyWorkSummarizerFunc) Summarize(ctx context.Context, userID string, p
 
 type emptyPaymentRepository struct{}
 
-func (emptyPaymentRepository) FindPaymentByRequestKey(context.Context, string, string) (ProtectedPayment, bool, error) {
-	return ProtectedPayment{}, false, nil
-}
-
-func (emptyPaymentRepository) withEmployeePaymentLock(context.Context, string, string, string, func(paymentTransaction, *ProtectedPayment) error) error {
+func (emptyPaymentRepository) withEmployeePaymentLock(context.Context, string, string, func(paymentTransaction) error) error {
 	return errors.New("operação de escrita não esperada no teste de resumo")
 }
 

@@ -13,7 +13,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,25 +56,13 @@ func TestSalesRepositoryIntegration(t *testing.T) {
 	sale, err := service.Create(ctx, users[0], exampleSale())
 	require.NoError(t, err)
 	assert.EqualValues(t, 53000, sale.ReceivableCents)
-	key1, err := uuid.New()
-	require.NoError(t, err)
-	input := CreateReceiptInput{SaleID: sale.ID, AmountCents: 30000, RequestKey: key1}
-	receipt, replayed, err := service.Receive(ctx, users[0], input)
-	require.NoError(t, err)
-	assert.False(t, replayed)
-	again, replayed, err := service.Receive(ctx, users[0], input)
-	require.NoError(t, err)
-	assert.True(t, replayed)
-	assert.Equal(t, receipt.ID, again.ID)
-	input.AmountCents = 1
-	_, _, err = service.Receive(ctx, users[0], input)
-	assert.ErrorIs(t, err, ErrReceiptIdempotencyConflict)
-	input.RequestKey, err = uuid.New()
+	input := CreateReceiptInput{SaleID: sale.ID, AmountCents: 30000}
+	_, err = service.Receive(ctx, users[0], input)
 	require.NoError(t, err)
 	input.AmountCents = 23001
-	_, _, err = service.Receive(ctx, users[0], input)
+	_, err = service.Receive(ctx, users[0], input)
 	assert.ErrorIs(t, err, ErrReceiptExceedsBalance)
-	_, _, err = service.Receive(ctx, users[1], input)
+	_, err = service.Receive(ctx, users[1], input)
 	assert.ErrorIs(t, err, ErrSaleNotFound)
 	period := SalePeriod{StartDate: sale.SoldAt, EndDate: sale.SoldAt}
 	list, err := service.List(ctx, users[0], period)
@@ -123,12 +110,10 @@ func TestSalesRepositoryIntegration(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 	for range 2 {
-		key, err := uuid.New()
-		require.NoError(t, err)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _, e := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: sale.ID, RequestKey: key, AmountCents: 23000})
+			_, e := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: sale.ID, AmountCents: 23000})
 			errs <- e
 		}()
 	}
@@ -150,39 +135,14 @@ func TestSalesRepositoryIntegration(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sale_receipts WHERE sale_id=$1`, sale.ID).Scan(&count))
 	assert.Equal(t, 2, count)
 
-	// A mesma chave simultânea deve produzir um único recebimento e um replay.
+	// Envios iguais que cabem no saldo são eventos distintos.
 	second, err := service.Create(ctx, users[0], exampleSale())
 	require.NoError(t, err)
-	sharedKey, err := uuid.New()
+	firstReceipt, err := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: second.ID, AmountCents: 10000})
 	require.NoError(t, err)
-	type result struct {
-		receipt Receipt
-		replay  bool
-		err     error
-	}
-	results := make(chan result, 2)
-	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			r, replay, err := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: second.ID, RequestKey: sharedKey, AmountCents: 30000})
-			results <- result{r, replay, err}
-		}()
-	}
-	wg.Wait()
-	close(results)
-	var ids []string
-	replays := 0
-	for r := range results {
-		require.NoError(t, r.err)
-		ids = append(ids, r.receipt.ID)
-		if r.replay {
-			replays++
-		}
-	}
-	require.Len(t, ids, 2)
-	assert.Equal(t, ids[0], ids[1])
-	assert.Equal(t, 1, replays)
+	secondReceipt, err := service.Receive(ctx, users[0], CreateReceiptInput{SaleID: second.ID, AmountCents: 10000})
+	require.NoError(t, err)
+	assert.NotEqual(t, firstReceipt.ID, secondReceipt.ID)
 	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM sale_receipts WHERE sale_id=$1`, second.ID).Scan(&count))
-	assert.Equal(t, 1, count)
+	assert.Equal(t, 2, count)
 }

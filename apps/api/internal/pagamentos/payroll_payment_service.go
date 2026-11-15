@@ -1,4 +1,4 @@
-// Implementa criação idempotente, soma e abertura dos envelopes de pagamento.
+// Implementa criação, soma e abertura dos envelopes de pagamento.
 package pagamentos
 
 import (
@@ -11,11 +11,10 @@ import (
 )
 
 type paymentCreatorRepository interface {
-	FindPaymentByRequestKey(ctx context.Context, userID, requestKey string) (ProtectedPayment, bool, error)
 	withEmployeePaymentLock(
 		ctx context.Context,
-		userID, employeeID, requestKey string,
-		operation func(paymentTransaction, *ProtectedPayment) error,
+		userID, employeeID string,
+		operation func(paymentTransaction) error,
 	) error
 	ListPayments(ctx context.Context, userID string, periodStart, periodEnd time.Time) ([]ProtectedPayment, error)
 	ListPaymentsCoveringDate(ctx context.Context, userID, employeeID string, date time.Time) ([]ProtectedPayment, error)
@@ -44,62 +43,29 @@ func normalizeCreatePayment(userID string, input CreatePaymentInput) (Payment, e
 	if err != nil {
 		return Payment{}, err
 	}
-	requestKey, err := normalizePaymentRequestKey(input.RequestKey)
-	if err != nil {
-		return Payment{}, err
-	}
 
 	return Payment{
 		UserID: ownerID, EmployeeID: employeeID,
 		PeriodStart: start, PeriodEnd: endInclusive.AddDate(0, 0, 1),
 		AmountCents: amountCents, Notes: strings.TrimSpace(input.Notes),
-		RequestKey: requestKey,
 	}, nil
 }
 
 // Create valida a entrada, calcula o devido e grava um único pagamento protegido.
-func (s *PayrollService) Create(ctx context.Context, userID string, input CreatePaymentInput) (PaymentCreation, error) {
+func (s *PayrollService) Create(ctx context.Context, userID string, input CreatePaymentInput) (Payment, error) {
 	if err := ctx.Err(); err != nil {
-		return PaymentCreation{}, err
+		return Payment{}, err
 	}
 	request, err := normalizeCreatePayment(userID, input)
 	if err != nil {
-		return PaymentCreation{}, err
+		return Payment{}, err
 	}
 	if s == nil || s.repo == nil || s.protector == nil || s.harvest == nil || s.daily == nil {
-		return PaymentCreation{}, ErrInvalidPaymentConfig
+		return Payment{}, ErrInvalidPaymentConfig
 	}
-	// Uma repetição idêntica retorna o registro original mesmo que o cadastro de origem
-	// tenha mudado depois do primeiro envio; request_key é a identidade do comando aceito.
-	existing, found, err := s.repo.FindPaymentByRequestKey(ctx, request.UserID, request.RequestKey)
-	if err != nil {
-		return PaymentCreation{}, err
-	}
-	if found {
-		payment, err := s.openProtectedPayment(existing, request.UserID)
-		if err != nil {
-			return PaymentCreation{}, err
-		}
-		if !samePaymentRequest(payment, request) {
-			return PaymentCreation{}, ErrPaymentIdempotencyConflict
-		}
-		return PaymentCreation{Payment: payment, Replayed: true}, nil
-	}
-
-	var creation PaymentCreation
-	err = s.repo.withEmployeePaymentLock(ctx, request.UserID, request.EmployeeID, request.RequestKey,
-		func(tx paymentTransaction, existing *ProtectedPayment) error {
-			if existing != nil {
-				payment, err := s.openProtectedPayment(*existing, request.UserID)
-				if err != nil {
-					return err
-				}
-				if !samePaymentRequest(payment, request) {
-					return ErrPaymentIdempotencyConflict
-				}
-				creation = PaymentCreation{Payment: payment, Replayed: true}
-				return nil
-			}
+	var creation Payment
+	err = s.repo.withEmployeePaymentLock(ctx, request.UserID, request.EmployeeID,
+		func(tx paymentTransaction) error {
 			// O devido é recalculado depois do bloqueio do funcionário: agora colheitas
 			// podem ser editadas, então o total lido antes da transação poderia ficar obsoleto.
 			dueSummary, err := s.summarizeDue(ctx, request.UserID, request.inclusivePeriod())
@@ -144,28 +110,14 @@ func (s *PayrollService) Create(ctx context.Context, userID string, input Create
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			stored, inserted, err := tx.InsertPayment(ctx, protected)
-			if err != nil {
+			if err := tx.InsertPayment(ctx, protected); err != nil {
 				return err
 			}
-			if !inserted {
-				// A restrição UNIQUE é uma última defesa para processos antigos ou escritores
-				// que não usem a trava consultiva; ainda assim comparamos o conteúdo no serviço.
-				existingPayment, err := s.openProtectedPayment(stored, request.UserID)
-				if err != nil {
-					return err
-				}
-				if !samePaymentRequest(existingPayment, request) {
-					return ErrPaymentIdempotencyConflict
-				}
-				creation = PaymentCreation{Payment: existingPayment, Replayed: true}
-				return nil
-			}
-			creation = PaymentCreation{Payment: request}
+			creation = request
 			return nil
 		})
 	if err != nil {
-		return PaymentCreation{}, err
+		return Payment{}, err
 	}
 	return creation, nil
 }
@@ -252,10 +204,6 @@ func (s *PayrollService) openProtectedPayment(protected ProtectedPayment, expect
 	if err != nil {
 		return Payment{}, ErrInvalidPaymentEmployee
 	}
-	requestKey, err := normalizePaymentRequestKey(protected.RequestKey)
-	if err != nil {
-		return Payment{}, ErrInvalidPaymentCipherContext
-	}
 	periodStart := calendarDate.Normalize(protected.PeriodStart)
 	periodEnd := calendarDate.Normalize(protected.PeriodEnd)
 	if periodStart.IsZero() || periodEnd.IsZero() || !periodEnd.After(periodStart) {
@@ -268,12 +216,12 @@ func (s *PayrollService) openProtectedPayment(protected ProtectedPayment, expect
 	metadata := Payment{
 		ID: id, UserID: userID, EmployeeID: employeeID,
 		PeriodStart: periodStart, PeriodEnd: periodEnd,
-		PaidAt: paidAt, Notes: strings.TrimSpace(protected.Notes), RequestKey: requestKey,
+		PaidAt: paidAt, Notes: strings.TrimSpace(protected.Notes),
 	}
 	amount, err := s.protector.DecryptPaymentAmount(ProtectedPayment{
 		ID: id, UserID: userID, EmployeeID: employeeID,
 		PeriodStart: periodStart, PeriodEnd: periodEnd,
-		PaidAt: paidAt, Amount: protected.Amount, Notes: metadata.Notes, RequestKey: requestKey,
+		PaidAt: paidAt, Amount: protected.Amount, Notes: metadata.Notes,
 	})
 	if err != nil {
 		return Payment{}, err
@@ -283,16 +231,6 @@ func (s *PayrollService) openProtectedPayment(protected ProtectedPayment, expect
 	}
 	metadata.AmountCents = amount
 	return metadata, nil
-}
-
-func samePaymentRequest(existing, requested Payment) bool {
-	return existing.UserID == requested.UserID &&
-		existing.EmployeeID == requested.EmployeeID &&
-		existing.PeriodStart.Equal(requested.PeriodStart) &&
-		existing.PeriodEnd.Equal(requested.PeriodEnd) &&
-		existing.AmountCents == requested.AmountCents &&
-		existing.Notes == requested.Notes &&
-		existing.RequestKey == requested.RequestKey
 }
 
 var _ paymentAmountProtector = (*Cipher)(nil)

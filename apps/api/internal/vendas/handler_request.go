@@ -59,7 +59,6 @@ func decodeCreateSaleRequest(w http.ResponseWriter, r *http.Request) (CreateSale
 	return CreateSaleInput{SoldAt: soldAt, BuyerName: request.BuyerName, Notes: request.Notes, Items: items, Discount: discount}, true
 }
 func decodeReceiptRequest(w http.ResponseWriter, r *http.Request) (CreateReceiptInput, bool) {
-	requestKey := r.Header.Get("Idempotency-Key")
 	request, err := httpjson.Decode[receiptRequest](w, r)
 	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, 415, errorResponse{Error: "Envie o corpo como application/json"})
@@ -73,7 +72,7 @@ func decodeReceiptRequest(w http.ResponseWriter, r *http.Request) (CreateReceipt
 		writeJSON(w, 400, errorResponse{Error: "Envie um único objeto JSON com o recebimento"})
 		return CreateReceiptInput{}, false
 	}
-	return CreateReceiptInput{AmountCents: request.AmountCents, RequestKey: requestKey}, true
+	return CreateReceiptInput{AmountCents: request.AmountCents}, true
 }
 func decodeSalePeriod(w http.ResponseWriter, r *http.Request) (SalePeriod, bool) {
 	query, err := url.ParseQuery(r.URL.RawQuery)

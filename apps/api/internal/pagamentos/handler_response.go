@@ -92,35 +92,27 @@ func writePeriodSummaryResponse(w http.ResponseWriter, summary PeriodSummary, er
 	}
 }
 
-func writeCreatePaymentResponse(w http.ResponseWriter, creation PaymentCreation, err error) {
+func writeCreatePaymentResponse(w http.ResponseWriter, payment Payment, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidPaymentEmployee):
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O campo employee_id deve ser um UUID válido"})
-	case errors.Is(err, ErrInvalidPaymentRequestKey):
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O cabeçalho Idempotency-Key deve ser um UUID válido"})
 	case errors.Is(err, ErrInvalidPayrollOwner), errors.Is(err, ErrInvalidPaymentPeriod),
 		errors.Is(err, ErrInvalidPaymentAmount):
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira funcionário, período, valor e Idempotency-Key"})
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "Confira funcionário, período e valor"})
 	case errors.Is(err, ErrPaymentEmployeeNotFound):
 		writeJSON(w, http.StatusNotFound, errorResponse{Error: "Funcionário não encontrado"})
 	case errors.Is(err, ErrPaymentExceedsBalance):
 		writeJSON(w, http.StatusConflict, errorResponse{Error: "O valor excede o saldo devido no período"})
-	case errors.Is(err, ErrPaymentIdempotencyConflict):
-		writeJSON(w, http.StatusConflict, errorResponse{Error: "Idempotency-Key já utilizada com dados diferentes"})
 	case errors.Is(err, context.DeadlineExceeded):
 		writeJSON(w, http.StatusGatewayTimeout, errorResponse{Error: "Tempo para registrar o pagamento esgotado"})
 	case errors.Is(err, context.Canceled):
 		writeJSON(w, http.StatusRequestTimeout, errorResponse{Error: "Requisição cancelada"})
 	case err != nil:
-		// Não registrar valor, envelope, chave de idempotência ou dados do funcionário no log.
+		// Não registrar valor, envelope ou dados do funcionário no log.
 		log.Print("erro ao criar pagamento protegido")
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "Não foi possível registrar o pagamento"})
 	default:
-		status := http.StatusCreated
-		if creation.Replayed {
-			status = http.StatusOK
-		}
-		writeJSON(w, status, newPaymentResponse(creation.Payment))
+		writeJSON(w, http.StatusCreated, newPaymentResponse(payment))
 	}
 }
 

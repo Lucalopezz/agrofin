@@ -89,11 +89,8 @@ CREATE TABLE employee_payments (
     amount_nonce BYTEA NOT NULL CHECK (octet_length(amount_nonce) > 0),
     amount_key_version TEXT NOT NULL CHECK (btrim(amount_key_version) <> ''),
     notes TEXT,
-    -- Uma repetição da mesma requisição não pode criar outra saída de caixa.
-    request_key UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     FOREIGN KEY (user_id, employee_id) REFERENCES employees (user_id, id),
-    UNIQUE (user_id, request_key),
     CHECK (period_end > period_start)
 );
 

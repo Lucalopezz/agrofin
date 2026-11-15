@@ -15,8 +15,7 @@ type saleRepository interface {
 	CreateSale(context.Context, ProtectedSale) error
 	GetSale(context.Context, string, string) (ProtectedSaleRecord, error)
 	ListSales(context.Context, string, time.Time, time.Time) ([]ProtectedSaleRecord, error)
-	FindReceiptByRequestKey(context.Context, string, string) (ProtectedReceipt, bool, error)
-	withSaleReceiptLock(context.Context, string, string, string, func(receiptTx, *ProtectedReceipt) error) error
+	withSaleReceiptLock(context.Context, string, string, func(receiptTx) error) error
 }
 
 type saleProtector interface {
@@ -113,82 +112,57 @@ func (s *Service) List(ctx context.Context, userID string, period SalePeriod) ([
 	return result, nil
 }
 
-func (s *Service) Receive(ctx context.Context, userID string, input CreateReceiptInput) (Receipt, bool, error) {
+// Receive registra cada envio válido e serializa a conferência do saldo da venda.
+func (s *Service) Receive(ctx context.Context, userID string, input CreateReceiptInput) (Receipt, error) {
 	if err := ctx.Err(); err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
 	ownerID, err := uuid.Normalize(userID)
 	if err != nil {
-		return Receipt{}, false, ErrInvalidSaleOwner
+		return Receipt{}, ErrInvalidSaleOwner
 	}
 	saleID, err := uuid.Normalize(input.SaleID)
 	if err != nil {
-		return Receipt{}, false, ErrInvalidSaleID
+		return Receipt{}, ErrInvalidSaleID
 	}
-	requestKey, err := uuid.Normalize(input.RequestKey)
-	if err != nil || input.AmountCents <= 0 {
-		return Receipt{}, false, ErrInvalidReceipt
+	if input.AmountCents <= 0 {
+		return Receipt{}, ErrInvalidReceipt
 	}
 	if s == nil || s.repo == nil || s.protector == nil {
-		return Receipt{}, false, ErrInvalidSaleConfig
-	}
-	if existing, found, err := s.repo.FindReceiptByRequestKey(ctx, ownerID, requestKey); err != nil {
-		return Receipt{}, false, err
-	} else if found {
-		opened, err := s.openReceipt(existing)
-		if err != nil {
-			return Receipt{}, false, err
-		}
-		if opened.SaleID != saleID || opened.AmountCents != input.AmountCents {
-			return Receipt{}, false, ErrReceiptIdempotencyConflict
-		}
-		return opened, true, nil
+		return Receipt{}, ErrInvalidSaleConfig
 	}
 	record, err := s.repo.GetSale(ctx, ownerID, saleID)
 	if err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
 	sale, err := s.openSale(ownerID, record)
 	if err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
-	newReceipt := Receipt{UserID: ownerID, SaleID: saleID, AmountCents: input.AmountCents, RequestKey: requestKey}
-	newReceipt.ID, err = uuid.New()
+	receipt := Receipt{UserID: ownerID, SaleID: saleID, AmountCents: input.AmountCents}
+	receipt.ID, err = uuid.New()
 	if err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
-	newReceipt.ReceivedAt = time.Now().UTC().Truncate(time.Microsecond)
-	protected, err := s.protector.encrypt("agrofin.sale.receipt.v1", ownerID, saleID, newReceipt.ID, []string{newReceipt.ReceivedAt.Format(time.RFC3339Nano)}, newReceipt.AmountCents)
+	receipt.ReceivedAt = time.Now().UTC().Truncate(time.Microsecond)
+	amount, err := s.protector.encrypt("agrofin.sale.receipt.v1", ownerID, saleID, receipt.ID, []string{receipt.ReceivedAt.Format(time.RFC3339Nano)}, receipt.AmountCents)
 	if err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
-	stored := ProtectedReceipt{ID: newReceipt.ID, UserID: ownerID, SaleID: saleID, ReceivedAt: newReceipt.ReceivedAt, Amount: protected, RequestKey: requestKey}
-	creation := newReceipt
-	replayed := false
-	err = s.repo.withSaleReceiptLock(ctx, ownerID, saleID, requestKey, func(tx receiptTx, existing *ProtectedReceipt) error {
-		if existing != nil {
-			opened, err := s.openReceipt(*existing)
-			if err != nil {
-				return err
-			}
-			if opened.SaleID != saleID || opened.AmountCents != input.AmountCents {
-				return ErrReceiptIdempotencyConflict
-			}
-			creation = opened
-			replayed = true
-			return nil
-		}
+	stored := ProtectedReceipt{ID: receipt.ID, UserID: ownerID, SaleID: saleID, ReceivedAt: receipt.ReceivedAt, Amount: amount}
+	// O bloqueio da venda mantém a soma e a inserção atômicas sob concorrência.
+	err = s.repo.withSaleReceiptLock(ctx, ownerID, saleID, func(tx receiptTx) error {
 		prior, err := tx.List(ctx, ownerID, saleID)
 		if err != nil {
 			return err
 		}
 		var received int64
 		for _, p := range prior {
-			amount, err := s.openReceipt(p)
+			opened, err := s.openReceipt(p)
 			if err != nil {
 				return err
 			}
-			received, err = addCents(received, amount.AmountCents)
+			received, err = addCents(received, opened.AmountCents)
 			if err != nil {
 				return err
 			}
@@ -196,27 +170,12 @@ func (s *Service) Receive(ctx context.Context, userID string, input CreateReceip
 		if received > sale.NetCents || input.AmountCents > sale.NetCents-received {
 			return ErrReceiptExceedsBalance
 		}
-		inserted, ok, err := tx.Insert(ctx, stored)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			opened, err := s.openReceipt(inserted)
-			if err != nil {
-				return err
-			}
-			if opened.SaleID != saleID || opened.AmountCents != input.AmountCents {
-				return ErrReceiptIdempotencyConflict
-			}
-			creation = opened
-			replayed = true
-		}
-		return nil
+		return tx.Insert(ctx, stored)
 	})
 	if err != nil {
-		return Receipt{}, false, err
+		return Receipt{}, err
 	}
-	return creation, replayed, nil
+	return receipt, nil
 }
 
 // openSale abre os valores protegidos e recompõe os totais para devolver a venda legível.
@@ -291,7 +250,7 @@ func (s *Service) openReceipt(p ProtectedReceipt) (Receipt, error) {
 	if err != nil {
 		return Receipt{}, err
 	}
-	return Receipt{ID: p.ID, UserID: p.UserID, SaleID: p.SaleID, ReceivedAt: p.ReceivedAt, AmountCents: amount, RequestKey: p.RequestKey}, nil
+	return Receipt{ID: p.ID, UserID: p.UserID, SaleID: p.SaleID, ReceivedAt: p.ReceivedAt, AmountCents: amount}, nil
 }
 
 // multiplyCents calcula o total da linha sem permitir valores inválidos ou estouro de int64.

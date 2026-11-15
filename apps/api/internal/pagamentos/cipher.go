@@ -46,7 +46,6 @@ func (c *Cipher) EncryptPaymentAmount(payment Payment) (ProtectedPayment, error)
 		ID: payment.ID, UserID: payment.UserID, EmployeeID: payment.EmployeeID,
 		PeriodStart: payment.PeriodStart, PeriodEnd: payment.PeriodEnd,
 		PaidAt: payment.PaidAt, Amount: amount, Notes: payment.Notes,
-		RequestKey: payment.RequestKey,
 	}, nil
 }
 
@@ -58,7 +57,7 @@ func (c *Cipher) DecryptPaymentAmount(payment ProtectedPayment) (int64, error) {
 	amount, err := c.amounts.Decrypt(paymentAmountContext(Payment{
 		ID: payment.ID, UserID: payment.UserID, EmployeeID: payment.EmployeeID,
 		PeriodStart: payment.PeriodStart, PeriodEnd: payment.PeriodEnd,
-		PaidAt: payment.PaidAt, RequestKey: payment.RequestKey,
+		PaidAt: payment.PaidAt,
 	}), payment.Amount)
 	return amount, mapPaymentCipherError(err)
 }
@@ -75,7 +74,6 @@ func paymentAmountContext(payment Payment) financialcipher.Context[paymentCipher
 			payment.PeriodStart.Format(calendarDate.Layout),
 			payment.PeriodEnd.Format(calendarDate.Layout),
 			payment.PaidAt.Format(time.RFC3339Nano),
-			payment.RequestKey,
 		},
 	}
 }

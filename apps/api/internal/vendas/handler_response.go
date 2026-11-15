@@ -79,14 +79,14 @@ func writeSaleListResponse(w http.ResponseWriter, sales []Sale, err error) {
 		writeJSON(w, 200, out)
 	}
 }
-func writeReceiptResponse(w http.ResponseWriter, receipt Receipt, replayed bool, err error) {
+func writeReceiptResponse(w http.ResponseWriter, receipt Receipt, err error) {
 	switch {
 	case errors.Is(err, ErrInvalidSaleID), errors.Is(err, ErrInvalidReceipt):
 		writeJSON(w, 400, errorResponse{Error: "Confira o ID da venda, a chave e o valor do recebimento"})
 	case errors.Is(err, ErrSaleNotFound):
 		writeJSON(w, 404, errorResponse{Error: "Venda não encontrada"})
-	case errors.Is(err, ErrReceiptExceedsBalance), errors.Is(err, ErrReceiptIdempotencyConflict):
-		writeJSON(w, 409, errorResponse{Error: "O recebimento excede o saldo ou a chave já identifica outro pedido"})
+	case errors.Is(err, ErrReceiptExceedsBalance):
+		writeJSON(w, 409, errorResponse{Error: "O recebimento excede o saldo"})
 	case errors.Is(err, context.DeadlineExceeded):
 		writeJSON(w, 504, errorResponse{Error: "Tempo para registrar o recebimento esgotado"})
 	case errors.Is(err, context.Canceled):
@@ -95,11 +95,7 @@ func writeReceiptResponse(w http.ResponseWriter, receipt Receipt, replayed bool,
 		log.Print("erro ao registrar recebimento protegido")
 		writeJSON(w, 500, errorResponse{Error: "Não foi possível registrar o recebimento"})
 	default:
-		status := 201
-		if replayed {
-			status = 200
-		}
-		writeJSON(w, status, receiptResponse{ID: receipt.ID, SaleID: receipt.SaleID, ReceivedAt: receipt.ReceivedAt.Format(time.RFC3339Nano), AmountCents: receipt.AmountCents})
+		writeJSON(w, 201, receiptResponse{ID: receipt.ID, SaleID: receipt.SaleID, ReceivedAt: receipt.ReceivedAt.Format(time.RFC3339Nano), AmountCents: receipt.AmountCents})
 	}
 }
 func newSaleResponse(s Sale) saleResponse {

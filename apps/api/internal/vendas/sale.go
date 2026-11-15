@@ -70,7 +70,6 @@ type SaleDiscountInput struct {
 type CreateReceiptInput struct {
 	SaleID      string
 	AmountCents int64
-	RequestKey  string
 }
 
 type SalePeriod struct{ StartDate, EndDate time.Time }
@@ -81,7 +80,6 @@ type Receipt struct {
 	SaleID      string
 	ReceivedAt  time.Time
 	AmountCents int64
-	RequestKey  string
 }
 
 type ProtectedAmount = financialcipher.Amount[salePurpose]
@@ -115,7 +113,6 @@ type ProtectedReceipt struct {
 	SaleID     string
 	ReceivedAt time.Time
 	Amount     ProtectedAmount
-	RequestKey string
 }
 
 type ProtectedSaleRecord struct {

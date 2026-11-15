@@ -42,9 +42,7 @@ CREATE TABLE sale_receipts (
     amount_ciphertext BYTEA NOT NULL CHECK (octet_length(amount_ciphertext) > 0),
     amount_nonce BYTEA NOT NULL CHECK (octet_length(amount_nonce) > 0),
     amount_key_version TEXT NOT NULL CHECK (btrim(amount_key_version) <> ''),
-    request_key UUID NOT NULL,
-    FOREIGN KEY (user_id, sale_id) REFERENCES sales (user_id, id),
-    UNIQUE (user_id, request_key)
+    FOREIGN KEY (user_id, sale_id) REFERENCES sales (user_id, id)
 );
 
 CREATE INDEX sale_receipts_user_date_idx ON sale_receipts (user_id, received_at);
@@ -60,9 +58,7 @@ CREATE TABLE expenses (
     amount_ciphertext BYTEA NOT NULL CHECK (octet_length(amount_ciphertext) > 0),
     amount_nonce BYTEA NOT NULL CHECK (octet_length(amount_nonce) > 0),
     amount_key_version TEXT NOT NULL CHECK (btrim(amount_key_version) <> ''),
-    request_key UUID NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (user_id, request_key)
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX expenses_user_date_idx ON expenses (user_id, paid_at);

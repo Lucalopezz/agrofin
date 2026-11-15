@@ -10,7 +10,7 @@ import (
 
 type payrollService interface {
 	Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error)
-	Create(ctx context.Context, userID string, input CreatePaymentInput) (PaymentCreation, error)
+	Create(ctx context.Context, userID string, input CreatePaymentInput) (Payment, error)
 }
 
 // Handler coordena a consulta HTTP sem conhecer SQL nem abrir cifras diretamente.

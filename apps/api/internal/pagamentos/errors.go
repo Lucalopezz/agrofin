@@ -13,8 +13,6 @@ var (
 	ErrInvalidPaymentEmployee        = errors.New("pagamentos: funcionário do pagamento inválido")
 	ErrPaymentEmployeeNotFound       = errors.New("pagamentos: funcionário não encontrado")
 	ErrInvalidPaymentAmount          = errors.New("pagamentos: valor do pagamento inválido")
-	ErrInvalidPaymentRequestKey      = errors.New("pagamentos: chave de requisição inválida")
-	ErrPaymentIdempotencyConflict    = errors.New("pagamentos: chave de idempotência usada com outra requisição")
 	ErrPaymentExceedsBalance         = errors.New("pagamentos: pagamento excede o saldo devido")
 	ErrInvalidPaymentBalance         = errors.New("pagamentos: saldo de pagamentos inconsistente")
 	ErrInvalidPaymentConfig          = errors.New("pagamentos: repositório ou cifra de pagamento não configurados")
