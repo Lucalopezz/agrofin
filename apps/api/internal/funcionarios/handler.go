@@ -58,7 +58,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// O contexto e o user ID seguem da requisição: o primeiro preserva prazo e
-	// cancelamento; o segundo vem da sessão. O Service valida o nome, monta Employee
+	// cancelamento; o segundo vem da sessão. O Service recebe o nome validado, monta Employee
 	// e só então chama o Repository.
 	employee, err := h.service.Create(r.Context(), principal.UserID, input.Name)
 	writeCreateEmployeeResponse(w, employee, err)

@@ -24,16 +24,9 @@ func NewService(repo employeeRepository) *Service {
 	return &Service{repo: repo}
 }
 
-// Create valida o nome e monta a entidade antes de solicitar sua gravação.
+// Create recebe o nome validado e monta a entidade antes de solicitar sua gravação.
 // userID é fornecido pelo chamador confiável, separado do nome do cadastro.
 func (s *Service) Create(ctx context.Context, userID, name string) (Employee, error) {
-	// A identidade vem de um chamador confiável (o handler após middleware); o
-	// nome, por vir do cliente, precisa passar pelas regras do domínio.
-	name, err := normalizeName(name)
-	if err != nil {
-		return Employee{}, err
-	}
-
 	// O serviço define o estado inicial do domínio. O gerente vem do chamador
 	// confiável; o ID fica vazio até o banco gerar o identificador na inserção.
 	employee := Employee{
@@ -52,14 +45,9 @@ func (s *Service) List(ctx context.Context, userID string, active *bool) ([]Empl
 	return s.repo.List(ctx, userID, active)
 }
 
-// Rename valida o novo nome antes da persistência; userID vem do chamador
+// Rename recebe o nome validado antes da persistência; userID vem do chamador
 // confiável e employeeID identifica o registro que ele deseja alterar.
 func (s *Service) Rename(ctx context.Context, userID, employeeID, name string) (Employee, error) {
-	name, err := normalizeName(name)
-	if err != nil {
-		return Employee{}, err
-	}
-
 	// A operação usa somente identificação e nome. O UPDATE não grava Active:
 	// o estado atual é preservado e devolvido pelo RETURNING do banco.
 	employee := Employee{ID: employeeID, UserID: userID, Name: name}

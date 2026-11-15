@@ -59,20 +59,10 @@ func TestServiceCreate(t *testing.T) {
 			return expected, nil
 		}}
 
-		got, err := NewService(repo).Create(ctx, "user-id", "  João D'Ávila \n")
+		got, err := NewService(repo).Create(ctx, "user-id", "João D'Ávila")
 		require.NoError(t, err)
 		assert.Equal(t, expected, got)
 		assert.True(t, called, "a persistência deve ser chamada para um nome válido")
-	})
-
-	t.Run("nome vazio não chega à persistência", func(t *testing.T) {
-		repo := employeeRepositoryStub{create: func(context.Context, Employee) (Employee, error) {
-			t.Fatal("persistência chamada com nome inválido")
-			return Employee{}, nil
-		}}
-		got, err := NewService(repo).Create(context.Background(), "user-id", " \t\n")
-		assert.ErrorIs(t, err, ErrInvalidName)
-		assert.Equal(t, Employee{}, got)
 	})
 
 	t.Run("preserva erro da persistência", func(t *testing.T) {
@@ -86,7 +76,7 @@ func TestServiceCreate(t *testing.T) {
 }
 
 func TestServiceRename(t *testing.T) {
-	t.Run("normaliza nome e preserva identificação contexto e estado retornado", func(t *testing.T) {
+	t.Run("recebe nome validado e preserva identificação contexto e estado retornado", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		expectedInput := Employee{ID: "employee-id", UserID: "user-id", Name: "João  D'Ávila"}
@@ -100,24 +90,11 @@ func TestServiceRename(t *testing.T) {
 			assert.Equal(t, expectedInput, employee)
 			return expected, nil
 		}}
-		got, err := NewService(repo).Rename(ctx, "user-id", "employee-id", " \tJoão  D'Ávila\n")
+		got, err := NewService(repo).Rename(ctx, "user-id", "employee-id", "João  D'Ávila")
 		require.NoError(t, err)
 		assert.True(t, called)
 		assert.Equal(t, expected, got)
 	})
-
-	for _, name := range []string{"", " \t\n"} {
-		t.Run("nome inválido não chega à persistência "+name, func(t *testing.T) {
-			repo := employeeRepositoryStub{rename: func(context.Context, Employee) (Employee, error) {
-				// A regra precisa bloquear o UPDATE, não apenas devolver um erro depois dele.
-				t.Fatal("persistência chamada com nome inválido")
-				return Employee{}, nil
-			}}
-			got, err := NewService(repo).Rename(context.Background(), "user-id", "employee-id", name)
-			assert.ErrorIs(t, err, ErrInvalidName)
-			assert.Equal(t, Employee{}, got)
-		})
-	}
 
 	for _, expectedErr := range []error{ErrNotFound, context.Canceled, context.DeadlineExceeded, errors.New("falha de persistência")} {
 		t.Run("preserva erro "+expectedErr.Error(), func(t *testing.T) {

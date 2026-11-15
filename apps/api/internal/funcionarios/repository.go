@@ -22,8 +22,8 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-// Create persiste a entidade montada e validada pelo Service sob um gerente existente.
-// A validação de negócio fica no serviço; as restrições do banco continuam
+// Create persiste a entidade montada pelo Service com dados validados pelo request sob um gerente existente.
+// A validação de entrada fica no request; as restrições do banco continuam
 // protegendo a integridade caso outro caminho tente gravar dados inválidos.
 func (r *Repository) Create(ctx context.Context, employee Employee) (Employee, error) {
 	// O ID é gerado pelo banco; os demais dados vêm da entidade do serviço.
@@ -95,7 +95,7 @@ func (r *Repository) List(ctx context.Context, userID string, active *bool) ([]E
 	return employees, nil
 }
 
-// Rename altera somente o nome validado pelo serviço, sob o gerente informado.
+// Rename altera somente o nome validado pelo request, sob o gerente informado.
 func (r *Repository) Rename(ctx context.Context, employee Employee) (Employee, error) {
 	const query = `
 		UPDATE employees

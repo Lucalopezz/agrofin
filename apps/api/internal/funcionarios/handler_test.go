@@ -72,7 +72,7 @@ func TestCreateEmployeeHandler(t *testing.T) {
 		{name: "conteúdo após json", body: `{"name":"Ana"} lixo`, contentType: "application/json", expectedCode: 400},
 		{name: "corpo muito grande", body: `{"name":"` + strings.Repeat("a", 4096) + `"}`, contentType: "application/json", expectedCode: 413},
 		{name: "espaços extras excedem limite", body: `{"name":"Ana"}` + strings.Repeat(" ", 4096), contentType: "application/json", expectedCode: 413},
-		{name: "nome rejeitado pelo serviço", body: `{"name":""}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 1},
+		{name: "nome rejeitado no request", body: `{"name":""}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 0},
 		{name: "falha interna", body: `{"name":"Ana"}`, contentType: "application/json", serviceErr: errors.New("detalhe privado do banco"), expectedCode: 500, expectedCalls: 1},
 		{name: "prazo esgotado", body: `{"name":"Ana"}`, contentType: "application/json", serviceErr: context.DeadlineExceeded, expectedCode: 504, expectedCalls: 1},
 		{name: "cancelamento", body: `{"name":"Ana"}`, contentType: "application/json", serviceErr: context.Canceled, expectedCode: 408, expectedCalls: 1},
@@ -242,7 +242,7 @@ func TestRenameEmployeeHandler(t *testing.T) {
 		expectedCode  int
 		expectedCalls int
 	}{
-		{name: "renomeia sem reativar", body: `{"name":"  João  D'Ávila  "}`, contentType: "application/json; charset=utf-8", expectedName: "  João  D'Ávila  ", expectedCode: 200, expectedCalls: 1},
+		{name: "renomeia sem reativar", body: `{"name":"  João  D'Ávila  "}`, contentType: "application/json; charset=utf-8", expectedName: "João  D'Ávila", expectedCode: 200, expectedCalls: 1},
 		{name: "uuid com maiúsculas", id: strings.ToUpper(employeeID), body: `{"name":"Ana"}`, contentType: "application/json", expectedName: "Ana", expectedCode: 200, expectedCalls: 1},
 		{name: "sem sessão", body: `{"name":"Ana"}`, contentType: "application/json", unconfigured: true, expectedCode: 401},
 		{name: "uuid inválido", id: "nao-e-uuid", body: `{"name":"Ana"}`, contentType: "application/json", expectedCode: 400},
@@ -265,9 +265,9 @@ func TestRenameEmployeeHandler(t *testing.T) {
 		{name: "conteúdo após json", body: `{"name":"Ana"} lixo`, contentType: "application/json", expectedCode: 400},
 		{name: "corpo muito grande", body: `{"name":"` + strings.Repeat("a", 4096) + `"}`, contentType: "application/json", expectedCode: 413},
 		{name: "espaços extras excedem limite", body: `{"name":"Ana"}` + strings.Repeat(" ", 4096), contentType: "application/json", expectedCode: 413},
-		{name: "nome ausente validado pelo serviço", body: `{}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 1},
-		{name: "nome null validado pelo serviço", body: `{"name":null}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 1},
-		{name: "nome vazio validado pelo serviço", body: `{"name":""}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 1},
+		{name: "nome ausente validado no request", body: `{}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 0},
+		{name: "nome null validado no request", body: `{"name":null}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 0},
+		{name: "nome vazio validado no request", body: `{"name":""}`, contentType: "application/json", serviceErr: ErrInvalidName, expectedCode: 400, expectedCalls: 0},
 		{name: "funcionário não encontrado", body: `{"name":"Ana"}`, contentType: "application/json", expectedName: "Ana", serviceErr: fmt.Errorf("consulta: %w", ErrNotFound), expectedCode: 404, expectedCalls: 1},
 		{name: "falha interna", body: `{"name":"Ana"}`, contentType: "application/json", expectedName: "Ana", serviceErr: errors.New("detalhe privado do banco"), expectedCode: 500, expectedCalls: 1},
 		{name: "prazo esgotado", body: `{"name":"Ana"}`, contentType: "application/json", expectedName: "Ana", serviceErr: fmt.Errorf("consulta: %w", context.DeadlineExceeded), expectedCode: 504, expectedCalls: 1},

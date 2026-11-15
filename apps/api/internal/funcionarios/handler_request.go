@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
@@ -53,6 +54,12 @@ func decodeEmployeeNameRequest(w http.ResponseWriter, r *http.Request) (*employe
 		return nil, false
 	}
 
+	name, err := normalizeName(input.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O nome do funcionário é obrigatório"})
+		return nil, false
+	}
+	input.Name = name
 	return input, true
 }
 
@@ -80,4 +87,15 @@ func decodeEmployeeStateChangeRequest(w http.ResponseWriter, r *http.Request) (s
 		return "", false
 	}
 	return id, true
+}
+
+func normalizeName(name string) (string, error) {
+	// Remove espaços apenas das extremidades para evitar nomes vazios ou
+	// preenchimento acidental, preservando a escrita e os espaços internos.
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ErrInvalidName
+	}
+
+	return name, nil
 }
