@@ -1,11 +1,8 @@
-// Package colheitas define tarifas gerais e valida seus valores e vigências.
+// Package colheitas define tarifas gerais e suas vigências.
 package colheitas
 
 import (
 	"time"
-
-	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 // BoxType classifica a colheita para pagamento, separado da classificação de venda.
@@ -28,33 +25,4 @@ type Rate struct {
 	// ValidUntil nil indica uma vigência sem data final definida.
 	ValidFrom  time.Time
 	ValidUntil *time.Time
-}
-
-// normalizeRate reúne as validações locais para o futuro Service montar a tarifa
-// antes de persistir. Não consulta outras tarifas nem decide escopo individual.
-func normalizeRate(rate Rate) (Rate, error) {
-	switch rate.BoxType {
-	case BoxTypeNormal, BoxTypeMoagem:
-	default:
-		return Rate{}, ErrInvalidBoxType
-	}
-
-	if !money.IsPositiveCents(rate.AmountCents) {
-		return Rate{}, ErrInvalidRateAmount
-	}
-	rate.ValidFrom = calendarDate.Normalize(rate.ValidFrom)
-	if rate.ValidFrom.IsZero() {
-		return Rate{}, ErrInvalidRatePeriod
-	}
-
-	if rate.ValidUntil != nil {
-		until := calendarDate.Normalize(*rate.ValidUntil)
-		if until.IsZero() || !until.After(rate.ValidFrom) {
-			return Rate{}, ErrInvalidRatePeriod
-		}
-		// Copiar a data evita compartilhar o ponteiro recebido: uma alteração no
-		// argumento do chamador não pode mudar depois a vigência que foi validada.
-		rate.ValidUntil = &until
-	}
-	return rate, nil
 }

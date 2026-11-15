@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/auth"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type rateService interface {
@@ -120,9 +119,8 @@ func (h *Handler) updateHarvest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	harvestID, err := uuid.Normalize(r.PathValue("id"))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O ID da colheita deve ser um UUID válido"})
+	harvestID, ok := decodeHarvestID(w, r)
+	if !ok {
 		return
 	}
 	input, ok := decodeUpdateHarvestRequest(w, r)

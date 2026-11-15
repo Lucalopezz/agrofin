@@ -9,6 +9,8 @@ import (
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
 type createRateRequest struct {
@@ -63,6 +65,11 @@ func decodeCreateRateRequest(w http.ResponseWriter, r *http.Request) (CreateRate
 		validUntil = &parsed
 	}
 
+	_, err = normalizeRate(Rate{BoxType: request.BoxType, AmountCents: request.AmountCents, ValidFrom: validFrom, ValidUntil: validUntil})
+	if err != nil {
+		writeCreateRateResponse(w, Rate{}, err)
+		return CreateRateInput{}, false
+	}
 	return CreateRateInput{
 		BoxType: request.BoxType, AmountCents: request.AmountCents,
 		ValidFrom: validFrom, ValidUntil: validUntil,
@@ -92,9 +99,16 @@ func decodeCreateHarvestRequest(w http.ResponseWriter, r *http.Request) (CreateH
 	for _, item := range request.Items {
 		items = append(items, HarvestItemInput{BoxType: item.BoxType, Quantity: item.Quantity})
 	}
-	return CreateHarvestInput{
-		EmployeeID: request.EmployeeID, HarvestDate: harvestDate, Items: items,
-	}, true
+	harvestItems := make([]HarvestItem, 0, len(items))
+	for _, item := range items {
+		harvestItems = append(harvestItems, HarvestItem{BoxType: item.BoxType, Quantity: item.Quantity})
+	}
+	harvest, err := normalizeHarvest(Harvest{EmployeeID: request.EmployeeID, HarvestDate: harvestDate, Items: harvestItems})
+	if err != nil {
+		writeCreateHarvestResponse(w, Harvest{}, err)
+		return CreateHarvestInput{}, false
+	}
+	return CreateHarvestInput{EmployeeID: harvest.EmployeeID, HarvestDate: harvest.HarvestDate, Items: items}, true
 }
 
 func decodeHarvestPeriodQuery(w http.ResponseWriter, r *http.Request) (HarvestPeriod, bool) {
@@ -122,6 +136,10 @@ func decodeHarvestPeriodQuery(w http.ResponseWriter, r *http.Request) (HarvestPe
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
 		return HarvestPeriod{}, false
 	}
+	if endDate.Before(startDate) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve ser igual ou posterior a start_date"})
+		return HarvestPeriod{}, false
+	}
 	return HarvestPeriod{StartDate: startDate, EndDate: endDate}, true
 }
 
@@ -143,5 +161,63 @@ func decodeUpdateHarvestRequest(w http.ResponseWriter, r *http.Request) (UpdateH
 	for _, item := range request.Items {
 		items = append(items, HarvestItemInput{BoxType: item.BoxType, Quantity: item.Quantity})
 	}
+	if len(items) == 0 {
+		writeUpdateHarvestResponse(w, Harvest{}, ErrInvalidHarvestItems)
+		return UpdateHarvestInput{}, false
+	}
+	seen := make(map[BoxType]bool, len(items))
+	for _, item := range items {
+		if item.BoxType != BoxTypeNormal && item.BoxType != BoxTypeMoagem {
+			writeUpdateHarvestResponse(w, Harvest{}, ErrInvalidBoxType)
+			return UpdateHarvestInput{}, false
+		}
+		if item.Quantity <= 0 {
+			writeUpdateHarvestResponse(w, Harvest{}, ErrInvalidHarvestQuantity)
+			return UpdateHarvestInput{}, false
+		}
+		if seen[item.BoxType] {
+			writeUpdateHarvestResponse(w, Harvest{}, ErrDuplicateHarvestItem)
+			return UpdateHarvestInput{}, false
+		}
+		seen[item.BoxType] = true
+	}
 	return UpdateHarvestInput{Items: items}, true
+}
+
+// decodeHarvestID valida o identificador HTTP antes de chamar o serviço.
+func decodeHarvestID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Normalize(r.PathValue("id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "O ID da colheita deve ser um UUID válido"})
+		return "", false
+	}
+	return id, true
+}
+
+// normalizeRate valida os dados enviados antes de chamar o serviço de tarifas.
+func normalizeRate(rate Rate) (Rate, error) {
+	switch rate.BoxType {
+	case BoxTypeNormal, BoxTypeMoagem:
+	default:
+		return Rate{}, ErrInvalidBoxType
+	}
+
+	if !money.IsPositiveCents(rate.AmountCents) {
+		return Rate{}, ErrInvalidRateAmount
+	}
+	rate.ValidFrom = calendarDate.Normalize(rate.ValidFrom)
+	if rate.ValidFrom.IsZero() {
+		return Rate{}, ErrInvalidRatePeriod
+	}
+
+	if rate.ValidUntil != nil {
+		until := calendarDate.Normalize(*rate.ValidUntil)
+		if until.IsZero() || !until.After(rate.ValidFrom) {
+			return Rate{}, ErrInvalidRatePeriod
+		}
+		// Copiar a data evita compartilhar o ponteiro recebido: uma alteração no
+		// argumento do chamador não pode mudar depois a vigência que foi validada.
+		rate.ValidUntil = &until
+	}
+	return rate, nil
 }

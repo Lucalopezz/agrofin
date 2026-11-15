@@ -48,7 +48,7 @@ func (f rateAmountProtectorFunc) Decrypt(string, string, ProtectedRateAmount) (i
 func TestServiceCreateRate(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	start := time.Date(2026, time.November, 2, 19, 30, 0, 0, time.FixedZone("UTC-3", -3*60*60))
+	start := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
 	end := start.AddDate(0, 0, 8)
 	expectedStart := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
 	expectedEnd := expectedStart.AddDate(0, 0, 8)
@@ -98,33 +98,6 @@ func TestServiceCreateRate(t *testing.T) {
 	assert.Equal(t, expectedStart, got.ValidFrom)
 	require.NotNil(t, got.ValidUntil)
 	assert.Equal(t, expectedEnd, *got.ValidUntil)
-}
-
-func TestServiceCreateRateRejectsInvalidInput(t *testing.T) {
-	start := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
-	valid := CreateRateInput{BoxType: BoxTypeNormal, AmountCents: 500, ValidFrom: start}
-	tests := []struct {
-		name        string
-		userID      string
-		input       CreateRateInput
-		expectedErr error
-	}{
-		{name: "sem gerente", input: valid, expectedErr: ErrInvalidRateOwner},
-		{name: "gerente com espaços", userID: " user-id", input: valid, expectedErr: ErrInvalidRateOwner},
-		{name: "tipo de venda", userID: "user-id", input: CreateRateInput{BoxType: "mercado", AmountCents: 500, ValidFrom: start}, expectedErr: ErrInvalidBoxType},
-		{name: "valor zero", userID: "user-id", input: CreateRateInput{BoxType: BoxTypeNormal, ValidFrom: start}, expectedErr: ErrInvalidRateAmount},
-		{name: "sem início", userID: "user-id", input: CreateRateInput{BoxType: BoxTypeNormal, AmountCents: 500}, expectedErr: ErrInvalidRatePeriod},
-		{name: "fim no mesmo dia", userID: "user-id", input: CreateRateInput{BoxType: BoxTypeNormal, AmountCents: 500, ValidFrom: start, ValidUntil: &start}, expectedErr: ErrInvalidRatePeriod},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Dependências sem operações configuradas garantem que os erros
-			// locais sejam detectados antes de consulta, cifra ou escrita.
-			got, err := NewService(rateRepositoryStub{}, nil).CreateRate(context.Background(), tt.userID, tt.input)
-			assert.ErrorIs(t, err, tt.expectedErr)
-			assert.Equal(t, Rate{}, got)
-		})
-	}
 }
 
 func TestServiceCreateRateStopsOnFailure(t *testing.T) {

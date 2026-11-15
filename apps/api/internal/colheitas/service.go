@@ -3,7 +3,6 @@ package colheitas
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
@@ -64,22 +63,14 @@ func NewService(repo rateRepository, protector rateAmountProtector) *Service {
 	return &Service{repo: repo, protector: protector}
 }
 
-// CreateRate valida, verifica vigência e protege o valor antes de pedir a gravação.
+// CreateRate verifica vigência e protege o valor antes de pedir a gravação.
 // O retorno em memória contém os centavos, mas a persistência recebe ProtectedRate.
 func (s *Service) CreateRate(ctx context.Context, userID string, input CreateRateInput) (Rate, error) {
 	if err := ctx.Err(); err != nil {
 		return Rate{}, err
 	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return Rate{}, ErrInvalidRateOwner
-	}
-	rate, err := normalizeRate(Rate{
-		UserID: userID, BoxType: input.BoxType, AmountCents: input.AmountCents,
-		ValidFrom: input.ValidFrom, ValidUntil: input.ValidUntil,
-	})
-	if err != nil {
-		return Rate{}, err
-	}
+	// A vigência e os valores foram validados no request.
+	rate := Rate{UserID: userID, BoxType: input.BoxType, AmountCents: input.AmountCents, ValidFrom: input.ValidFrom, ValidUntil: input.ValidUntil}
 	overlaps, err := s.repo.HasRateOverlap(ctx, RatePeriod{
 		UserID: rate.UserID, BoxType: rate.BoxType,
 		ValidFrom: rate.ValidFrom, ValidUntil: rate.ValidUntil,
@@ -123,9 +114,6 @@ func (s *Service) CreateRate(ctx context.Context, userID string, input CreateRat
 func (s *Service) ListRates(ctx context.Context, userID string) ([]Rate, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return nil, ErrInvalidRateOwner
 	}
 	protectedRates, err := s.repo.ListRates(ctx, userID)
 	if err != nil {

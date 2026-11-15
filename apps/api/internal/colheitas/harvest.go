@@ -80,15 +80,6 @@ type ProtectedHarvestItem struct {
 	AppliedAmount ProtectedRateAmount
 }
 
-func normalizeHarvestPeriod(period HarvestPeriod) (HarvestPeriod, error) {
-	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
-	if err != nil {
-		return HarvestPeriod{}, ErrInvalidHarvestPeriod
-	}
-	period.StartDate, period.EndDate = start, end
-	return period, nil
-}
-
 func normalizeHarvest(harvest Harvest) (Harvest, error) {
 	employeeID, err := normalizeHarvestEmployeeID(harvest.EmployeeID)
 	if err != nil {

@@ -25,7 +25,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-// HasRateOverlap consulta apenas o gerente, tipo e período validados pelo serviço.
+// HasRateOverlap consulta apenas o gerente, tipo e período validados pelo request.
 func (r *Repository) HasRateOverlap(ctx context.Context, period RatePeriod) (bool, error) {
 	const query = `
 		SELECT EXISTS (

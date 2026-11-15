@@ -5,7 +5,6 @@ import (
 	"context"
 	"math"
 	"sort"
-	"strings"
 	"time"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
@@ -60,14 +59,8 @@ func (s *HarvestService) Update(ctx context.Context, userID, harvestID string, i
 	if err := ctx.Err(); err != nil {
 		return Harvest{}, err
 	}
-	ownerID, err := uuid.Normalize(userID)
-	if err != nil {
-		return Harvest{}, ErrInvalidHarvestOwner
-	}
-	id, err := uuid.Normalize(harvestID)
-	if err != nil {
-		return Harvest{}, ErrInvalidHarvestID
-	}
+	// O identificador foi validado pelo request; o dono vem da sessão.
+	ownerID, id := userID, harvestID
 	if s == nil || s.repo == nil || s.protector == nil || s.guard == nil {
 		return Harvest{}, ErrInvalidHarvestConfig
 	}
@@ -83,13 +76,8 @@ func (s *HarvestService) Update(ctx context.Context, userID, harvestID string, i
 	for _, item := range input.Items {
 		items = append(items, HarvestItem{BoxType: item.BoxType, Quantity: item.Quantity})
 	}
-	updated, err := normalizeHarvest(Harvest{
-		ID: current.ID, UserID: ownerID, EmployeeID: current.EmployeeID,
-		HarvestDate: current.HarvestDate, Items: items,
-	})
-	if err != nil {
-		return Harvest{}, err
-	}
+	// Os itens recebidos foram validados no request; os dados anteriores vêm do banco.
+	updated := Harvest{ID: current.ID, UserID: ownerID, EmployeeID: current.EmployeeID, HarvestDate: current.HarvestDate, Items: items}
 	oldRates := make(map[BoxType]int64, len(current.Items))
 	for _, item := range current.Items {
 		oldRates[item.BoxType] = item.AppliedRateCents
@@ -131,22 +119,15 @@ func (s *HarvestService) Create(ctx context.Context, userID string, input Create
 	if err := ctx.Err(); err != nil {
 		return Harvest{}, err
 	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return Harvest{}, ErrInvalidHarvestOwner
-	}
 	items := make([]HarvestItem, 0, len(input.Items))
 	// Para cada item, a tarifa vigente na data do lançamento é lida e decifrada. O
 	// valor é re-cifrado com o ID do lançamento, do funcionário e da data, para
 	for _, item := range input.Items {
 		items = append(items, HarvestItem{BoxType: item.BoxType, Quantity: item.Quantity})
 	}
-	harvest, err := normalizeHarvest(Harvest{
-		UserID: userID, EmployeeID: input.EmployeeID,
-		HarvestDate: input.HarvestDate, Items: items,
-	})
-	if err != nil {
-		return Harvest{}, err
-	}
+	// Os campos do lançamento foram validados no request.
+	harvest := Harvest{UserID: userID, EmployeeID: input.EmployeeID, HarvestDate: input.HarvestDate, Items: items}
+	var err error
 	// A checagem antecipada evita procurar tarifas para um ID alheio ou inativo.
 	// O Repository repete a verificação sob bloqueio na gravação para fechar a corrida.
 	if err := s.repo.CheckActiveEmployee(ctx, userID, harvest.EmployeeID); err != nil {
@@ -204,7 +185,7 @@ func (s *HarvestService) Create(ctx context.Context, userID string, input Create
 	return harvest, nil
 }
 
-// List valida o período, lê apenas dados do gerente autenticado e só então
+// List recebe o período validado, lê apenas dados do gerente autenticado e só então
 // descriptografa as tarifas aplicadas para montar os agregados de resposta.
 func (s *HarvestService) List(ctx context.Context, userID string, period HarvestPeriod) ([]Harvest, error) {
 	records, err := s.listRecords(ctx, userID, period)
@@ -220,15 +201,6 @@ func (s *HarvestService) List(ctx context.Context, userID string, period Harvest
 
 func (s *HarvestService) listRecords(ctx context.Context, userID string, period HarvestPeriod) ([]harvestReadRecord, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return nil, ErrInvalidHarvestOwner
-	}
-
-	// Validações de domínio
-	period, err := normalizeHarvestPeriod(period)
-	if err != nil {
 		return nil, err
 	}
 
