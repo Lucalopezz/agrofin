@@ -189,6 +189,13 @@ O registro de pagamentos e o saldo por intervalo explícito estão implementados
 
 Na coleção Postman v2.1, a consulta de período está em **07.7 - Listar vendas do período**. Cadastro e recebimentos ficam em **Manual - Registrar venda**, pois gravam dados persistentes; execute as requisições individualmente pelo Postman ou Bruno.
 
+### Despesas gerais pagas
+
+- `POST /expenses` registra data de pagamento, categoria, descrição opcional e valor positivo em centavos. Cada envio cria uma despesa; não é exigida chave de idempotência.
+- `GET /expenses?start_date=AAAA-MM-DD&end_date=AAAA-MM-DD` lista despesas da conta no intervalo inclusivo; sem registros, retorna `[]`.
+- `PUT /expenses/{id}` substitui os dados editáveis. `DELETE /expenses/{id}` exclui o registro e retorna `204`; registro inexistente ou de outra conta retorna `404`.
+- Os valores são cifrados na aplicação. A atualização muda os dados considerados na consulta do período; a exclusão remove a despesa. Ainda não há histórico de edições nem painel consolidado.
+
 ### HU-08, HU-09 e HU-10 — indicadores
 
 - Um filtro de período altera todos os indicadores visíveis, com datas de início e fim explícitas.
