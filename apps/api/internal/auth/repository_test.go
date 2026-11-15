@@ -74,7 +74,7 @@ func TestSessionRepositoryIntegration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Gerente de teste", profile.Name)
 	assert.Equal(t, loginName, profile.LoginName)
-	updatedProfile, err := service.UpdateManagerName(ctx, userID, "  Nome atualizado  ")
+	updatedProfile, err := service.UpdateManagerName(ctx, userID, "Nome atualizado")
 	require.NoError(t, err)
 	assert.Equal(t, "Nome atualizado", updatedProfile.Name)
 	assert.Equal(t, loginName, updatedProfile.LoginName, "alterar o nome não deve alterar o login")

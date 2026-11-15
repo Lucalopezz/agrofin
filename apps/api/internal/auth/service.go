@@ -1,4 +1,4 @@
-// Aplica regras de cadastro, login, sessão e perfil sem depender do HTTP.
+// Coordena cadastro, login, sessão e perfil sem depender do HTTP.
 package auth
 
 import (
@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -38,7 +39,7 @@ const (
 	sessionLifetime = 30 * 24 * time.Hour
 )
 
-// Service aplica as regras de cadastro do gerente antes de persistir a entidade.
+// Service coordena o cadastro do gerente antes de persistir a entidade.
 type Service struct {
 	repo         authRepository
 	passwordWork chan struct{}
@@ -53,21 +54,10 @@ func NewService(repo authRepository) *Service {
 	}
 }
 
-// RegisterManager normaliza e valida as credenciais, gera o hash e só então
+// RegisterManager recebe credenciais validadas, gera o hash e só então
 // entrega ao Repository a entidade pronta para gravação.
 func (s *Service) RegisterManager(ctx context.Context, name, loginName, password string) error {
-	// Nome público e login têm regras distintas: o nome pode conter espaços e
-	// acentos; o login continua normalizado pelo alfabeto definido em password.go.
-	name, err := normalizeManagerName(name)
-	if err != nil {
-		return err
-	}
-	// Normalizar antes de comparar ou persistir garante que o mesmo login não tenha
-	// variantes por espaços ou diferenças entre maiúsculas e minúsculas.
-	loginName, err = normalizeLoginName(loginName)
-	if err != nil {
-		return err
-	}
+	// O request entrega nome, login e senha já validados e normalizados.
 	if err := s.acquirePasswordWork(ctx); err != nil {
 		return err
 	}
@@ -75,7 +65,7 @@ func (s *Service) RegisterManager(ctx context.Context, name, loginName, password
 
 	// A senha original é usada apenas para produzir o hash; a entidade que atravessa
 	// a fronteira do Repository contém o hash, nunca a senha em texto claro.
-	passwordHash, err := createPasswordHash(password, loginName)
+	passwordHash, err := hashPasswordMaterial(password)
 	if err != nil {
 		return err
 	}
@@ -95,13 +85,9 @@ func (s *Service) GetManagerProfile(ctx context.Context, userID string) (Manager
 	return s.repo.FindManagerProfile(ctx, userID)
 }
 
-// UpdateManagerName valida o novo nome e entrega ao Repository uma entidade pronta.
+// UpdateManagerName recebe o novo nome validado e entrega ao Repository uma entidade pronta.
 // LoginName fica deliberadamente fora da entidade parcial para não ser alterado.
 func (s *Service) UpdateManagerName(ctx context.Context, userID, name string) (ManagerProfile, error) {
-	name, err := normalizeManagerName(name)
-	if err != nil {
-		return ManagerProfile{}, err
-	}
 	return s.repo.UpdateManagerName(ctx, Manager{ID: userID, Name: name})
 }
 
@@ -128,16 +114,15 @@ func (s *Service) ChangePassword(ctx context.Context, userID, currentPassword, n
 		return ErrInvalidSession
 	}
 
-	currentPassword, err = normalizePasswordInput(currentPassword)
-	if err != nil || !verifyPasswordHash(manager.PasswordHash, currentPassword) {
+	if !verifyPasswordHash(manager.PasswordHash, currentPassword) {
 		// O principal já identifica a conta; ainda assim, uma senha atual incorreta
 		// não deve revelar detalhes do hash ou do estado interno da conta.
 		return ErrInvalidCredentials
 	}
 
-	newPassword, err = validateNewPassword(newPassword, manager.LoginName)
-	if err != nil {
-		return err
+	// Comparar com o login depende da conta consultada e permanece no serviço.
+	if strings.EqualFold(newPassword, manager.LoginName) {
+		return invalidInput("escolha uma senha menos comum")
 	}
 	if newPassword == currentPassword {
 		return invalidInput("a nova senha deve ser diferente da senha atual")
@@ -182,9 +167,7 @@ func (s *Service) Login(ctx context.Context, loginName, password string) (create
 
 	// Credenciais malformadas e usuário inexistente seguem um caminho com custo
 	// Argon2id semelhante ao de uma senha incorreta, reduzindo enumeração por tempo.
-	loginName, loginErr := normalizeLoginName(loginName)
-	password, passwordErr := normalizePasswordInput(password)
-	if loginErr != nil || passwordErr != nil {
+	if loginName == "" {
 		performDummyPasswordHash(password)
 		return createdSession{}, ErrInvalidCredentials
 	}

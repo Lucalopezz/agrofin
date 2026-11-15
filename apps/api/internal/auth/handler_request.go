@@ -3,7 +3,10 @@ package auth
 
 import (
 	"errors"
+	"golang.org/x/text/unicode/norm"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 )
@@ -43,6 +46,15 @@ func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (*credenti
 		writeError(w, http.StatusBadRequest, "login_name e password são obrigatórios")
 		return nil, false
 	}
+	login, loginErr := normalizeLoginName(input.LoginName)
+	password, passwordErr := normalizePasswordInput(input.Password)
+	// A string vazia é um sinal interno: o serviço mantém o custo fictício do
+	// login inválido sob o mesmo limite de concorrência usado nas demais tentativas.
+	if loginErr != nil || passwordErr != nil {
+		input.LoginName = ""
+		return input, true
+	}
+	input.LoginName, input.Password = login, password
 	return input, true
 }
 
@@ -56,6 +68,22 @@ func decodeRegistrationRequest(w http.ResponseWriter, r *http.Request) (*registr
 		writeError(w, http.StatusBadRequest, "name, login_name e password são obrigatórios")
 		return nil, false
 	}
+	name, err := normalizeManagerName(input.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	login, err := normalizeLoginName(input.LoginName)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	password, err := validateNewPassword(input.Password, login)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	input.Name, input.LoginName, input.Password = name, login, password
 	return input, true
 }
 
@@ -69,6 +97,12 @@ func decodeManagerNamePatchRequest(w http.ResponseWriter, r *http.Request) (*man
 		writeError(w, http.StatusBadRequest, "name é obrigatório")
 		return nil, false
 	}
+	name, err := normalizeManagerName(input.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	input.Name = name
 	return input, true
 }
 
@@ -97,6 +131,17 @@ func decodePasswordChangeRequest(w http.ResponseWriter, r *http.Request) (*passw
 		writeError(w, http.StatusBadRequest, "current_password e new_password são obrigatórios")
 		return nil, false
 	}
+	current, err := normalizePasswordInput(input.CurrentPassword)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	next, err := validateNewPassword(input.NewPassword, "")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return nil, false
+	}
+	input.CurrentPassword, input.NewPassword = current, next
 	return input, true
 }
 
@@ -116,4 +161,18 @@ func decodeJSONRequest[T any](w http.ResponseWriter, r *http.Request) (*T, bool)
 		writeError(w, http.StatusBadRequest, "envie um único objeto JSON válido")
 	}
 	return nil, false
+}
+
+// normalizeManagerName preserva a forma escrita, mas remove espaços externos e
+// unifica representações Unicode equivalentes antes de validar e persistir.
+func normalizeManagerName(name string) (string, error) {
+	if !utf8.ValidString(name) {
+		return "", invalidInput("nome do gerente inválido")
+	}
+	name = strings.TrimSpace(norm.NFC.String(name))
+	runeCount := utf8.RuneCountInString(name)
+	if runeCount == 0 || runeCount > 100 {
+		return "", invalidInput("nome do gerente deve ter entre 1 e 100 caracteres")
+	}
+	return name, nil
 }

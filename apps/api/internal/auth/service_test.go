@@ -139,36 +139,9 @@ func TestServiceRegisterManager(t *testing.T) {
 			return nil
 		})
 
-		err := NewService(repo).RegisterManager(ctx, "  Gerente da Produção  ", "  Gerente_1  ", password)
+		err := NewService(repo).RegisterManager(ctx, "Gerente da Produção", "gerente_1", password)
 		require.NoError(t, err)
 		assert.True(t, called, "o repository deve receber a entidade válida")
-	})
-
-	t.Run("credenciais inválidas não chegam ao repository", func(t *testing.T) {
-		tests := []struct {
-			name        string
-			managerName string
-			loginName   string
-			password    string
-		}{
-			{name: "nome vazio", managerName: "   ", loginName: "gerente", password: "UmaSenhaForteComMaisDe15Caracteres"},
-			{name: "login inválido", managerName: "Gerente", loginName: "x", password: "UmaSenhaForteComMaisDe15Caracteres"},
-			{name: "senha fraca", managerName: "Gerente", loginName: "gerente", password: "passwordpassword"},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				called := false
-				repo := managerCreatorFunc(func(context.Context, Manager) error {
-					called = true
-					return nil
-				})
-
-				err := NewService(repo).RegisterManager(context.Background(), tt.managerName, tt.loginName, tt.password)
-				assert.True(t, isValidationError(err))
-				assert.False(t, called)
-			})
-		}
 	})
 
 	t.Run("preserva erro do repository", func(t *testing.T) {
@@ -185,7 +158,7 @@ func TestServiceRegisterManager(t *testing.T) {
 func TestServiceManagerProfile(t *testing.T) {
 	t.Run("atualiza somente o nome normalizado", func(t *testing.T) {
 		repo := &authRepositoryStub{profile: ManagerProfile{ID: "manager-id", Name: "Novo Nome", LoginName: "login-fixo", Active: true}}
-		profile, err := NewService(repo).UpdateManagerName(context.Background(), "manager-id", "  Novo Nome  ")
+		profile, err := NewService(repo).UpdateManagerName(context.Background(), "manager-id", "Novo Nome")
 		require.NoError(t, err)
 		assert.Equal(t, "manager-id", repo.updatedManager.ID)
 		assert.Equal(t, "Novo Nome", repo.updatedManager.Name)
@@ -193,12 +166,6 @@ func TestServiceManagerProfile(t *testing.T) {
 		assert.Equal(t, "login-fixo", profile.LoginName)
 	})
 
-	t.Run("nome vazio não chega ao repository", func(t *testing.T) {
-		repo := &authRepositoryStub{}
-		_, err := NewService(repo).UpdateManagerName(context.Background(), "manager-id", "  ")
-		assert.True(t, isValidationError(err))
-		assert.Empty(t, repo.updatedManager.ID)
-	})
 }
 
 func TestServiceChangePassword(t *testing.T) {
@@ -222,13 +189,6 @@ func TestServiceChangePassword(t *testing.T) {
 		repo := &authRepositoryStub{managerByID: manager}
 		err := NewService(repo).ChangePassword(context.Background(), manager.ID, "SenhaAtualErradaComTamanhoSuficiente", newPassword)
 		assert.ErrorIs(t, err, ErrInvalidCredentials)
-		assert.Empty(t, repo.passwordChange.UserID)
-	})
-
-	t.Run("nova senha inválida não chega ao repository", func(t *testing.T) {
-		repo := &authRepositoryStub{managerByID: manager}
-		err := NewService(repo).ChangePassword(context.Background(), manager.ID, currentPassword, "curta")
-		assert.True(t, isValidationError(err))
 		assert.Empty(t, repo.passwordChange.UserID)
 	})
 
@@ -270,7 +230,7 @@ func TestServiceLogin(t *testing.T) {
 	t.Run("credenciais válidas criam sessão e persistem somente o hash do token", func(t *testing.T) {
 		repo := &authRepositoryStub{manager: Manager{ID: "manager-id", LoginName: "gerente", PasswordHash: passwordHash, Active: true}}
 		ctx := context.Background()
-		created, err := NewService(repo).Login(ctx, " GERENTE ", password)
+		created, err := NewService(repo).Login(ctx, "gerente", password)
 		require.NoError(t, err)
 
 		tokenBytes, err := base64.RawURLEncoding.DecodeString(created.Token)

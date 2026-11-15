@@ -21,7 +21,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-// CreateManager persiste a entidade validada e preparada pelo Service.
+// CreateManager persiste a entidade preparada pelo Service com entrada validada no request.
 // A unicidade do login protege contra cadastros concorrentes com o mesmo acesso.
 func (r *Repository) CreateManager(ctx context.Context, manager Manager) error {
 	// O Repository recebe a entidade já normalizada e com hash; ele não decide

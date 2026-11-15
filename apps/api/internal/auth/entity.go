@@ -2,11 +2,7 @@
 package auth
 
 import (
-	"strings"
 	"time"
-	"unicode/utf8"
-
-	"golang.org/x/text/unicode/norm"
 )
 
 // Manager contém somente os dados prontos para persistência; a senha original
@@ -15,7 +11,7 @@ type Manager struct {
 	ID string
 	// Name é o nome de exibição; não substitui nem altera o login usado para entrar.
 	Name string
-	// LoginName já chega normalizado pelo Service, para que a regra não fique duplicada no SQL.
+	// LoginName já chega normalizado pelo request, para que a regra não fique duplicada no SQL.
 	LoginName string
 	// PasswordHash é verificável, mas não reversível; a senha original não faz parte da entidade.
 	PasswordHash string
@@ -53,18 +49,4 @@ type Session struct {
 type createdSession struct {
 	Token     string
 	ExpiresAt time.Time
-}
-
-// normalizeManagerName preserva a forma escrita, mas remove espaços externos e
-// unifica representações Unicode equivalentes antes de validar e persistir.
-func normalizeManagerName(name string) (string, error) {
-	if !utf8.ValidString(name) {
-		return "", invalidInput("nome do gerente inválido")
-	}
-	name = strings.TrimSpace(norm.NFC.String(name))
-	runeCount := utf8.RuneCountInString(name)
-	if runeCount == 0 || runeCount > 100 {
-		return "", invalidInput("nome do gerente deve ter entre 1 e 100 caracteres")
-	}
-	return name, nil
 }

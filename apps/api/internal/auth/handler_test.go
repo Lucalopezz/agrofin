@@ -60,13 +60,15 @@ func TestRegisterHandler(t *testing.T) {
 		expectedLogin    string
 		expectedPassword string
 	}{
-		{name: "cadastro público sem token", body: validBody, contentType: "application/json; charset=utf-8", expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "Gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
+		{name: "cadastro público sem token", body: validBody, contentType: "application/json; charset=utf-8", expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
 		{name: "content type ausente", body: validBody, expectedStatus: http.StatusUnsupportedMediaType},
 		{name: "content type não suportado", body: validBody, contentType: "text/plain", expectedStatus: http.StatusUnsupportedMediaType},
 		{name: "json inválido", body: `{"login_name":`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
 		{name: "json nulo", body: `null`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
 		{name: "campo desconhecido", body: `{"login_name":"gerente","password":"senha","admin":true}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
 		{name: "mais de um valor json", body: validBody + ` {}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "nome com espaços", body: `{"name":"   ","login_name":"gerente","password":"UmaSenhaForteComMaisDe15Caracteres"}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
+		{name: "senha fraca", body: `{"name":"Gerente","login_name":"gerente","password":"passwordpassword"}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
 		{name: "credenciais ausentes", body: `{"login_name":"","password":""}`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
 		{name: "corpo grande demais", body: `{"login_name":"gerente","password":"` + strings.Repeat("a", 4100) + `"}`, contentType: "application/json", expectedStatus: http.StatusRequestEntityTooLarge},
 		{name: "credenciais recusadas pelo service", body: validBody, contentType: "application/json", serviceErr: invalidInput("senha fraca"), expectedStatus: http.StatusBadRequest, expectedCalls: 1},
@@ -127,7 +129,7 @@ func TestLoginHandlerSetsHttpOnlySessionCookie(t *testing.T) {
 	defer cancel()
 	registrar := managerRegistrarFunc(func(gotCtx context.Context, _, loginName, password string) error {
 		assert.Same(t, ctx, gotCtx)
-		assert.Equal(t, "Gerente_1", loginName)
+		assert.Equal(t, "gerente_1", loginName)
 		assert.Equal(t, "UmaSenhaForteComMaisDe15Caracteres", password)
 		return nil
 	})
@@ -299,7 +301,7 @@ func TestChangePasswordHandlerMapsWrongCurrentPassword(t *testing.T) {
 	service := &managerProfileServiceStub{passwordErr: ErrInvalidCredentials}
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
-	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"senha-atual","new_password":"senha-nova"}`))
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"senha-atual","new_password":"SenhaNovaForteComMaisDe15"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
 	response := httptest.NewRecorder()
@@ -353,4 +355,28 @@ type logoutServiceStub struct {
 func (s logoutServiceStub) Logout(_ context.Context, token string) error {
 	*s.token = token
 	return nil
+}
+
+func TestLoginRequestNormalizesCredentialsAndMarksInvalid(t *testing.T) {
+	tests := []struct{ body, login string }{
+		{`{"login_name":" GERENTE_1 ","password":"Senha valida qualquer"}`, "gerente_1"},
+		{`{"login_name":"x","password":"Senha valida qualquer"}`, ""},
+	}
+	for _, tc := range tests {
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", strings.NewReader(tc.body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		input, ok := decodeCredentialsRequest(w, req)
+		require.True(t, ok)
+		assert.Equal(t, tc.login, input.LoginName)
+	}
+}
+
+func TestChangePasswordRequestRejectsWeakPassword(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"atual","new_password":"curta"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	_, ok := decodePasswordChangeRequest(w, req)
+	assert.False(t, ok)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }
