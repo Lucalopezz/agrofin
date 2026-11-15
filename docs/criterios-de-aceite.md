@@ -78,16 +78,16 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 - Os envelopes financeiros só são lidos depois do filtro por gerente e período. A API descriptografa os dados no serviço, soma em centavos inteiros e retorna `500` sem lista parcial se um envelope falhar.
 - Sem pagamento no intervalo, `paid_amount_cents` é zero e `remaining_amount_cents` é igual ao devido. Sem lançamentos e pagamentos, `employees` retorna `[]`.
 
-### HU-05 — registrar pagamento idempotente por intervalo
+### HU-05 — registrar pagamento por intervalo
 
-`POST /api/v1/employee-payments` exige sessão e recebe `Idempotency-Key` como UUID no cabeçalho. O corpo estrito recebe `employee_id`, `start_date`, `end_date`, `amount_cents` positivo e `notes` opcional. As datas são inclusivas, como no resumo; a entidade usa o fim exclusivo na persistência. `paid_at` é gerado pelo servidor e `user_id` vem da sessão.
+`POST /api/v1/employee-payments` exige sessão. O corpo estrito recebe `employee_id`, `start_date`, `end_date`, `amount_cents` positivo e `notes` opcional. As datas são inclusivas, como no resumo; a entidade usa o fim exclusivo na persistência. `paid_at` é gerado pelo servidor e `user_id` vem da sessão.
 
 - O funcionário deve pertencer à conta autenticada. Um registro existente pode receber pagamento mesmo depois de ficar inativo, preservando a possibilidade de quitar valores históricos.
 - O serviço calcula o devido com caixas e diárias do intervalo e subtrai pagamentos anteriores ligados ao mesmo funcionário e intervalo exato. Centavos são somados como inteiros com detecção de overflow.
 - O repositório mantém a soma dos pagamentos e a inserção na mesma transação serializada por funcionário. Duas requisições diferentes concorrentes não podem usar o mesmo saldo disponível.
-- A primeira aceitação retorna `201`; repetir a mesma chave e os mesmos campos retorna o pagamento original com `200`. Reutilizar a chave com funcionário, período, valor ou observação diferentes retorna `409`. Pagar acima do restante também retorna `409`.
+- Cada pagamento aceito retorna `201` e cria um registro; pagar acima do restante retorna `409`. A futura interface deve impedir novos cliques enquanto o envio estiver em andamento.
 - O valor é cifrado antes de gravar. O resumo abre os envelopes somente depois do filtro por dono e intervalo; `Cache-Control: no-store` é enviado nas respostas financeiras.
-- UUID, período, valor ou chave inválidos retornam `400`; funcionário inexistente ou de outra conta retorna `404`; falta de sessão retorna `401`. `paid_at` não pode ser enviado pelo cliente.
+- UUID, período ou valor inválidos retornam `400`; funcionário inexistente ou de outra conta retorna `404`; falta de sessão retorna `401`. `paid_at` não pode ser enviado pelo cliente.
 - Período vazio retorna `200` com `employees: []`. Datas inválidas, ausentes, repetidas, extras ou fim anterior ao início retornam `400`; sem sessão, `401`. A resposta usa `Cache-Control: no-store`.
 
 ### HU-04 — registro de diária implementado
@@ -167,7 +167,7 @@ A reativação e o filtro de estado estão implementados na API; sua integraçã
 
 - Dadas 10 caixas normais a R$ 5,00 e 4 caixas de moagem a R$ 2,00, o total por caixas é R$ 58,00.
 - Se houver uma diária de R$ 80,00 na mesma semana, o valor devido fica R$ 138,00, com caixas e diária em linhas separadas.
-- Se forem pagos R$ 100,00, o resumo mostra `paid_amount_cents: 10000` e `remaining_amount_cents: 3800`. Uma segunda tentativa com a mesma `Idempotency-Key` e o mesmo conteúdo retorna o pagamento já criado sem gerar duplicidade; uma tentativa acima do restante é rejeitada.
+- Se forem pagos R$ 100,00, o resumo mostra `paid_amount_cents: 10000` e `remaining_amount_cents: 3800`. Outro envio aceito cria outro pagamento; uma tentativa acima do restante é rejeitada.
 - Um dia sem lançamento não cria falta, desconto ou alerta de ausência.
 - O resumo deixa claro o intervalo de datas da semana e permite voltar ao detalhe que formou o total.
 
@@ -179,7 +179,7 @@ O registro de pagamentos e o saldo por intervalo explícito estão implementados
 
 - `POST /sales` exige sessão e recebe `sold_at` no formato `AAAA-MM-DD`, linhas com `sale_type` (`exportacao`, `mercado` ou `moagem`), `quantity` e `unit_price_cents`; `discount` é opcional e contém `reason` e `amount_cents`. A resposta `201` informa os totais calculados pela API.
 - `GET /sales?start_date=AAAA-MM-DD&end_date=AAAA-MM-DD` exige as duas datas inclusivas e retorna `200` com `[]` quando não há vendas. Linhas e desconto aparecem no detalhe; os recebimentos aparecem agregados nos totais recebido e a receber, sempre restritos ao cliente autenticado.
-- `POST /sales/{id}/receipts` exige `Idempotency-Key` UUID e um `amount_cents` positivo. A primeira gravação retorna `201`; repetir a mesma chave e conteúdo retorna `200` sem duplicar. Valor acima do saldo ou reutilização da chave com outro conteúdo retorna `409`.
+- `POST /sales/{id}/receipts` exige sessão e `amount_cents` positivo. Cada gravação aceita retorna `201`; valor acima do saldo retorna `409`. A futura interface deve impedir novos cliques enquanto o envio estiver em andamento.
 - Dadas 10 caixas de exportação a R$ 40,00 e 5 de mercado a R$ 30,00, o valor bruto é R$ 550,00.
 - Com desconto de R$ 20,00, o valor líquido vendido é R$ 530,00; o motivo do desconto aparece no detalhe.
 - Se houver recebimento de R$ 300,00, o sistema mostra R$ 230,00 a receber. Não apresenta R$ 530,00 como dinheiro já recebido.

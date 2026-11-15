@@ -49,7 +49,7 @@ No Go, manter `cmd` para a entrada executável e `internal` para os pacotes do p
 
 A base React em `apps/web` usa Vite, Tailwind e shadcn; o serviço `web` no Compose oferece HMR e proxy `/api` para o Go. Há uma landing page e páginas demonstrativas para os domínios de produção, financeiro, manejo e relatórios. Formulários e totais são mockados no navegador e não representam fluxos de negócio integrados nem dados persistidos; a [estrutura e convenções](../apps/web/README.md) descreve essa demonstração. As regras de negócio, a integração com a API e os demais recursos permanecem sujeitos à implementação e validação com o cliente.
 
-O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias, pagamentos idempotentes, vendas, despesas pagas, edição protegida de colheitas e resumo de saldo por período estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. O front escolhe o período (semana por padrão, com seleção de outro intervalo) e envia as datas à API para resumo e pagamento. Demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
+O PostgreSQL local, as migrações, a conexão inicial da API, o cadastro e a gestão de funcionários, a autenticação do gerente, tarifas, colheitas, diárias, pagamentos, vendas, despesas pagas, edição protegida de colheitas e resumo de saldo por período estão implementados na API. As gravações financeiras usam cifra antes da persistência e exigem sessão. O front escolhe o período (semana por padrão, com seleção de outro intervalo) e envia as datas à API para resumo e pagamento. Demais fluxos de escrita e o protótipo de deploy unificado continuam pendentes.
 
 ### Organização interna do cadastro de funcionários
 
@@ -360,16 +360,11 @@ A coleção Postman v2.1 contém **Manual - Registrar diária**, com cabeçalhos
 - Valores são somados como centavos inteiros, com detecção de overflow. Se um envelope não autenticar ou uma consulta falhar, a API não devolve um resultado parcial. A resposta usa `Cache-Control: no-store`.
 - A coleção Postman v2.1 contém **07.6 - Resumir valores devidos no período**, utilizável no Postman ou importável no Bruno e no Insomnia.
 
-### Registro idempotente de pagamentos
+### Registro de pagamentos
 
-`POST /api/v1/employee-payments` exige sessão, `Origin`, `X-Agrofin-Request: 1` e um UUID no cabeçalho `Idempotency-Key`. O JSON estrito recebe `employee_id`, `start_date`, `end_date`, `amount_cents` positivo e `notes` opcional. As datas são inclusivas como no resumo; na tabela, `period_end` fica exclusivo. `paid_at` é gerado no servidor com precisão de microssegundos e não pode vir do cliente.
+`POST /api/v1/employee-payments` exige sessão, `Origin` e `X-Agrofin-Request: 1`. O JSON recebe funcionário, datas inclusivas, valor positivo e observação opcional. Cada envio aceito cria um pagamento (`201`); uma tentativa acima do saldo retorna `409`.
 
-- `PayrollService` normaliza proprietário, funcionário, chave, período e centavos; calcula o devido com os serviços de caixas e diárias; abre envelopes dos pagamentos anteriores e rejeita valor acima do saldo.
-- O repositório usa uma trava transacional por chave de idempotência e bloqueia a linha do funcionário para pagamento novo. A leitura dos pagamentos anteriores, a verificação do saldo e a inserção ficam na mesma transação serializada. A restrição `UNIQUE (user_id, request_key)` permanece como defesa final.
-- Para a mesma chave, funcionário, período, valor e observação, a repetição retorna o pagamento original (`200`). A chave reutilizada com dados diferentes e uma tentativa acima do saldo retornam `409`; o primeiro registro retorna `201`.
-- A tabela recebe somente envelope cifrado e metadados. A cifra autentica conta, ID, funcionário, período, data do pagamento e chave de requisição. `Cache-Control: no-store` protege as respostas financeiras.
-- A trava do funcionário também conflita com o `FOR SHARE` usado pelas criações de colheita e diária. Como essas fontes são append-only nesta versão, o devido é consultado antes da transação para evitar exigir uma segunda conexão do pool dentro da transação. Uma nova colheita concorrente pode aumentar o devido e provocar uma rejeição conservadora que o cliente pode repetir; não pode permitir pagamento acima do devido anterior. Se correções que reduzam lançamentos forem introduzidas, o cálculo do devido deverá participar da mesma transação/snapshot.
-- A pasta **Manual - Registrar pagamento** da coleção Postman v2.1 contém o POST; reutilize a chave apenas para repetir o mesmo corpo e escolha outra chave para outro pagamento. Não execute a coleção inteira pelo runner.
+O serviço calcula o devido, e o repositório bloqueia o funcionário enquanto confere pagamentos anteriores e grava o novo envelope cifrado. Essa serialização impede que solicitações concorrentes ultrapassem o saldo. A cifra autentica conta, ID, funcionário, período e data do pagamento. O frontend ainda precisa bloquear o botão enquanto o pedido estiver em andamento; isso não é uma garantia contra duplicações após falhas de rede. A coleção HTTP contém o POST na pasta manual.
 
 ### Respostas para a tela
 
@@ -395,7 +390,7 @@ Por exemplo, `GET /harvest-entries/summary` retorna uma lista como esta:
 
 O resumo inicial por período está disponível em `GET /harvest-entries/summary`, com quantidades e valores gerados por tipo. `GET /payroll-periods/summary` combina caixas e diárias com pagamentos para mostrar devido, pago e restante no intervalo explícito enviado pelo front. A API não calcula semanas automaticamente. `PATCH /harvest-entries/{id}` altera somente itens, preserva tarifas históricas e verifica todos os intervalos de pagamento do funcionário afetados, inclusive intervalos personalizados sobrepostos.
 
-`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `PATCH /harvest-entries/{id}` corrige quantidades sem alterar funcionário, data ou tarifas aplicadas, e `GET /harvest-entries/summary` agrupa caixas. `POST /daily-work` registra diárias, `POST /employee-payments` registra pagamentos idempotentes e `GET /payroll-periods/summary` combina devido, pago e restante em intervalo explícito. O front envia o intervalo escolhido, com semana como padrão; a API não calcula semanas automaticamente.
+`/employees` continua responsável pelo cadastro. `POST /harvest-entries` cria lançamentos, `GET /harvest-entries` consulta-os por data, `PATCH /harvest-entries/{id}` corrige quantidades sem alterar funcionário, data ou tarifas aplicadas, e `GET /harvest-entries/summary` agrupa caixas. `POST /daily-work` registra diárias, `POST /employee-payments` registra pagamentos e `GET /payroll-periods/summary` combina devido, pago e restante em intervalo explícito. O front envia o intervalo escolhido, com semana como padrão; a API não calcula semanas automaticamente.
 
 ## Sequência sugerida
 
@@ -403,7 +398,7 @@ Antes de iniciar tarifas e lançamentos, concluir o cadastro nesta ordem:
 
 1. **Reativação de funcionário — implementada na API:** disponível em `PATCH /employees/{id}/reactivate`, sem corpo, protegido pela sessão e pela origem. Restaurar `active=true` e limpar `deactivated_at`, preservando ID, dono, nome e histórico. Retornar `204`, inclusive se já estiver ativo, e `404` para registro inexistente ou de outra conta.
 2. **Filtro de estado — implementado na API, em revisão:** `GET /employees?active=true` busca somente ativos e `GET /employees?active=false`, somente inativos; sem o parâmetro, preserva o retorno com ambos. O filtro não substitui o dono derivado da sessão e rejeita valores inválidos ou repetidos com `400`.
-3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação, consulta e edição protegida de colheitas, resumo de caixas, criação de diárias, registro idempotente de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes controles globais de uso/rotação das chaves.
+3. **Tarifas, colheitas, diárias e pagamentos — fluxos iniciais implementados:** tarifas são gerais por conta e tipo; a API oferece criação, consulta e edição protegida de colheitas, resumo de caixas, criação de diárias, registro de pagamentos e resumo de devido/pago/restante por intervalo explícito. Seguem pendentes controles globais de uso/rotação das chaves.
 4. **Vendas e despesas — em andamento:** `POST /sales`, `GET /sales` e `POST /sales/{id}/receipts` estão disponíveis na API com sessão e proteção dos valores financeiros. O cadastro, consulta por período, atualização e exclusão de despesas gerais pagas estão implementados na API; o painel consolidado ainda está pendente. Recebimentos parciais são aceitos pelo desenho inicial; confirmar se ocorrem na prática.
 
 Cada etapa deve ser revisada antes de avançar à seguinte. A reativação e o filtro estão implementados na API; criação e consulta de tarifas, criação e consulta de lançamentos, diárias, pagamentos e resumos funcionam com sessão e proteção financeira. A API recebe o intervalo escolhido pelo front, sem semana automática; colheitas ficam bloqueadas para edição depois da quitação total do período do funcionário.
@@ -433,12 +428,12 @@ GET            ${API_PREFIX}/harvest-entries/summary # resumo de caixas por func
 GET            ${API_PREFIX}/payroll-periods/summary # devido, pago e restante por período implementado
 POST           ${API_PREFIX}/harvest-entries       # criação inicial implementada
 POST           ${API_PREFIX}/daily-work            # registro de diária implementado
-POST           ${API_PREFIX}/employee-payments     # pagamento protegido e idempotente implementado
+POST           ${API_PREFIX}/employee-payments     # pagamento protegido implementado
 PATCH          ${API_PREFIX}/harvest-entries/{id}
 GET            ${API_PREFIX}/payroll-weeks/{week}/summary
 POST           ${API_PREFIX}/sales                # venda com linhas classificadas e desconto opcional implementada
 GET            ${API_PREFIX}/sales?start_date=...&end_date=... # consulta inclusiva implementada
-POST           ${API_PREFIX}/sales/{id}/receipts   # recebimento protegido e idempotente implementado
+POST           ${API_PREFIX}/sales/{id}/receipts   # recebimento protegido implementado
 POST           ${API_PREFIX}/expenses              # cadastro de despesa paga
 GET            ${API_PREFIX}/expenses              # consulta por período inclusivo
 PUT            ${API_PREFIX}/expenses/{id}         # substituição dos dados

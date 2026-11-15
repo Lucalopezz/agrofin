@@ -54,14 +54,6 @@
       "value": "2026-11-30"
     },
     {
-      "key": "payment_request_key",
-      "value": "68be7967-1eb6-4d71-91c4-d5f8ccf481cb"
-    },
-    {
-      "key": "receipt_request_key",
-      "value": "5a9e105a-b09e-4149-a093-a9bb24a4053c"
-    },
-    {
       "key": "sale_start_date",
       "value": "2026-11-01"
     },
@@ -593,7 +585,7 @@
     },
     {
       "name": "Manual - Registrar pagamento",
-      "description": "Registra um pagamento persistente e protegido. Reutilize a mesma Idempotency-Key ao repetir exatamente o mesmo pedido; altere a chave para um novo pagamento. Envie somente manualmente.",
+      "description": "Registra pagamento persistente. Cada envio aceito cria um pagamento; execute manualmente.",
       "item": [
         {
           "name": "Registrar pagamento do funcionário",
@@ -613,10 +605,6 @@
               {
                 "key": "X-Agrofin-Request",
                 "value": "1"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{payment_request_key}}"
               }
             ],
             "body": {
@@ -670,7 +658,7 @@
         {
           "name": "Registrar recebimento da venda",
           "request": {
-            "description": "Registra um recebimento parcial ou integral com Idempotency-Key. Reutilize a chave somente ao repetir o mesmo pedido. Receber acima do saldo retorna 409.",
+            "description": "Registra um recebimento parcial ou integral. Cada envio aceito cria um recebimento; valor acima do saldo retorna 409.",
             "method": "POST",
             "url": "{{base_url}}/sales/{{sale_id}}/receipts",
             "header": [
@@ -685,10 +673,6 @@
               {
                 "key": "X-Agrofin-Request",
                 "value": "1"
-              },
-              {
-                "key": "Idempotency-Key",
-                "value": "{{receipt_request_key}}"
               }
             ],
             "body": {
