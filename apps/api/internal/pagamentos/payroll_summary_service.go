@@ -5,11 +5,9 @@ import (
 	"context"
 	"math"
 	"sort"
-	"strings"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/colheitas"
 	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
-	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 type harvestSummarizer interface {
@@ -43,13 +41,6 @@ func NewPayrollService(
 // quando um pagamento concorre com a consulta. As fontes atuais só recebem novos lançamentos.
 func (s *PayrollService) Summarize(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
 	if err := ctx.Err(); err != nil {
-		return PeriodSummary{}, err
-	}
-	if userID == "" || strings.TrimSpace(userID) != userID {
-		return PeriodSummary{}, ErrInvalidPayrollOwner
-	}
-	period, err := normalizePeriod(period)
-	if err != nil {
 		return PeriodSummary{}, err
 	}
 	if s == nil || s.harvest == nil || s.daily == nil {
@@ -242,16 +233,6 @@ func (s *PayrollService) summarizeDue(ctx context.Context, userID string, period
 		return employees[i].EmployeeID < employees[j].EmployeeID
 	})
 	return PeriodSummary{Period: period, Employees: employees}, nil
-}
-
-func normalizePeriod(period Period) (Period, error) {
-	// DATE não representa um instante. Normalizar ambos os limites preserva os mesmos dias civis.
-	start, end, err := calendarDate.NormalizeInclusivePeriod(period.StartDate, period.EndDate)
-	if err != nil {
-		return Period{}, ErrInvalidPayrollPeriod
-	}
-	period.StartDate, period.EndDate = start, end
-	return period, nil
 }
 
 func addAmount(current, addition int64) (int64, error) {

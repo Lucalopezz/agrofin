@@ -31,7 +31,7 @@ func NewCipher(keyring *financialcipher.Keyring) (*Cipher, error) {
 	return &Cipher{amounts: amounts}, nil
 }
 
-// EncryptPaymentAmount cifra o valor de um pagamento já validado pelo PayrollService.
+// EncryptPaymentAmount cifra o valor de um pagamento já validado pelo request.
 // O ID precisa existir antes desta chamada porque também autentica o valor cifrado.
 func (c *Cipher) EncryptPaymentAmount(payment Payment) (ProtectedPayment, error) {
 	if c == nil || c.amounts == nil {

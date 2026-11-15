@@ -42,7 +42,7 @@ func (h *Handler) createPayment(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "Autenticação necessária"})
 		return
 	}
-	input, ok := decodeCreatePaymentRequest(w, r)
+	input, ok := decodeCreatePaymentRequest(w, r, principal.UserID)
 	if !ok {
 		return
 	}

@@ -25,41 +25,14 @@ type paymentAmountProtector interface {
 	DecryptPaymentAmount(payment ProtectedPayment) (int64, error)
 }
 
-// normalizeCreatePayment pertence ao caso de uso: valida a entrada e monta a entidade antes da cifra.
-func normalizeCreatePayment(userID string, input CreatePaymentInput) (Payment, error) {
-	ownerID, err := uuid.Normalize(userID)
-	if err != nil {
-		return Payment{}, ErrInvalidPayrollOwner
-	}
-	employeeID, err := uuid.Normalize(input.EmployeeID)
-	if err != nil {
-		return Payment{}, ErrInvalidPaymentEmployee
-	}
-	start, endInclusive, err := calendarDate.NormalizeInclusivePeriod(input.PeriodStart, input.PeriodEnd)
-	if err != nil {
-		return Payment{}, ErrInvalidPaymentPeriod
-	}
-	amountCents, err := normalizePaymentAmount(input.AmountCents)
-	if err != nil {
-		return Payment{}, err
-	}
-
-	return Payment{
-		UserID: ownerID, EmployeeID: employeeID,
-		PeriodStart: start, PeriodEnd: endInclusive.AddDate(0, 0, 1),
-		AmountCents: amountCents, Notes: strings.TrimSpace(input.Notes),
-	}, nil
-}
-
-// Create valida a entrada, calcula o devido e grava um único pagamento protegido.
+// Create recebe a entrada validada, calcula o devido e grava um único pagamento protegido.
 func (s *PayrollService) Create(ctx context.Context, userID string, input CreatePaymentInput) (Payment, error) {
 	if err := ctx.Err(); err != nil {
 		return Payment{}, err
 	}
-	request, err := normalizeCreatePayment(userID, input)
-	if err != nil {
-		return Payment{}, err
-	}
+	// O request entrega os campos normalizados; o fim é exclusivo no banco.
+	request := Payment{UserID: userID, EmployeeID: input.EmployeeID, PeriodStart: input.PeriodStart, PeriodEnd: input.PeriodEnd.AddDate(0, 0, 1), AmountCents: input.AmountCents, Notes: input.Notes}
+	var err error
 	if s == nil || s.repo == nil || s.protector == nil || s.harvest == nil || s.daily == nil {
 		return Payment{}, ErrInvalidPaymentConfig
 	}

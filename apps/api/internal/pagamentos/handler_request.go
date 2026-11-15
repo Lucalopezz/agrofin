@@ -3,11 +3,14 @@ package pagamentos
 
 import (
 	"errors"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 	"net/http"
 	"net/url"
+	"strings"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 type createPaymentRequest struct {
@@ -18,7 +21,7 @@ type createPaymentRequest struct {
 	Notes       string `json:"notes"`
 }
 
-func decodeCreatePaymentRequest(w http.ResponseWriter, r *http.Request) (CreatePaymentInput, bool) {
+func decodeCreatePaymentRequest(w http.ResponseWriter, r *http.Request, userID string) (CreatePaymentInput, bool) {
 	request, err := httpjson.Decode[createPaymentRequest](w, r)
 	if errors.Is(err, httpjson.ErrUnsupportedMediaType) {
 		writeJSON(w, http.StatusUnsupportedMediaType, errorResponse{Error: "Envie o corpo como application/json"})
@@ -42,10 +45,13 @@ func decodeCreatePaymentRequest(w http.ResponseWriter, r *http.Request) (CreateP
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
 		return CreatePaymentInput{}, false
 	}
-	return CreatePaymentInput{
-		EmployeeID: request.EmployeeID, PeriodStart: startDate, PeriodEnd: endDate,
-		AmountCents: request.AmountCents, Notes: request.Notes,
-	}, true
+	input := CreatePaymentInput{EmployeeID: request.EmployeeID, PeriodStart: startDate, PeriodEnd: endDate, AmountCents: request.AmountCents, Notes: request.Notes}
+	payment, err := normalizeCreatePayment(userID, input)
+	if err != nil {
+		writeCreatePaymentResponse(w, Payment{}, err)
+		return CreatePaymentInput{}, false
+	}
+	return CreatePaymentInput{EmployeeID: payment.EmployeeID, PeriodStart: payment.PeriodStart, PeriodEnd: payment.PeriodEnd.AddDate(0, 0, -1), AmountCents: payment.AmountCents, Notes: payment.Notes}, true
 }
 
 func decodePeriodQuery(w http.ResponseWriter, r *http.Request) (Period, bool) {
@@ -72,5 +78,43 @@ func decodePeriodQuery(w http.ResponseWriter, r *http.Request) (Period, bool) {
 		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve usar o formato AAAA-MM-DD"})
 		return Period{}, false
 	}
+	if endDate.Before(startDate) {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "end_date deve ser igual ou posterior a start_date"})
+		return Period{}, false
+	}
 	return Period{StartDate: startDate, EndDate: endDate}, true
+}
+
+// normalizeCreatePayment valida e normaliza os dados recebidos no HTTP.
+func normalizeCreatePayment(userID string, input CreatePaymentInput) (Payment, error) {
+	ownerID, err := uuid.Normalize(userID)
+	if err != nil {
+		return Payment{}, ErrInvalidPayrollOwner
+	}
+	employeeID, err := uuid.Normalize(input.EmployeeID)
+	if err != nil {
+		return Payment{}, ErrInvalidPaymentEmployee
+	}
+	start, endInclusive, err := calendarDate.NormalizeInclusivePeriod(input.PeriodStart, input.PeriodEnd)
+	if err != nil {
+		return Payment{}, ErrInvalidPaymentPeriod
+	}
+	amountCents, err := normalizePaymentAmount(input.AmountCents)
+	if err != nil {
+		return Payment{}, err
+	}
+
+	return Payment{
+		UserID: ownerID, EmployeeID: employeeID,
+		PeriodStart: start, PeriodEnd: endInclusive.AddDate(0, 0, 1),
+		AmountCents: amountCents, Notes: strings.TrimSpace(input.Notes),
+	}, nil
+}
+
+// normalizePaymentAmount aplica a regra compartilhada e preserva o erro do domínio de pagamentos.
+func normalizePaymentAmount(amountCents int64) (int64, error) {
+	if !money.IsPositiveCents(amountCents) {
+		return 0, ErrInvalidPaymentAmount
+	}
+	return amountCents, nil
 }

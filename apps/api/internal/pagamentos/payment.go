@@ -3,8 +3,6 @@ package pagamentos
 
 import (
 	"time"
-
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 )
 
 type Payment struct {
@@ -40,14 +38,6 @@ type ProtectedPayment struct {
 	PaidAt      time.Time
 	Amount      ProtectedPaymentAmount
 	Notes       string
-}
-
-// normalizePaymentAmount aplica a regra compartilhada e preserva o erro do domínio de pagamentos.
-func normalizePaymentAmount(amountCents int64) (int64, error) {
-	if !money.IsPositiveCents(amountCents) {
-		return 0, ErrInvalidPaymentAmount
-	}
-	return amountCents, nil
 }
 
 // inclusivePeriod converte o intervalo semiaberto persistido para a forma usada nas consultas HTTP.

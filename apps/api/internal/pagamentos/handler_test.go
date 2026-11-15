@@ -47,7 +47,7 @@ func TestPayrollSummaryHandler(t *testing.T) {
 		{name: "parâmetro extra", path: path + "&user_id=outro", wantStatus: http.StatusBadRequest},
 		{name: "query malformada", path: "/payroll-periods/summary?start_date=%zz&end_date=2026-11-08", wantStatus: http.StatusBadRequest},
 		{name: "data inválida", path: "/payroll-periods/summary?start_date=2026-02-30&end_date=2026-11-08", wantStatus: http.StatusBadRequest},
-		{name: "período invertido", path: "/payroll-periods/summary?start_date=2026-11-08&end_date=2026-11-02", serviceErr: ErrInvalidPayrollPeriod, wantStatus: http.StatusBadRequest, wantCalls: 1},
+		{name: "período invertido", path: "/payroll-periods/summary?start_date=2026-11-08&end_date=2026-11-02", wantStatus: http.StatusBadRequest, wantCalls: 0},
 		{name: "prazo esgotado", path: path, serviceErr: context.DeadlineExceeded, wantStatus: http.StatusGatewayTimeout, wantCalls: 1},
 		{name: "falha interna sem detalhe", path: path, serviceErr: errors.New("valor protegido privado"), wantStatus: http.StatusInternalServerError, wantCalls: 1},
 	}
@@ -114,8 +114,23 @@ func TestCreatePaymentWithoutIdempotencyHeader(t *testing.T) {
 	RegisterRoutes(mux, NewHandler(service), func(h http.Handler) http.Handler { return h })
 	req := httptest.NewRequest(http.MethodPost, "/employee-payments", strings.NewReader(`{"employee_id":"11111111-1111-4111-8111-111111111111","start_date":"2026-11-01","end_date":"2026-11-01","amount_cents":1000}`))
 	req.Header.Set("Content-Type", "application/json")
-	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: "conta"}))
+	req = req.WithContext(auth.WithPrincipal(req.Context(), auth.Principal{UserID: "11111111-1111-4111-8111-111111111111"}))
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+}
+
+func TestPaymentRequestRejectsInvalidInput(t *testing.T) {
+	for _, body := range []string{
+		`{"employee_id":"inválido","start_date":"2026-11-01","end_date":"2026-11-02","amount_cents":100}`,
+		`{"employee_id":"11111111-1111-4111-8111-111111111111","start_date":"2026-11-02","end_date":"2026-11-01","amount_cents":100}`,
+		`{"employee_id":"11111111-1111-4111-8111-111111111111","start_date":"2026-11-01","end_date":"2026-11-02","amount_cents":0}`,
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/employee-payments", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		_, ok := decodeCreatePaymentRequest(w, req, "11111111-1111-4111-8111-111111111111")
+		assert.False(t, ok)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	}
 }

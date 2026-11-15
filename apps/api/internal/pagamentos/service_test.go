@@ -111,24 +111,6 @@ func TestServiceSummarizeCombinesHarvestsAndDailyWorks(t *testing.T) {
 	}, got.Employees[2])
 }
 
-func TestServiceSummarizeRejectsInvalidPeriodBeforeDependencies(t *testing.T) {
-	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
-	calls := 0
-	service := newTestPayrollService(
-		harvestSummarizerFunc(func(context.Context, string, colheitas.HarvestPeriod) ([]colheitas.HarvestSummary, error) {
-			calls++
-			return nil, nil
-		}),
-		dailyWorkSummarizerFunc(func(context.Context, string, diarias.DailyWorkPeriod) ([]diarias.DailyWorkSummary, error) {
-			calls++
-			return nil, nil
-		}),
-	)
-	_, err := service.Summarize(context.Background(), "user-a", Period{StartDate: date.AddDate(0, 0, 1), EndDate: date})
-	assert.ErrorIs(t, err, ErrInvalidPayrollPeriod)
-	assert.Zero(t, calls)
-}
-
 func TestServiceSummarizeEmptyPeriodReturnsInitializedList(t *testing.T) {
 	date := time.Date(2026, time.November, 2, 0, 0, 0, 0, time.UTC)
 	service := newTestPayrollService(
