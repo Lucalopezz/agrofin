@@ -67,6 +67,13 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 - Preserve alterações já feitas pelo usuário. Atualize a documentação quando o comportamento implementado divergir do plano e distinga claramente proposta de funcionalidade entregue.
 - Ao criar commits, use Conventional Commits com mensagem em pt-BR, como `feat:`, `fix:` ou `refact:`.
 
+## formatação do código
+
+- Priorize a leitura ao criar ou alterar código: quebre linhas longas e distribua tipos com vários campos, objetos, argumentos de chamadas, condicionais e JSX em várias linhas quando isso facilitar a compreensão.
+- Evite concentrar várias instruções, elementos JSX ou chamadas com muitos detalhes em uma única linha. Mantenha indentação consistente e blocos relacionados visualmente agrupados, inclusive nos testes.
+- No React, mantenha páginas focadas na composição e na navegação. Extraia formulários e blocos de interface com responsabilidade própria em componentes da feature, separando lógica e apresentação quando isso melhorar a leitura; evite dividir elementos simples sem necessidade ou criar componentes compartilhados sem uso real.
+- Respeite os formatadores e convenções da linguagem e do projeto; em Go, use `gofmt`. Não compacte o código apenas para reduzir o número de linhas.
+
 ## comentários no código
 
 - Sempre adicione comentários próximos de toda lógica não óbvia e das escolhas cuja razão não seja evidente para outro desenvolvedor. Explique **por que** o código foi feito daquela forma, a regra ou invariante que protege e os trade-offs relevantes.
