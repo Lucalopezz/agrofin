@@ -1,13 +1,13 @@
 # Frontend do agrofin
 
-Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A interface inclui uma landing page e um painel navegável de demonstração para apresentar os fluxos previstos do agrofin.
+Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A interface inclui cadastro, login e sessão integrados à API, além de uma landing page e um painel protegido que ainda apresenta dados demonstrativos.
 
 ## demonstração visual
 
-- A landing page abre em `http://localhost:5173/`; use **explorar o painel** para entrar no protótipo.
+- A landing page abre em `http://localhost:5173/`. Crie uma conta e entre para acessar o painel protegido.
 - O painel tem páginas de visão geral, colheitas, pagamentos, vendas, despesas, insumos, pulverizações, calendário e relatórios.
 - Os formulários de colheita, pagamento, venda, despesa e pulverização simulam prévias, confirmações e atualizações em memória no navegador.
-- Todos os dados são fictícios. A demonstração não lê nem grava lançamentos na API ou no banco e não substitui autenticação, validação ou regras de negócio do servidor.
+- A autenticação usa a API e o cookie de sessão. Os dados e formulários do painel continuam fictícios: não leem nem gravam lançamentos na API ou no banco.
 
 As páginas e interações são material de apresentação; os fluxos de negócio continuam pendentes de integração e validação com o cliente.
 
@@ -17,6 +17,7 @@ Siga as instruções do [README principal](../../README.md#como-executar) para i
 
 ```bash
 docker compose logs -f web
+docker compose exec web pnpm run test
 docker compose exec web pnpm run lint
 docker compose exec web pnpm run build
 ```
