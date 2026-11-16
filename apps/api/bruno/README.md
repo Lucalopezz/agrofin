@@ -10,7 +10,7 @@ O repositório mantém um único arquivo compartilhado no caminho `apps/api/brun
 
 1. No Postman, clique em **Import** e selecione `apps/api/bruno/agrofin.postman_collection.json`. No Bruno, use **+ → Import Collection → Postman Collection** e selecione o mesmo arquivo.
 2. No Insomnia, use **Import → File**, selecione o arquivo e conclua a importação após revisar o que será criado.
-3. Nas variáveis da coleção ou no ambiente equivalente, ajuste `base_url` para o endereço da API com `API_PREFIX`, `origin` para o mesmo valor de `PUBLIC_ORIGIN` no `.env`, e `login_name` e `password` para suas credenciais. Para testar a troca de senha, defina também `new_password` para um valor diferente e válido. Os valores versionados são exemplos locais; não salve credenciais reais no repositório. A senha exige entre 15 e 128 caracteres.
+3. Nas variáveis da coleção ou no ambiente equivalente, ajuste `base_url` para o endereço da API com `API_PREFIX`, `origin` para o mesmo valor de `PUBLIC_ORIGIN` no `.env`, e `login_name` e `password` para suas credenciais. Para testar a troca de senha, defina também `new_password` para um valor diferente e válido. Os valores versionados são exemplos locais; não salve credenciais reais no repositório. A senha exige entre 6 e 128 caracteres.
 
 ## Executar
 

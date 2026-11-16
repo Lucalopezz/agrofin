@@ -8,6 +8,7 @@ Estes exemplos tornam as histórias verificáveis. Valores são ilustrativos; n�
 
 - Dois clientes podem criar contas com nomes de acesso diferentes sem sessão prévia, convite ou token de instalação, mesmo que tenham o mesmo nome de exibição.
 - Repetir um nome de acesso, inclusive variando maiúsculas e espaços externos, retorna `409` sem alterar a conta existente.
+- Cadastro e troca de senha aceitam de 6 a 128 caracteres Unicode após normalização; senhas da lista local de uso comum continuam rejeitadas, assim como senhas iguais ao nome de acesso no cadastro.
 - Cada cliente entra com suas próprias credenciais e recebe uma sessão vinculada ao seu usuário.
 - Funcionários cadastrados por um gerente não aparecem para outro; enviar `user_id` no corpo ou na query não permite escolher o dono dos registros.
 - Desativar uma conta revoga somente suas sessões; outras contas continuam funcionando.

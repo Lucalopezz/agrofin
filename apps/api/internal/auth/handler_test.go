@@ -61,6 +61,7 @@ func TestRegisterHandler(t *testing.T) {
 		expectedPassword string
 	}{
 		{name: "cadastro público sem token", body: validBody, contentType: "application/json; charset=utf-8", expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente da Produção", expectedLogin: "gerente_1", expectedPassword: "UmaSenhaForteComMaisDe15Caracteres"},
+		{name: "cadastro com seis caracteres", body: `{"name":"Gerente","login_name":"gerente","password":"Lim4o!"}`, contentType: "application/json", expectedStatus: http.StatusCreated, expectedCalls: 1, expectedName: "Gerente", expectedLogin: "gerente", expectedPassword: "Lim4o!"},
 		{name: "content type ausente", body: validBody, expectedStatus: http.StatusUnsupportedMediaType},
 		{name: "content type não suportado", body: validBody, contentType: "text/plain", expectedStatus: http.StatusUnsupportedMediaType},
 		{name: "json inválido", body: `{"login_name":`, contentType: "application/json", expectedStatus: http.StatusBadRequest},
@@ -265,7 +266,7 @@ func TestChangePasswordHandlerUsesCurrentPrincipalAndClearsCookie(t *testing.T) 
 	service := &managerProfileServiceStub{}
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, NewHandler(service, HandlerConfig{}), func(next http.Handler) http.Handler { return next })
-	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"SenhaAtualComMaisDe15Caracteres","new_password":"NovaSenhaComMaisDe15Caracteres"}`))
+	request := httptest.NewRequest(http.MethodPatch, "/auth/me/password", strings.NewReader(`{"current_password":"SenhaAtualComMaisDe15Caracteres","new_password":"Lim4o!"}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "current-session"})
 	request = request.WithContext(WithPrincipal(request.Context(), Principal{UserID: "manager-id"}))
@@ -277,7 +278,7 @@ func TestChangePasswordHandlerUsesCurrentPrincipalAndClearsCookie(t *testing.T) 
 	assert.Empty(t, response.Body.String())
 	assert.Equal(t, "manager-id", service.passwordUserID)
 	assert.Equal(t, "SenhaAtualComMaisDe15Caracteres", service.currentPassword)
-	assert.Equal(t, "NovaSenhaComMaisDe15Caracteres", service.newPassword)
+	assert.Equal(t, "Lim4o!", service.newPassword)
 	cookies := response.Result().Cookies()
 	require.Len(t, cookies, 1)
 	assert.Equal(t, -1, cookies[0].MaxAge)

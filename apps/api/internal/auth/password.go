@@ -28,12 +28,17 @@ const (
 	passwordKeyBytes  = 32
 	// Contamos caracteres Unicode, não bytes, para que senhas acentuadas não
 	// tenham tamanho percebido diferente por causa da codificação UTF-8.
-	minimumPasswordRunes = 15
+	minimumPasswordRunes = 6
 	maximumPasswordRunes = 128
 )
 
 // A lista pequena bloqueia escolhas notoriamente fracas até o produto adotar uma lista de senhas comprometidas atualizável.
 var commonPasswords = map[string]struct{}{
+	"123456":           {},
+	"12345678":         {},
+	"password":         {},
+	"senha123":         {},
+	"qwerty":           {},
 	"123456789012345":  {},
 	"password1234567":  {},
 	"passwordpassword": {},
@@ -168,7 +173,7 @@ func validateNewPassword(password, loginName string) (string, error) {
 	}
 	runeCount := utf8.RuneCountInString(password)
 	if runeCount < minimumPasswordRunes || runeCount > maximumPasswordRunes {
-		return "", invalidInput("senha deve ter entre 15 e 128 caracteres")
+		return "", invalidInput("senha deve ter entre 6 e 128 caracteres")
 	}
 
 	// Bloqueio pequeno e local para senhas conhecidamente fracas; não substitui
