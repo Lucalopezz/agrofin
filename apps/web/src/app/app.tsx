@@ -62,7 +62,12 @@ export function App() {
   const pageContent = {
     inicio: <DashboardPage onNavigate={navigate} />,
     funcionarios: <FuncionariosPage key={session.user?.id} />,
-    colheitas: <ColheitaPage />,
+    colheitas: (
+      <ColheitaPage
+        key={session.user?.id}
+        onOpenEmployees={() => navigate('funcionarios')}
+      />
+    ),
     pagamentos: <PagamentosPage />,
     vendas: <VendasPage />,
     despesas: <DespesasPage />,

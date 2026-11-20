@@ -345,7 +345,8 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
 
 /* colheita e pagamentos */
 .harvest-preview { min-height: 60px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #e1eadc; border-radius: 9px; background: #f5f8f1; }
-.harvest-preview > div:first-child { display: flex; align-items: center; gap: 9px; }
+.harvest-preview > div:first-child { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.harvest-preview-summary { min-width: 0; overflow-wrap: anywhere; }
 .preview-icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; color: #568158; background: #e5efdf; }
 .harvest-preview small, .harvest-preview strong { display: block; }
 .harvest-preview small { color: #909b8f; font-size: 8px; }
