@@ -6,7 +6,7 @@ import {
   FormField,
   SectionCard,
 } from '@/features/painel/components/page-ui'
-import type { Employee } from '../api/employees-api'
+import type { Employee } from '../types'
 
 type EmployeeFormProps = {
   employee: Employee | null

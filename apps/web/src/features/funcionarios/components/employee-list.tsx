@@ -1,6 +1,6 @@
 import { Button } from '@/shared/components/ui/button'
 import { FormActions } from '@/features/painel/components/page-ui'
-import type { Employee } from '../api/employees-api'
+import type { Employee } from '../types'
 
 type EmployeeListProps = {
   employees: Employee[]

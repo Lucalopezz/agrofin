@@ -4,7 +4,7 @@ import { privateQueries } from '@/app/query-client'
 import { useSession } from '@/features/auth/session-context'
 import { sentenceCase } from '@/features/painel/lib/sentence-case'
 import { ApiError } from '@/shared/lib/api-client'
-import { employeesApi } from '../api/employees-api'
+import { listEmployees } from '../api/list-employees'
 
 export const employeeListsKey = (userId: string | undefined) =>
   [...privateQueries, userId, 'employees'] as const
@@ -14,7 +14,10 @@ export function useEmployees(active?: boolean) {
   const query = useQuery({
     // Cada conta e filtro tem sua própria lista, inclusive no seletor da colheita.
     queryKey: [...employeeListsKey(user?.id), active ?? null],
-    queryFn: ({ signal }) => employeesApi.list(active, signal),
+    queryFn: ({ signal }) => listEmployees(active, signal),
+    // Reutiliza a lista em navegações rápidas. Escritas confirmadas invalidam
+    // todos os filtros da conta sem esperar este prazo.
+    staleTime: 30_000,
     enabled: Boolean(user),
   })
   const { error } = query

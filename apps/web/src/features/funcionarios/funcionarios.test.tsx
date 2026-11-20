@@ -3,7 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '@/app/app'
 import { SessionProvider } from '@/features/auth/session'
-import type { Employee } from './api/employees-api'
+import type { Employee } from './types'
 
 const prefix = '/api/v1'
 const employeeId = 'e0184fc1-b810-4596-8013-bfbccffa7252'
@@ -156,6 +156,27 @@ describe('Funcionários no painel', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Confira a conexão.')
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     expect(await screen.findByText('Nenhum funcionário encontrado.')).toBeVisible()
+  })
+
+  it('reutiliza um filtro consultado enquanto a lista está atual', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(sessionResponse())
+      .mockResolvedValueOnce(response(200, [{ id: employeeId, name: 'Maria', active: true }]))
+      .mockResolvedValueOnce(response(200, []))
+    renderPanel()
+
+    expect(await screen.findByText('Maria')).toBeVisible()
+    const filter = screen.getByRole('combobox', { name: 'Situação' })
+    fireEvent.change(filter, { target: { value: 'inativos' } })
+    expect(await screen.findByText('Nenhum funcionário encontrado.')).toBeVisible()
+    fireEvent.change(filter, { target: { value: 'todos' } })
+
+    expect(screen.getByText('Maria')).toBeVisible()
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      `${prefix}/auth/me`,
+      `${prefix}/employees`,
+      `${prefix}/employees?active=false`,
+    ])
   })
 
   it('ignora uma resposta do filtro anterior ao alternar rapidamente', async () => {
