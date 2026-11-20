@@ -223,7 +223,20 @@ button:disabled { cursor: not-allowed; }
 .success-feedback { padding: 10px 12px; margin-bottom: 15px; display: flex; align-items: center; gap: 9px; border: 1px solid #d5e8d1; border-radius: 8px; color: #43704a; background: #f2f8ef; font-size: 10px; line-height: 1.45; }
 .success-feedback > span { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: #6e9a68; }
 .form-page-grid { margin-bottom: 16px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(230px, .8fr); align-items: start; gap: 15px; }
-.form-page-grid.harvest-page-grid, .form-page-grid.expense-page-grid { grid-template-columns: minmax(0, 760px); }
+.form-page-grid.harvest-page-grid, .form-page-grid.expense-page-grid, .form-page-grid.employee-page-grid { grid-template-columns: minmax(0, 760px); }
+.employee-list { list-style: none; padding: 0; margin: 10px 0 0; }
+.employee-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eff1ed;
+}
+.employee-list > li:last-child { border-bottom: 0; }
+.employee-list-name { min-width: 0; overflow-wrap: anywhere; }
+.employee-list-name small { display: block; margin-top: 3px; color: #526354; }
 .demo-form { display: grid; gap: 15px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .form-field { min-width: 0; display: grid; align-content: start; gap: 7px; color: #4a5a4d; font-size: 10px; font-weight: 600; }

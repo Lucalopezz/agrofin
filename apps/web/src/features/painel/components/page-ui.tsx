@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ComponentProps, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Check, Info, Plus, type LucideIcon } from 'lucide-react'
 import { sentenceCase } from '@/features/painel/lib/sentence-case'
 
@@ -34,7 +34,7 @@ export function SmallAction({ children, onClick }: { children: ReactNode; onClic
   return <button className="small-action" type="button" onClick={onClick}><Plus size={15} aria-hidden="true" />{typeof children === 'string' ? sentenceCase(children) : children}</button>
 }
 
-export function FieldInput(props: InputHTMLAttributes<HTMLInputElement>) {
+export function FieldInput(props: ComponentProps<'input'>) {
   const placeholder = typeof props.placeholder === 'string' ? sentenceCase(props.placeholder) : props.placeholder
   return <input className="form-control" {...props} placeholder={placeholder} />
 }

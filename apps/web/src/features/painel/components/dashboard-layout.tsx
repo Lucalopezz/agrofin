@@ -9,6 +9,7 @@ import {
   Package,
   ReceiptText,
   Store,
+  Users,
   Wallet,
 } from 'lucide-react'
 import { Navbar } from '@/shared/components/navbar'
@@ -17,6 +18,7 @@ import { sentenceCase } from '@/features/painel/lib/sentence-case'
 export type DemoPage =
   | 'inicio'
   | 'colheitas'
+  | 'funcionarios'
   | 'pagamentos'
   | 'vendas'
   | 'despesas'
@@ -27,6 +29,7 @@ export type DemoPage =
 
 const navigation: { id: DemoPage; label: string; icon: typeof Leaf; group: string }[] = [
   { id: 'inicio', label: 'Visão geral', icon: LayoutDashboard, group: 'produção' },
+  { id: 'funcionarios', label: 'Funcionários', icon: Users, group: 'produção' },
   { id: 'colheitas', label: 'Colheitas', icon: ClipboardList, group: 'produção' },
   { id: 'pagamentos', label: 'Pagamentos', icon: Wallet, group: 'produção' },
   { id: 'vendas', label: 'Vendas', icon: Store, group: 'financeiro' },

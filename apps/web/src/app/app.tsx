@@ -4,6 +4,7 @@ import { AuthPage } from '@/features/auth/pages/auth-page'
 import { DashboardLayout, type DemoPage } from '@/features/painel/components/dashboard-layout'
 import { LandingPage } from '@/features/inicio/pages/landing-page'
 import { DashboardPage } from '@/features/painel/pages/dashboard-page'
+import { FuncionariosPage } from '@/features/funcionarios/pages/funcionarios-page'
 import { ColheitaPage } from '@/features/colheita/pages/colheita-page'
 import { PagamentosPage } from '@/features/pagamentos/pages/pagamentos-page'
 import { VendasPage } from '@/features/vendas/pages/vendas-page'
@@ -19,7 +20,10 @@ function readRoute(): Route {
   if (window.location.hash === '#/login') return 'login'
   if (window.location.hash === '#/cadastro') return 'register'
   const slug = window.location.hash.replace(/^#\/demo\/?/, '')
-  const pages: DemoPage[] = ['inicio', 'colheitas', 'pagamentos', 'vendas', 'despesas', 'insumos', 'pulverizacoes', 'calendario', 'relatorios']
+  const pages: DemoPage[] = [
+    'inicio', 'funcionarios', 'colheitas', 'pagamentos', 'vendas',
+    'despesas', 'insumos', 'pulverizacoes', 'calendario', 'relatorios',
+  ]
   return pages.includes(slug as DemoPage) ? slug as DemoPage : 'landing'
 }
 
@@ -57,6 +61,7 @@ export function App() {
 
   const pageContent = {
     inicio: <DashboardPage onNavigate={navigate} />,
+    funcionarios: <FuncionariosPage key={session.user?.id} />,
     colheitas: <ColheitaPage />,
     pagamentos: <PagamentosPage />,
     vendas: <VendasPage />,
