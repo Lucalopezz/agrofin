@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '@/render-with-query'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SessionProvider } from './session'
 import { useSession } from './session-context'
@@ -37,7 +38,7 @@ describe('Autenticação', () => {
         }),
       )
       .mockResolvedValueOnce(response(204))
-    render(
+    renderWithQuery(
       <SessionProvider>
         <Status />
       </SessionProvider>,
@@ -62,7 +63,7 @@ describe('Autenticação', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockRejectedValueOnce(new TypeError('offline'))
       .mockResolvedValueOnce(response(401, { error: 'autenticação necessária' }))
-    render(
+    renderWithQuery(
       <SessionProvider>
         <Status />
       </SessionProvider>,
@@ -77,7 +78,7 @@ describe('Autenticação', () => {
       .mockResolvedValueOnce(response(401))
       .mockResolvedValueOnce(response(401, { error: 'credenciais inválidas' }))
     const navigate = vi.fn()
-    render(
+    renderWithQuery(
       <SessionProvider>
         <AuthPage mode="login" onNavigate={navigate} />
       </SessionProvider>,
@@ -96,7 +97,7 @@ describe('Autenticação', () => {
 
   it('não envia cadastro quando a confirmação difere', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response(401))
-    render(
+    renderWithQuery(
       <SessionProvider>
         <AuthPage mode="register" onNavigate={vi.fn()} />
       </SessionProvider>,
@@ -128,7 +129,7 @@ describe('Autenticação', () => {
         }),
       )
     const navigate = vi.fn()
-    render(
+    renderWithQuery(
       <SessionProvider>
         <AuthPage mode="login" onNavigate={navigate} />
         <Status />
@@ -150,7 +151,7 @@ describe('Autenticação', () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(response(401))
       .mockResolvedValueOnce(response(409, { error: 'nome de acesso já está em uso' }))
-    render(
+    renderWithQuery(
       <SessionProvider>
         <AuthPage mode="register" onNavigate={vi.fn()} />
       </SessionProvider>,

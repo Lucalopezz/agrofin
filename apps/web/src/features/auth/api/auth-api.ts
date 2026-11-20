@@ -27,7 +27,7 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  me: () => apiRequest<{ authenticated: boolean; user: User }>('/auth/me'),
+  me: (signal: AbortSignal) => apiRequest<{ authenticated: boolean; user: User }>('/auth/me', { signal }),
   logout: () =>
     apiRequest<void>('/auth/logout', {
       method: 'POST',
