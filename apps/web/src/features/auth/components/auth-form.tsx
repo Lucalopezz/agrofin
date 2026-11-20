@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { useMutation } from '@tanstack/react-query'
 import { AuthField } from '@/features/auth/components/auth-field'
-import { authApi } from '@/features/auth/api/auth-api'
+import { useRegister } from '@/features/auth/hooks/use-register'
 import { useSession } from '@/features/auth/session-context'
 import { ApiError } from '@/shared/lib/api-client'
 
@@ -13,7 +12,7 @@ type AuthFormProps = {
 
 export function AuthForm({ mode, onRegistered, onLogin }: AuthFormProps) {
   const { login } = useSession()
-  const registration = useMutation({ mutationFn: authApi.register, gcTime: 0 })
+  const register = useRegister()
   const [name, setName] = useState('')
   const [loginName, setLoginName] = useState('')
   const [password, setPassword] = useState('')
@@ -33,7 +32,7 @@ export function AuthForm({ mode, onRegistered, onLogin }: AuthFormProps) {
     setBusy(true)
     try {
       if (registering) {
-        await registration.mutateAsync({ name, login_name: loginName, password })
+        await register({ name, login_name: loginName, password })
         setPassword('')
         setConfirmation('')
         onRegistered()
@@ -50,8 +49,6 @@ export function AuthForm({ mode, onRegistered, onLogin }: AuthFormProps) {
         setError(err.message.charAt(0).toUpperCase() + err.message.slice(1))
       else setError('Não foi possível concluir. Confira a conexão e tente novamente.')
     } finally {
-      // Descarta as credenciais que estavam nas variáveis do cadastro.
-      registration.reset()
       setBusy(false)
     }
   }

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Credentials, User } from './api/auth-api'
+import type { Credentials, User } from './types'
 
 export type Session = {
   status: 'loading' | 'anonymous' | 'authenticated' | 'error'
