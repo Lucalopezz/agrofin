@@ -1,23 +1,8 @@
-import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/shared/components/ui/button'
-import { apiRequest } from '@/shared/lib/api-client'
-
-async function checkHealth(signal: AbortSignal) {
-  // O prazo permite tentar novamente mesmo quando o proxy não responde.
-  const body = await apiRequest<unknown>('/health', {
-    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
-  })
-  if (typeof body !== 'object' || body === null || !('status' in body) || body.status !== 'ok') {
-    throw new Error('Resposta de saúde inválida')
-  }
-  return body.status
-}
+import { useHealth } from '../hooks/use-health'
 
 export function ApiStatus() {
-  const query = useQuery({
-    queryKey: ['health'],
-    queryFn: ({ signal }) => checkHealth(signal),
-  })
+  const query = useHealth()
 
   return (
     <section className="rounded-2xl border bg-secondary p-5" aria-labelledby="conexao-titulo">
