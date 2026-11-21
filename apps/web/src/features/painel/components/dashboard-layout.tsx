@@ -59,6 +59,7 @@ export function DashboardLayout({
   logoutError,
   leaving,
 }: DashboardLayoutProps) {
+  const demo = page !== 'colheitas' && page !== 'funcionarios'
   const groups = [...new Set(navigation.map((item) => item.group))]
   const active = navigation.find((item) => item.id === page)
 
@@ -81,10 +82,10 @@ export function DashboardLayout({
             <Leaf size={17} aria-hidden="true" />
           </span>
           <span>
-            <strong>Fazenda Boa Vista</strong>
+            <strong>{demo ? 'Fazenda Boa Vista' : userName}</strong>
             <small>{sentenceCase('produção de limão')}</small>
           </span>
-          <span className="online-dot" title="Demonstração" />
+          {demo && <span className="online-dot" title="Demonstração" />}
         </div>
         <nav className="side-navigation">
           {groups.map((group) => (
@@ -158,7 +159,7 @@ export function DashboardLayout({
           {children}
         </main>
         <footer className="demo-footer">
-          <span>Demonstração agrofin · interface</span>
+          <span>{demo ? 'Demonstração agrofin · interface' : 'Agrofin'}</span>
           <button onClick={() => onNavigate('landing')}>Voltar à apresentação</button>
         </footer>
       </div>

@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { useEmployees } from '@/features/funcionarios/hooks/use-employees'
-import { Feedback, FieldInput, FieldSelect, FormField, SectionCard } from '@/features/painel/components/page-ui'
+import {
+  Feedback,
+  FieldInput,
+  FieldSelect,
+  FormField,
+  SectionCard,
+} from '@/features/painel/components/page-ui'
 import { Button } from '@/shared/components/ui/button'
 import { useCreateHarvestEntry } from '../hooks/use-create-harvest-entry'
 import { useHarvestRates } from '../hooks/use-harvest-rates'
@@ -26,18 +32,30 @@ export function HarvestForm({ onOpenEmployees, onSaved }: Props) {
     rate: activeRate(rates.data ?? [], box_type, date),
   }))
   const selected = lines.filter(({ quantity }) => quantity !== 0)
-  const canSave = employee && date && !staff.error && !staff.loading && rates.isSuccess
-    && selected.length > 0 && selected.every(({ quantity, rate }) =>
-      validQuantity(quantity) && rate && Number.isSafeInteger(rate.amount_cents))
+  const canSave =
+    employee &&
+    date &&
+    !staff.error &&
+    !staff.loading &&
+    rates.isSuccess &&
+    selected.length > 0 &&
+    selected.every(
+      ({ quantity, rate }) =>
+        validQuantity(quantity) && rate && Number.isSafeInteger(rate.amount_cents),
+    )
   const preview = canSave
-    ? selected.reduce((sum, line) => sum + BigInt(line.quantity) * BigInt(line.rate!.amount_cents), 0n)
+    ? selected.reduce(
+        (sum, line) => sum + BigInt(line.quantity) * BigInt(line.rate!.amount_cents),
+        0n,
+      )
     : null
 
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!canSave) return
     const entry = await create.submit({
-      employee_id: employeeId, harvest_date: date,
+      employee_id: employeeId,
+      harvest_date: date,
       items: selected.map(({ box_type, quantity }) => ({ box_type, quantity })),
     })
     if (entry) {
@@ -51,38 +69,80 @@ export function HarvestForm({ onOpenEmployees, onSaved }: Props) {
       <form className="demo-form" onSubmit={submit}>
         <fieldset className="form-grid" disabled={create.isPending}>
           <FormField label="Data da colheita">
-            <FieldInput type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
+            <FieldInput
+              type="date"
+              required
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </FormField>
           <FormField label="Funcionário">
-            <FieldSelect value={employee?.id ?? ''} required disabled={!staff.employees.length}
-              onChange={(e) => setEmployeeId(e.target.value)}>
+            <FieldSelect
+              value={employee?.id ?? ''}
+              required
+              disabled={!staff.employees.length}
+              onChange={(e) => setEmployeeId(e.target.value)}
+            >
               <option value="">Selecione um funcionário</option>
-              {staff.employees.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+              {staff.employees.map(({ id, name }) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
             </FieldSelect>
           </FormField>
           {lines.map(({ box_type, rate }) => (
-            <QuantityField key={box_type} type={box_type} value={quantities[box_type]}
-              hint={rates.isSuccess ? rate ? `${money(rate.amount_cents)} por caixa` : 'Sem tarifa vigente' : undefined}
+            <QuantityField
+              key={box_type}
+              type={box_type}
+              value={quantities[box_type]}
+              hint={
+                rates.isSuccess
+                  ? rate
+                    ? `${money(rate.amount_cents)} por caixa`
+                    : 'Sem tarifa vigente'
+                  : undefined
+              }
               onChange={(value) => setQuantities({ ...quantities, [box_type]: value })}
             />
           ))}
         </fieldset>
         {staff.loading && <p role="status">Carregando funcionários...</p>}
-        {staff.error && <div><p role="alert">{staff.error}</p><Button type="button" onClick={staff.reload}>Recarregar funcionários</Button></div>}
+        {staff.error && (
+          <div>
+            <p role="alert">{staff.error}</p>
+            <Button type="button" onClick={staff.reload}>
+              Recarregar funcionários
+            </Button>
+          </div>
+        )}
         {!staff.loading && !staff.error && !staff.employees.length && (
-          <div><p>Nenhum funcionário ativo.</p>
-            <Button type="button" variant="outline" onClick={onOpenEmployees}>Gerenciar funcionários</Button>
+          <div>
+            <p>Nenhum funcionário ativo.</p>
+            <Button type="button" variant="outline" onClick={onOpenEmployees}>
+              Gerenciar funcionários
+            </Button>
           </div>
         )}
         {rates.isPending && <p role="status">Carregando tarifas...</p>}
         <RequestError error={rates.error} retry={() => void rates.refetch()} />
         {rates.isSuccess && lines.some(({ rate }) => !rate) && (
-          <p>Cadastre em Tarifas de colheita a vigência que falta para o tipo de caixa desejado.</p>
+          <p>
+            Cadastre em Tarifas de colheita a vigência que falta para o tipo de caixa desejado.
+          </p>
         )}
-        {preview !== null && <p>Valor estimado: <strong>{money(preview)}</strong></p>}
-        <Button type="submit" disabled={!canSave || create.isPending}>Registrar colheita</Button>
+        {preview !== null && (
+          <p>
+            Valor estimado: <strong>{money(preview)}</strong>
+          </p>
+        )}
+        <Button type="submit" disabled={!canSave || create.isPending}>
+          Registrar colheita
+        </Button>
         <RequestError error={create.error} />
-        {create.isSuccess && <Feedback>Colheita registrada. Valor devido: {entryTotal(create.data)}.</Feedback>}
+        {create.isSuccess && (
+          <Feedback>Colheita registrada. Valor devido: {entryTotal(create.data)}.</Feedback>
+        )}
       </form>
     </SectionCard>
   )

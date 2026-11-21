@@ -4,7 +4,7 @@ import { localDate, money } from './rates'
 export function weekOf(day = localDate()): Period {
   // O calendário usa dias locais, inclusive ao atravessar o fim do mês.
   const monday = new Date(day + 'T12:00:00')
-  monday.setDate(monday.getDate() - (monday.getDay() + 6) % 7)
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
   const sunday = new Date(monday)
   sunday.setDate(monday.getDate() + 6)
   return { start_date: localDate(monday), end_date: localDate(sunday) }

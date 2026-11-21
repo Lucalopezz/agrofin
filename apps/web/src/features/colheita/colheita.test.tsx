@@ -10,10 +10,16 @@ import type { HarvestEntry, Rate } from './types'
 const today = localDate()
 const person = { id: 'employee-1', name: 'Maria Silva', active: true }
 const rate: Rate = {
-  id: 'rate', box_type: 'normal', amount_cents: 501, valid_from: '2000-01-01', valid_until: null,
+  id: 'rate',
+  box_type: 'normal',
+  amount_cents: 501,
+  valid_from: '2000-01-01',
+  valid_until: null,
 }
 const entry: HarvestEntry = {
-  id: 'entry', employee_id: person.id, harvest_date: today,
+  id: 'entry',
+  employee_id: person.id,
+  harvest_date: today,
   items: [{ box_type: 'normal', quantity: 2, applied_rate_cents: 500 }],
 }
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status })
@@ -31,7 +37,11 @@ function openPage(override?: Override) {
     throw new Error(`Requisição inesperada: ${path}`)
   })
   window.history.replaceState(null, '', '#/demo/colheitas')
-  renderWithQuery(<SessionProvider><App /></SessionProvider>)
+  renderWithQuery(
+    <SessionProvider>
+      <App />
+    </SessionProvider>,
+  )
   return fetchMock
 }
 
@@ -49,7 +59,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('Tarifas e colheitas', () => {
   it('abre o cadastro de funcionários a partir da lista vazia', async () => {
-    openPage((path) => path.startsWith('/employees') ? json([]) : undefined)
+    openPage((path) => (path.startsWith('/employees') ? json([]) : undefined))
     expect(await screen.findByText('Nenhum funcionário ativo.')).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Gerenciar funcionários' }))
     expect(await screen.findByRole('heading', { name: 'Cadastrar funcionário' })).toBeVisible()
@@ -88,16 +98,26 @@ describe('Tarifas e colheitas', () => {
     fireEvent.click(submit)
     expect(await screen.findByText('Tarifa cadastrada.')).toBeVisible()
     expect(screen.getByText('R$ 8,10')).toBeVisible()
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/harvest-rates', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({
-        box_type: 'normal', amount_cents: 405, valid_from: '2020-01-01', valid_until: null,
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/harvest-rates',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          box_type: 'normal',
+          amount_cents: 405,
+          valid_from: '2020-01-01',
+          valid_until: null,
+        }),
       }),
-    }))
+    )
   })
 
   it('mantém a tarifa digitada quando o servidor rejeita uma sobreposição', async () => {
-    openPage((path, init) => path === '/harvest-rates' && init.method === 'POST'
-      ? json({ error: 'Vigência sobreposta' }, 409) : undefined)
+    openPage((path, init) =>
+      path === '/harvest-rates' && init.method === 'POST'
+        ? json({ error: 'Vigência sobreposta' }, 409)
+        : undefined,
+    )
     fireEvent.click(await screen.findByText('Consultar e cadastrar tarifas'))
     input('Tipo de caixa', 'moagem')
     input('Valor por caixa (R$)', '3,50')
@@ -108,7 +128,9 @@ describe('Tarifas e colheitas', () => {
 
   it('envia uma vez com o ID escolhido e exibe a tarifa aplicada pelo servidor', async () => {
     let confirm!: (value: Response) => void
-    const pending = new Promise<Response>((resolve) => { confirm = resolve })
+    const pending = new Promise<Response>((resolve) => {
+      confirm = resolve
+    })
     let stored: HarvestEntry[] = []
     const twin = { ...person, id: 'employee-2' }
     const fetchMock = openPage((path, init) => {
@@ -127,7 +149,9 @@ describe('Tarifas e colheitas', () => {
     const writes = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST')
     expect(writes).toHaveLength(1)
     expect(JSON.parse(String(writes[0][1]?.body))).toEqual({
-      employee_id: twin.id, harvest_date: today, items: [{ box_type: 'normal', quantity: 2 }],
+      employee_id: twin.id,
+      harvest_date: today,
+      items: [{ box_type: 'normal', quantity: 2 }],
     })
     stored = [{ ...entry, employee_id: twin.id }]
     confirm(json(stored[0], 201))
@@ -138,8 +162,11 @@ describe('Tarifas e colheitas', () => {
   })
 
   it('mantém o rascunho quando a API recusa a colheita', async () => {
-    openPage((path, init) => path === '/harvest-entries' && init.method === 'POST'
-      ? json({ error: 'Não há tarifa vigente para a data informada' }, 409) : undefined)
+    openPage((path, init) =>
+      path === '/harvest-entries' && init.method === 'POST'
+        ? json({ error: 'Não há tarifa vigente para a data informada' }, 409)
+        : undefined,
+    )
     await fillEntry()
     fireEvent.click(screen.getByRole('button', { name: 'Registrar colheita' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Não há tarifa vigente')
@@ -159,14 +186,18 @@ describe('Tarifas e colheitas', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     expect(await screen.findByText('Total devido: R$ 10,00')).toBeVisible()
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/v1/harvest-entries?start_date=${week.start_date}&end_date=${week.end_date}`, expect.anything(),
+      `/api/v1/harvest-entries?start_date=${week.start_date}&end_date=${week.end_date}`,
+      expect.anything(),
     )
     input('Fim do período', '2020-01-10')
     expect(screen.getByText(/Informe um período/)).toBeVisible()
     input('Início do período', '2020-01-01')
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/v1/harvest-entries?start_date=2020-01-01&end_date=2020-01-10', expect.anything(),
-    ))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/harvest-entries?start_date=2020-01-01&end_date=2020-01-10',
+        expect.anything(),
+      ),
+    )
   })
 
   it('edita só quantidades dos tipos originais e recarrega a tarifa fotografada', async () => {
@@ -189,15 +220,22 @@ describe('Tarifas e colheitas', () => {
     expect(save).toBeDisabled()
     fireEvent.change(field, { target: { value: '3' } })
     fireEvent.click(save)
-    expect(await screen.findByText('Quantidades atualizadas. Valor devido: R$ 15,00.')).toBeVisible()
+    expect(
+      await screen.findByText('Quantidades atualizadas. Valor devido: R$ 15,00.'),
+    ).toBeVisible()
     expect(screen.getByText('Total devido: R$ 15,00')).toBeVisible()
-    expect(fetchMock).toHaveBeenCalledWith('/api/v1/harvest-entries/entry', expect.objectContaining({
-      method: 'PATCH', body: JSON.stringify({ items: [{ box_type: 'normal', quantity: 3 }] }),
-    }))
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/harvest-entries/entry',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ items: [{ box_type: 'normal', quantity: 3 }] }),
+      }),
+    )
   })
 
   it('preserva histórico e rascunho quando o servidor bloqueia a correção por pagamento', async () => {
-    const conflict = 'A alteração afetaria um período já pago ou reduziria o devido abaixo do valor pago'
+    const conflict =
+      'A alteração afetaria um período já pago ou reduziria o devido abaixo do valor pago'
     openPage((path, init) => {
       if (path.startsWith('/harvest-entries?')) return json([entry])
       if (init.method === 'PATCH') return json({ error: conflict }, 409)
@@ -223,7 +261,9 @@ describe('Tarifas e colheitas', () => {
         if (expired) return json({ error: 'Sessão expirada' }, 401)
       })
       expect(await screen.findByRole('button', { name: 'Entrar' })).toBeVisible()
-      expect(screen.queryByRole('heading', { name: 'Histórico de colheitas' })).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('heading', { name: 'Histórico de colheitas' }),
+      ).not.toBeInTheDocument()
     },
   )
 

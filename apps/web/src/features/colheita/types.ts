@@ -1,5 +1,5 @@
 export const boxTypes = ['normal', 'moagem'] as const
-export type BoxType = typeof boxTypes[number]
+export type BoxType = (typeof boxTypes)[number]
 export const boxLabels = { normal: 'Normal', moagem: 'Moagem' }
 
 export type RateInput = {

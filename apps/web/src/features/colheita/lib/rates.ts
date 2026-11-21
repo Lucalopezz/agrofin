@@ -12,8 +12,12 @@ export function displayDate(date: string) {
 
 export function activeRate(rates: Rate[], type: BoxType, date: string) {
   // O início pertence à vigência e o fim é o primeiro dia sem essa tarifa.
-  return rates.find((rate) => rate.box_type === type && rate.valid_from <= date
-    && (!rate.valid_until || date < rate.valid_until))
+  return rates.find(
+    (rate) =>
+      rate.box_type === type &&
+      rate.valid_from <= date &&
+      (!rate.valid_until || date < rate.valid_until),
+  )
 }
 
 export function parseCents(value: string) {
@@ -25,7 +29,8 @@ export function parseCents(value: string) {
 }
 
 export function money(cents: number | bigint) {
-  if (typeof cents === 'number' && !Number.isSafeInteger(cents)) return 'Valor fora do limite de exibição'
+  if (typeof cents === 'number' && !Number.isSafeInteger(cents))
+    return 'Valor fora do limite de exibição'
   const value = BigInt(cents)
   return `R$ ${(value / 100n).toLocaleString('pt-BR')},${String(value % 100n).padStart(2, '0')}`
 }

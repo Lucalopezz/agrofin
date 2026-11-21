@@ -9,14 +9,26 @@ export function ColheitaPage({ onOpenEmployees }: { onOpenEmployees: () => void 
   const [period, setPeriod] = useState(() => weekOf())
   return (
     <>
-      <PageHeading eyebrow="Produção" title="Registrar colheita" description="Informe funcionário e caixas." />
+      <PageHeading
+        eyebrow="Produção"
+        title="Registrar colheita"
+        description="Informe funcionário e caixas."
+      />
       <div className="form-page-grid harvest-page-grid">
-        <HarvestForm onOpenEmployees={onOpenEmployees} onSaved={(day) => {
-          // Um lançamento retroativo deve aparecer no histórico após salvar.
-          if (day < period.start_date || day > period.end_date || !period.start_date || !period.end_date) {
-            setPeriod(weekOf(day))
-          }
-        }} />
+        <HarvestForm
+          onOpenEmployees={onOpenEmployees}
+          onSaved={(day) => {
+            // Um lançamento retroativo deve aparecer no histórico após salvar.
+            if (
+              day < period.start_date ||
+              day > period.end_date ||
+              !period.start_date ||
+              !period.end_date
+            ) {
+              setPeriod(weekOf(day))
+            }
+          }}
+        />
         <HarvestRates />
         <HarvestHistory period={period} onChange={setPeriod} />
       </div>

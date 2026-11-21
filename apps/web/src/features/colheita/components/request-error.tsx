@@ -9,7 +9,11 @@ export function RequestError({ error, retry }: { error: Error | null; retry?: ()
   return (
     <div>
       <p role="alert">{error instanceof ApiError ? error.message : fallback}</p>
-      {retry && <Button type="button" variant="outline" onClick={retry}>Tentar novamente</Button>}
+      {retry && (
+        <Button type="button" variant="outline" onClick={retry}>
+          Tentar novamente
+        </Button>
+      )}
     </div>
   )
 }

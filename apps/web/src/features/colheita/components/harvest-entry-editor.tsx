@@ -12,11 +12,14 @@ type Props = { entry: HarvestEntry; onSaved: (entry: HarvestEntry) => void; onCa
 
 export function HarvestEntryEditor({ entry, onSaved, onCancel }: Props) {
   // Somente tipos já fotografados aparecem na correção. Cada tarifa segue vinculada ao item.
-  const [draft, setDraft] = useState(() => Object.fromEntries(
-    entry.items.map((item) => [item.box_type, String(item.quantity)]),
-  ))
+  const [draft, setDraft] = useState(() =>
+    Object.fromEntries(entry.items.map((item) => [item.box_type, String(item.quantity)])),
+  )
   const update = useUpdateHarvestEntry()
-  const items = entry.items.map(({ box_type }) => ({ box_type, quantity: Number(draft[box_type]) }))
+  const items = entry.items.map(({ box_type }) => ({
+    box_type,
+    quantity: Number(draft[box_type]),
+  }))
   const valid = items.every(({ quantity }) => validQuantity(quantity))
   const changed = items.some((item, index) => item.quantity !== entry.items[index].quantity)
 
@@ -31,15 +34,24 @@ export function HarvestEntryEditor({ entry, onSaved, onCancel }: Props) {
     <form className="demo-form" onSubmit={submit} aria-label="Corrigir quantidades">
       <fieldset className="form-grid" disabled={update.isPending}>
         {entry.items.map(({ box_type, applied_rate_cents }) => (
-          <QuantityField key={box_type} type={box_type} value={draft[box_type]} required
+          <QuantityField
+            key={box_type}
+            type={box_type}
+            value={draft[box_type]}
+            required
             hint={`Tarifa aplicada: ${money(applied_rate_cents)}`}
-            onChange={(value) => setDraft({ ...draft, [box_type]: value })} />
+            onChange={(value) => setDraft({ ...draft, [box_type]: value })}
+          />
         ))}
       </fieldset>
       <RequestError error={update.error} />
       <FormActions>
-        <Button type="submit" disabled={!valid || !changed || update.isPending}>Salvar correção</Button>
-        <Button type="button" variant="outline" onClick={onCancel} disabled={update.isPending}>Cancelar</Button>
+        <Button type="submit" disabled={!valid || !changed || update.isPending}>
+          Salvar correção
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={update.isPending}>
+          Cancelar
+        </Button>
       </FormActions>
     </form>
   )

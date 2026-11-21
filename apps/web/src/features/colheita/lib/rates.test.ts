@@ -3,7 +3,11 @@ import { activeRate, money, parseCents } from './rates'
 import type { Rate } from '../types'
 
 const rate: Rate = {
-  id: 'a', box_type: 'normal', amount_cents: 501, valid_from: '2026-10-01', valid_until: '2026-11-01',
+  id: 'a',
+  box_type: 'normal',
+  amount_cents: 501,
+  valid_from: '2026-10-01',
+  valid_until: '2026-11-01',
 }
 
 describe('Tarifas', () => {
