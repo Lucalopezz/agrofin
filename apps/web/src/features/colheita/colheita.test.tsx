@@ -43,6 +43,7 @@ describe('Funcionários ativos na colheita', () => {
         { id: employeeId, name: 'Maria Silva', active: true },
         { id: otherEmployeeId, name: 'Maria Silva', active: true },
       ]))
+      .mockResolvedValueOnce(response(200, []))
     renderHarvest()
 
     const select = await screen.findByRole('combobox', { name: 'Funcionário' })
@@ -62,7 +63,7 @@ describe('Funcionários ativos na colheita', () => {
     expect(save).toBeEnabled()
     fireEvent.click(save)
     expect(await screen.findByText(/Lançamento incluído nesta demonstração/)).toBeVisible()
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
   it('oferece acesso ao cadastro quando a colheita não tem funcionários ativos', async () => {

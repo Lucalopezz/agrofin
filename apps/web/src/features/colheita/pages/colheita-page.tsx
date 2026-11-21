@@ -1,3 +1,4 @@
+import { HarvestRates } from '../components/harvest-rates'
 import { useState } from 'react'
 import { PageHeading } from '@/features/painel/components/page-ui'
 import { HarvestDemoForm } from '../components/harvest-demo-form'
@@ -25,6 +26,7 @@ export function ColheitaPage({ onOpenEmployees }: { onOpenEmployees: () => void 
           onSave={(record) => setRows((current) => [record, ...current])}
         />
       </div>
+      <HarvestRates />
       <HarvestDemoHistory rows={rows} />
     </>
   )
