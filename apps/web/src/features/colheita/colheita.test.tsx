@@ -169,6 +169,64 @@ describe('Tarifas e colheitas', () => {
     ))
   })
 
+  it('edita só quantidades dos tipos originais e recarrega a tarifa fotografada', async () => {
+    let saved = entry
+    const fetchMock = openPage((path, init) => {
+      if (path.startsWith('/harvest-entries?')) return json([saved])
+      if (init.method === 'PATCH') {
+        saved = { ...entry, items: [{ ...entry.items[0], quantity: 3 }] }
+        return json(saved)
+      }
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Corrigir quantidades' }))
+    const editor = within(screen.getByRole('form', { name: 'Corrigir quantidades' }))
+    expect(editor.queryByLabelText(/Caixas de moagem/)).not.toBeInTheDocument()
+    expect(editor.getByText('Tarifa aplicada: R$ 5,00')).toBeVisible()
+    const field = editor.getByLabelText(/Caixas normais/)
+    const save = editor.getByRole('button', { name: 'Salvar correção' })
+    expect(save).toBeDisabled()
+    fireEvent.change(field, { target: { value: '0' } })
+    expect(save).toBeDisabled()
+    fireEvent.change(field, { target: { value: '3' } })
+    fireEvent.click(save)
+    expect(await screen.findByText('Quantidades atualizadas. Valor devido: R$ 15,00.')).toBeVisible()
+    expect(screen.getByText('Total devido: R$ 15,00')).toBeVisible()
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/harvest-entries/entry', expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ items: [{ box_type: 'normal', quantity: 3 }] }),
+    }))
+  })
+
+  it('preserva histórico e rascunho quando o servidor bloqueia a correção por pagamento', async () => {
+    const conflict = 'A alteração afetaria um período já pago ou reduziria o devido abaixo do valor pago'
+    openPage((path, init) => {
+      if (path.startsWith('/harvest-entries?')) return json([entry])
+      if (init.method === 'PATCH') return json({ error: conflict }, 409)
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Corrigir quantidades' }))
+    const editor = within(screen.getByRole('form', { name: 'Corrigir quantidades' }))
+    const quantity = editor.getByLabelText(/Caixas normais/)
+    fireEvent.change(quantity, { target: { value: '1' } })
+    fireEvent.click(editor.getByRole('button', { name: 'Salvar correção' }))
+    expect(await editor.findByRole('alert')).toHaveTextContent(conflict)
+    expect(quantity).toHaveValue(1)
+    expect(screen.getByText('Total devido: R$ 10,00')).toBeVisible()
+    fireEvent.click(editor.getByRole('button', { name: 'Cancelar' }))
+    expect(screen.queryByRole('form', { name: 'Corrigir quantidades' })).not.toBeInTheDocument()
+  })
+
+  it.each(['/harvest-rates', '/harvest-entries?'])(
+    'revalida a sessão após 401 na consulta %s',
+    async (route) => {
+      let expired = false
+      openPage((path) => {
+        if (path.startsWith(route)) expired = true
+        if (expired) return json({ error: 'Sessão expirada' }, 401)
+      })
+      expect(await screen.findByRole('button', { name: 'Entrar' })).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'Histórico de colheitas' })).not.toBeInTheDocument()
+    },
+  )
+
   it('pede login se a sessão expirar durante uma escrita', async () => {
     let expired = false
     openPage((path, init) => {
