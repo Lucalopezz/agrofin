@@ -2,6 +2,7 @@
 package vendas
 
 import (
+	"math"
 	"time"
 
 	"github.com/lucalopezz/agrofin/apps/api/internal/financialcipher"
@@ -14,6 +15,15 @@ const (
 	SaleTypeMercado    SaleType = "mercado"
 	SaleTypeMoagem     SaleType = "moagem"
 )
+
+func (t SaleType) isValid() bool {
+	switch t {
+	case SaleTypeExportacao, SaleTypeMercado, SaleTypeMoagem:
+		return true
+	default:
+		return false
+	}
+}
 
 type Sale struct {
 	ID              string
@@ -28,6 +38,35 @@ type Sale struct {
 	NetCents        int64
 	ReceivedCents   int64
 	ReceivableCents int64
+}
+
+// addItem recebe um item com quantidade positiva e preço validado na entrada
+// ou autenticado pela cifra. As duas origens compartilham o cálculo do bruto.
+func (s *Sale) addItem(item SaleItem) error {
+	quantity := int64(item.Quantity)
+	if item.UnitPriceCents > math.MaxInt64/quantity {
+		return ErrSaleOverflow
+	}
+	item.LineAmountCents = item.UnitPriceCents * quantity
+	gross, err := addCents(s.GrossCents, item.LineAmountCents)
+	if err != nil {
+		return err
+	}
+	s.GrossCents = gross
+	s.Items = append(s.Items, item)
+	return nil
+}
+
+func (s *Sale) applyDiscount(discount *SaleDiscount) error {
+	if discount != nil {
+		if discount.AmountCents > s.GrossCents {
+			return ErrDiscountExceedsGross
+		}
+		s.Discount = discount
+		s.DiscountCents = discount.AmountCents
+	}
+	s.NetCents = s.GrossCents - s.DiscountCents
+	return nil
 }
 
 type SaleItem struct {
@@ -117,7 +156,7 @@ type ProtectedSaleRecord struct {
 }
 
 func addCents(current, addition int64) (int64, error) {
-	if current < 0 || addition < 0 || current > int64(^uint64(0)>>1)-addition {
+	if current < 0 || addition < 0 || current > math.MaxInt64-addition {
 		return 0, ErrSaleOverflow
 	}
 	return current + addition, nil

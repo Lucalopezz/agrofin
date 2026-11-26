@@ -3,7 +3,6 @@ package vendas
 
 import (
 	"context"
-	"math"
 	"time"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
@@ -37,18 +36,24 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateSaleInp
 	if err := ctx.Err(); err != nil {
 		return Sale{}, err
 	}
-	// O request já validou classificações, valores, desconto e limites da soma.
+	// O request entrega os campos validados. O domínio calcula os totais
+	// e confere o desconto contra o bruto antes de preparar a persistência.
 	sale := Sale{UserID: userID, SoldAt: input.SoldAt, BuyerName: input.BuyerName, Notes: input.Notes}
 	for _, item := range input.Items {
-		line := int64(item.Quantity) * item.UnitPriceCents
-		sale.GrossCents += line
-		sale.Items = append(sale.Items, SaleItem{SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: item.UnitPriceCents, LineAmountCents: line})
+		err := sale.addItem(SaleItem{
+			SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: item.UnitPriceCents,
+		})
+		if err != nil {
+			return Sale{}, err
+		}
 	}
+	var discount *SaleDiscount
 	if input.Discount != nil {
-		sale.Discount = &SaleDiscount{Reason: input.Discount.Reason, AmountCents: input.Discount.AmountCents}
-		sale.DiscountCents = input.Discount.AmountCents
+		discount = &SaleDiscount{Reason: input.Discount.Reason, AmountCents: input.Discount.AmountCents}
 	}
-	sale.NetCents = sale.GrossCents - sale.DiscountCents
+	if err := sale.applyDiscount(discount); err != nil {
+		return Sale{}, err
+	}
 	sale.ReceivableCents = sale.NetCents
 	var err error
 	if s == nil || s.repo == nil || s.protector == nil {
@@ -200,41 +205,39 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 func (s *Service) openSoldSale(userID string, p ProtectedSale) (Sale, error) {
 	sale := Sale{ID: p.ID, UserID: userID, SoldAt: calendarDate.Normalize(p.SoldAt), BuyerName: p.BuyerName, Notes: p.Notes}
 	for _, item := range p.Items {
+		// A leitura do domínio entrega somente itens com classificação e
+		// quantidade válidas para o resumo e para a listagem de vendas.
+		if !item.SaleType.isValid() {
+			return Sale{}, ErrInvalidSaleType
+		}
+		if item.Quantity <= 0 {
+			return Sale{}, ErrInvalidProtectedSaleAmount
+		}
 		// Tipo e data fazem parte do contexto da cifra; repetir os valores aqui
 		// detecta troca de envelope entre itens ou vendas.
 		amount, err := s.protector.decrypt("agrofin.sale.unit-price.v1", userID, p.ID, item.ID, []string{string(item.SaleType), saleDateAttribute(sale.SoldAt)}, item.UnitPrice)
 		if err != nil {
 			return Sale{}, err
 		}
-		// Dados inválidos no banco não podem virar totais aparentemente válidos.
-		if item.Quantity <= 0 || amount <= 0 {
-			return Sale{}, ErrInvalidProtectedSaleAmount
-		}
-		// Calcula cada linha em centavos e soma com proteção contra estouro.
-		line, err := multiplyCents(amount, int64(item.Quantity))
+		err = sale.addItem(SaleItem{
+			ID: item.ID, SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: amount,
+		})
 		if err != nil {
 			return Sale{}, err
 		}
-		sale.GrossCents, err = addCents(sale.GrossCents, line)
-		if err != nil {
-			return Sale{}, err
-		}
-		sale.Items = append(sale.Items, SaleItem{ID: item.ID, SaleType: item.SaleType, Quantity: item.Quantity, UnitPriceCents: amount, LineAmountCents: line})
 	}
+	var discount *SaleDiscount
 	if p.Discount != nil {
 		// A justificativa também faz parte do contexto autenticado da cifra.
-		discount, err := s.protector.decrypt("agrofin.sale.discount.v1", userID, p.ID, p.Discount.ID, []string{saleDateAttribute(sale.SoldAt), p.Discount.Reason}, p.Discount.Amount)
+		amount, err := s.protector.decrypt("agrofin.sale.discount.v1", userID, p.ID, p.Discount.ID, []string{saleDateAttribute(sale.SoldAt), p.Discount.Reason}, p.Discount.Amount)
 		if err != nil {
 			return Sale{}, err
 		}
-		if discount > sale.GrossCents {
-			return Sale{}, ErrDiscountExceedsGross
-		}
-		sale.Discount = &SaleDiscount{ID: p.Discount.ID, Reason: p.Discount.Reason, AmountCents: discount}
-		sale.DiscountCents = discount
+		discount = &SaleDiscount{ID: p.Discount.ID, Reason: p.Discount.Reason, AmountCents: amount}
 	}
-	// O desconto define o líquido da venda no dia em que ela foi realizada.
-	sale.NetCents = sale.GrossCents - sale.DiscountCents
+	if err := sale.applyDiscount(discount); err != nil {
+		return Sale{}, err
+	}
 	return sale, nil
 }
 
@@ -250,14 +253,4 @@ func (s *Service) openReceipt(p ProtectedReceipt) (Receipt, error) {
 		return Receipt{}, err
 	}
 	return Receipt{ID: p.ID, UserID: p.UserID, SaleID: p.SaleID, ReceivedAt: p.ReceivedAt, AmountCents: amount}, nil
-}
-
-// multiplyCents calcula o total da linha sem permitir valores inválidos ou estouro de int64.
-func multiplyCents(unit, quantity int64) (int64, error) {
-	// Confere os operandos e o limite antes de multiplicar para evitar que um
-	// overflow em int64 transforme o valor da linha em um número incorreto.
-	if quantity <= 0 || unit <= 0 || unit > math.MaxInt64/quantity {
-		return 0, ErrSaleOverflow
-	}
-	return unit * quantity, nil
 }

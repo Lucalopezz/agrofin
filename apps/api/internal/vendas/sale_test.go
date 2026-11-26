@@ -2,6 +2,7 @@
 package vendas
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
@@ -17,14 +18,10 @@ func exampleSale() CreateSaleInput {
 }
 
 func TestNormalizeSale(t *testing.T) {
-	sale, err := normalizeSale(testOwner, exampleSale())
+	input, err := normalizeSale(testOwner, exampleSale())
 	require.NoError(t, err)
-	assert.EqualValues(t, 55000, sale.GrossCents)
-	assert.EqualValues(t, 2000, sale.DiscountCents)
-	assert.EqualValues(t, 53000, sale.NetCents)
-	assert.EqualValues(t, 0, sale.ReceivedCents)
-	assert.EqualValues(t, 53000, sale.ReceivableCents)
-	assert.Equal(t, "Desconto", sale.Discount.Reason)
+	require.NotNil(t, input.Discount)
+	assert.Equal(t, "Desconto", input.Discount.Reason)
 	cases := []struct {
 		name   string
 		change func(*CreateSaleInput)
@@ -37,8 +34,6 @@ func TestNormalizeSale(t *testing.T) {
 		{"quantidade zero", func(i *CreateSaleInput) { i.Items[0].Quantity = 0 }, ErrInvalidSaleQuantity},
 		{"preço zero", func(i *CreateSaleInput) { i.Items[0].UnitPriceCents = 0 }, ErrInvalidSalePrice},
 		{"desconto sem motivo", func(i *CreateSaleInput) { i.Discount.Reason = " " }, ErrInvalidSaleDiscount},
-		{"desconto maior que bruto", func(i *CreateSaleInput) { i.Discount.AmountCents = 55001 }, ErrDiscountExceedsGross},
-		{"estouro na multiplicação", func(i *CreateSaleInput) { i.Items[0].UnitPriceCents = math.MaxInt64 }, ErrSaleOverflow},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -50,4 +45,62 @@ func TestNormalizeSale(t *testing.T) {
 	}
 	_, err = normalizeSale("inválido", exampleSale())
 	assert.ErrorIs(t, err, ErrInvalidSaleOwner)
+}
+
+func TestCreateSaleRejectsInvalidTotals(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*CreateSaleInput)
+		want   error
+	}{
+		{"desconto maior que bruto", func(i *CreateSaleInput) { i.Discount.AmountCents = 55001 }, ErrDiscountExceedsGross},
+		{"estouro na multiplicação", func(i *CreateSaleInput) { i.Items[0].UnitPriceCents = math.MaxInt64 }, ErrSaleOverflow},
+		{
+			name: "estouro na soma",
+			change: func(i *CreateSaleInput) {
+				for index := range i.Items {
+					i.Items[index].Quantity = 1
+					i.Items[index].UnitPriceCents = math.MaxInt64/2 + 1
+				}
+			},
+			want: ErrSaleOverflow,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input := exampleSale()
+			tc.change(&input)
+			// Campos válidos seguem para o serviço, que confere os totais
+			// antes que seja necessário acessar o repositório ou a cifra.
+			input, err := normalizeSale(testOwner, input)
+			require.NoError(t, err)
+			_, err = NewService(nil, nil).Create(context.Background(), testOwner, input)
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
+}
+
+func TestOpenSoldSaleRejectsInvalidStoredItems(t *testing.T) {
+	service := NewService(nil, nil)
+	for _, tc := range []struct {
+		name string
+		item ProtectedSaleItem
+		want error
+	}{
+		{
+			name: "classificação inválida",
+			item: ProtectedSaleItem{SaleType: "normal", Quantity: 1},
+			want: ErrInvalidSaleType,
+		},
+		{
+			name: "quantidade zero",
+			item: ProtectedSaleItem{SaleType: SaleTypeMercado},
+			want: ErrInvalidProtectedSaleAmount,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// A venda deve rejeitar o item antes de tentar abrir o envelope.
+			_, err := service.openSoldSale(testOwner, ProtectedSale{Items: []ProtectedSaleItem{tc.item}})
+			assert.ErrorIs(t, err, tc.want)
+		})
+	}
 }

@@ -3,14 +3,14 @@ package vendas
 
 import (
 	"errors"
-	"github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
+	"net/http"
+	"net/url"
+	"strings"
+
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/httpjson"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/money"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
-	"net/http"
-	"net/url"
-	"strings"
 )
 
 type createSaleRequest struct {
@@ -61,15 +61,10 @@ func decodeCreateSaleRequest(w http.ResponseWriter, r *http.Request, userID stri
 		discount = &SaleDiscountInput{Reason: request.Discount.Reason, AmountCents: request.Discount.AmountCents}
 	}
 	input := CreateSaleInput{SoldAt: soldAt, BuyerName: request.BuyerName, Notes: request.Notes, Items: items, Discount: discount}
-	// Validamos a entrada antes do serviço; o cálculo no serviço monta a resposta.
-	sale, err := normalizeSale(userID, input)
+	input, err = normalizeSale(userID, input)
 	if err != nil {
 		writeSaleResponse(w, Sale{}, err)
 		return CreateSaleInput{}, false
-	}
-	input.BuyerName, input.Notes = sale.BuyerName, sale.Notes
-	if input.Discount != nil {
-		input.Discount.Reason = sale.Discount.Reason
 	}
 	return input, true
 }
@@ -132,59 +127,42 @@ func decodeSaleID(w http.ResponseWriter, r *http.Request) (string, bool) {
 	return id, true
 }
 
-func normalizeSale(userID string, input CreateSaleInput) (Sale, error) {
-	ownerID, err := uuid.Normalize(userID)
-	if err != nil {
-		return Sale{}, ErrInvalidSaleOwner
+func normalizeSale(userID string, input CreateSaleInput) (CreateSaleInput, error) {
+	if _, err := uuid.Normalize(userID); err != nil {
+		return CreateSaleInput{}, ErrInvalidSaleOwner
 	}
 	if input.SoldAt.IsZero() {
-		return Sale{}, ErrInvalidSaleDate
+		return CreateSaleInput{}, ErrInvalidSaleDate
 	}
 	if len(input.Items) == 0 {
-		return Sale{}, ErrInvalidSaleItems
+		return CreateSaleInput{}, ErrInvalidSaleItems
 	}
-	sale := Sale{UserID: ownerID, SoldAt: date.Normalize(input.SoldAt), BuyerName: strings.TrimSpace(input.BuyerName), Notes: strings.TrimSpace(input.Notes)}
+
+	input.BuyerName = strings.TrimSpace(input.BuyerName)
+	input.Notes = strings.TrimSpace(input.Notes)
 	seen := make(map[SaleType]struct{}, len(input.Items))
-	for _, in := range input.Items {
-		switch in.SaleType {
-		case SaleTypeExportacao, SaleTypeMercado, SaleTypeMoagem:
-		default:
-			return Sale{}, ErrInvalidSaleType
+	for _, item := range input.Items {
+		if !item.SaleType.isValid() {
+			return CreateSaleInput{}, ErrInvalidSaleType
 		}
-		if _, ok := seen[in.SaleType]; ok {
-			return Sale{}, ErrDuplicateSaleType
+		if _, ok := seen[item.SaleType]; ok {
+			return CreateSaleInput{}, ErrDuplicateSaleType
 		}
-		seen[in.SaleType] = struct{}{}
-		if in.Quantity <= 0 {
-			return Sale{}, ErrInvalidSaleQuantity
+		seen[item.SaleType] = struct{}{}
+		if item.Quantity <= 0 {
+			return CreateSaleInput{}, ErrInvalidSaleQuantity
 		}
-		if !money.IsPositiveCents(in.UnitPriceCents) {
-			return Sale{}, ErrInvalidSalePrice
+		if !money.IsPositiveCents(item.UnitPriceCents) {
+			return CreateSaleInput{}, ErrInvalidSalePrice
 		}
-		q := int64(in.Quantity)
-		if in.UnitPriceCents > int64(^uint64(0)>>1)/q {
-			return Sale{}, ErrSaleOverflow
-		}
-		line := in.UnitPriceCents * q
-		gross, err := addCents(sale.GrossCents, line)
-		if err != nil {
-			return Sale{}, err
-		}
-		sale.GrossCents = gross
-		sale.Items = append(sale.Items, SaleItem{SaleType: in.SaleType, Quantity: in.Quantity, UnitPriceCents: in.UnitPriceCents, LineAmountCents: line})
 	}
 	if input.Discount != nil {
-		reason := strings.TrimSpace(input.Discount.Reason)
-		if reason == "" || !money.IsPositiveCents(input.Discount.AmountCents) {
-			return Sale{}, ErrInvalidSaleDiscount
+		discount := *input.Discount
+		discount.Reason = strings.TrimSpace(discount.Reason)
+		if discount.Reason == "" || !money.IsPositiveCents(discount.AmountCents) {
+			return CreateSaleInput{}, ErrInvalidSaleDiscount
 		}
-		if input.Discount.AmountCents > sale.GrossCents {
-			return Sale{}, ErrDiscountExceedsGross
-		}
-		sale.Discount = &SaleDiscount{Reason: reason, AmountCents: input.Discount.AmountCents}
-		sale.DiscountCents = input.Discount.AmountCents
+		input.Discount = &discount
 	}
-	sale.NetCents = sale.GrossCents - sale.DiscountCents
-	sale.ReceivableCents = sale.NetCents
-	return sale, nil
+	return input, nil
 }
