@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/uuid"
 )
 
@@ -68,7 +67,7 @@ func (s *HarvestService) Update(ctx context.Context, userID, harvestID string, i
 	if err != nil {
 		return Harvest{}, err
 	}
-	current, err := s.openHarvestRecord(ownerID, stored)
+	current, err := s.openHarvestRecord(ctx, ownerID, stored)
 	if err != nil {
 		return Harvest{}, err
 	}
@@ -215,42 +214,10 @@ func (s *HarvestService) listRecords(ctx context.Context, userID string, period 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		protectedHarvest := record.Harvest
-		harvest := Harvest{
-			ID: protectedHarvest.ID, UserID: userID,
-			EmployeeID:  protectedHarvest.EmployeeID,
-			HarvestDate: calendarDate.Normalize(protectedHarvest.HarvestDate),
-			// Cria uma lista vazia
-			Items: make([]HarvestItem, 0, len(protectedHarvest.Items)),
-		}
-		// Para cada item de colheita da colheita protegida, adiciona à lista de itens do lançamento
-		for _, protectedItem := range protectedHarvest.Items {
-			harvest.Items = append(harvest.Items, HarvestItem{
-				BoxType: protectedItem.BoxType, Quantity: protectedItem.Quantity,
-			})
-		}
-		// Validar antes de abrir envelopes evita tratar metadados fora do domínio
-		// como contexto confiável para a autenticação da tarifa aplicada.
-		harvest, err = normalizeHarvest(harvest)
+		harvest, err := s.openHarvestRecord(ctx, userID, record)
 		if err != nil {
 			return nil, err
 		}
-		// Para cada item de colheita montado, descriptografa o amount
-		for index, protectedItem := range protectedHarvest.Items {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			amountCents, err := s.protector.DecryptHarvestItemRate(
-				userID, harvest.ID, harvest.EmployeeID, harvest.HarvestDate,
-				harvest.Items[index].BoxType, harvest.Items[index].Quantity, protectedItem.AppliedAmount,
-			)
-			if err != nil {
-				return nil, err
-			}
-			// Atualiza o item com o valor descriptografado
-			harvest.Items[index].AppliedRateCents = amountCents
-		}
-		// Adiciona o lançamento completo à lista de resultados
 		results = append(results, harvestReadRecord{Harvest: harvest, EmployeeName: record.EmployeeName})
 	}
 	if err := ctx.Err(); err != nil {
@@ -259,11 +226,13 @@ func (s *HarvestService) listRecords(ctx context.Context, userID string, period 
 	return results, nil
 }
 
-func (s *HarvestService) openHarvestRecord(userID string, record ProtectedHarvestRecord) (Harvest, error) {
+// openHarvestRecord compartilha a validação dos dados persistidos entre a
+// leitura do histórico, o resumo e a edição.
+func (s *HarvestService) openHarvestRecord(ctx context.Context, userID string, record ProtectedHarvestRecord) (Harvest, error) {
 	protected := record.Harvest
 	harvest := Harvest{
 		ID: protected.ID, UserID: userID, EmployeeID: protected.EmployeeID,
-		HarvestDate: calendarDate.Normalize(protected.HarvestDate),
+		HarvestDate: protected.HarvestDate,
 		Items:       make([]HarvestItem, 0, len(protected.Items)),
 	}
 	for _, item := range protected.Items {
@@ -274,13 +243,19 @@ func (s *HarvestService) openHarvestRecord(userID string, record ProtectedHarves
 	if err != nil {
 		return Harvest{}, err
 	}
-	for index, item := range protected.Items {
-		amount, err := s.protector.DecryptHarvestItemRate(userID, harvest.ID, harvest.EmployeeID,
-			harvest.HarvestDate, item.BoxType, item.Quantity, item.AppliedAmount)
+	for index, protectedItem := range protected.Items {
+		if err := ctx.Err(); err != nil {
+			return Harvest{}, err
+		}
+		item := &harvest.Items[index]
+		amount, err := s.protector.DecryptHarvestItemRate(
+			userID, harvest.ID, harvest.EmployeeID, harvest.HarvestDate,
+			item.BoxType, item.Quantity, protectedItem.AppliedAmount,
+		)
 		if err != nil {
 			return Harvest{}, err
 		}
-		harvest.Items[index].AppliedRateCents = amount
+		item.AppliedRateCents = amount
 	}
 	return harvest, nil
 }
@@ -292,8 +267,6 @@ func (s *HarvestService) Summarize(ctx context.Context, userID string, period Ha
 	if err != nil {
 		return nil, err
 	}
-	// Praticamente a mesma lógica da função acima,
-	// mas aqui faz a conta por funcionário
 	byEmployee := make(map[string]HarvestSummary)
 	for _, record := range records {
 		if err := ctx.Err(); err != nil {
@@ -309,13 +282,8 @@ func (s *HarvestService) Summarize(ctx context.Context, userID string, period Ha
 				return nil, err
 			}
 			quantity := int64(item.Quantity)
-			if quantity <= 0 {
-				return nil, ErrInvalidHarvestQuantity
-			}
-			if item.AppliedRateCents <= 0 {
-				return nil, ErrInvalidProtectedRateAmount
-			}
-			// Evitar overflow antes da multiplicação mantém os centavos corretos em int64.
+			// O lançamento aberto já tem quantidade válida e tarifa positiva.
+			// Aqui verificamos o limite da multiplicação em int64.
 			if item.AppliedRateCents > math.MaxInt64/quantity {
 				return nil, ErrHarvestSummaryOverflow
 			}
@@ -332,8 +300,6 @@ func (s *HarvestService) Summarize(ctx context.Context, userID string, period Ha
 				if err == nil {
 					summary.MillingAmountCents, err = addHarvestSummaryValue(summary.MillingAmountCents, amount)
 				}
-			default:
-				return nil, ErrInvalidBoxType
 			}
 			if err != nil {
 				return nil, err
@@ -364,7 +330,7 @@ func (s *HarvestService) Summarize(ctx context.Context, userID string, period Ha
 }
 
 func addHarvestSummaryValue(current, addition int64) (int64, error) {
-	if current < 0 || addition < 0 || current > math.MaxInt64-addition {
+	if current > math.MaxInt64-addition {
 		return 0, ErrHarvestSummaryOverflow
 	}
 	return current + addition, nil

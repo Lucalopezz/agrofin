@@ -101,3 +101,23 @@ func TestHarvestServiceCreateGeneratesIDBeforeProtectingItems(t *testing.T) {
 	require.Len(t, got.Items, 1)
 	assert.EqualValues(t, 650, got.Items[0].AppliedRateCents)
 }
+
+func TestHarvestServiceSummarizeRejectsInvalidStoredQuantity(t *testing.T) {
+	day := time.Date(2026, time.November, 6, 0, 0, 0, 0, time.UTC)
+	repo := harvestRepositoryStub{
+		list: func(context.Context, string, HarvestPeriod) ([]ProtectedHarvestRecord, error) {
+			return []ProtectedHarvestRecord{{
+				Harvest: ProtectedHarvest{
+					EmployeeID:  "00000000-0000-4000-8000-000000000001",
+					HarvestDate: day,
+					Items:       []ProtectedHarvestItem{{BoxType: BoxTypeNormal, Quantity: 0}},
+				},
+			}}, nil
+		},
+	}
+
+	// A abertura do lançamento rejeita a quantidade antes da cifra e da soma.
+	service := NewHarvestService(repo, nil)
+	_, err := service.Summarize(context.Background(), "user-a", HarvestPeriod{StartDate: day, EndDate: day})
+	assert.ErrorIs(t, err, ErrInvalidHarvestQuantity)
+}
