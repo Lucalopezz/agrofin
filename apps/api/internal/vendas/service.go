@@ -14,6 +14,8 @@ type saleRepository interface {
 	CreateSale(context.Context, ProtectedSale) error
 	GetSale(context.Context, string, string) (ProtectedSaleRecord, error)
 	ListSales(context.Context, string, time.Time, time.Time) ([]ProtectedSaleRecord, error)
+	ListSoldSales(context.Context, string, time.Time, time.Time) ([]ProtectedSaleRecord, error)
+	ListReceiptsByReceivedAt(context.Context, string, time.Time, time.Time) ([]ProtectedReceiptRecord, error)
 	withSaleReceiptLock(context.Context, string, string, func(receiptTx) error) error
 }
 
@@ -171,7 +173,31 @@ func (s *Service) Receive(ctx context.Context, userID string, input CreateReceip
 // openSale abre os valores protegidos e recompõe os totais para devolver a venda legível.
 // A consulta já foi limitada ao dono no repositório; o userID também vincula a decifra.
 func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, error) {
-	p := record.Sale
+	sale, err := s.openSoldSale(userID, record.Sale)
+	if err != nil {
+		return Sale{}, err
+	}
+	for _, p := range record.Receipts {
+		// Abre cada recebimento para somar somente valores conferidos pela cifra.
+		receipt, err := s.openReceipt(p)
+		if err != nil {
+			return Sale{}, err
+		}
+		sale.ReceivedCents, err = addCents(sale.ReceivedCents, receipt.AmountCents)
+		if err != nil {
+			return Sale{}, err
+		}
+	}
+	// Dados protegidos inconsistentes não podem gerar saldo negativo.
+	if sale.ReceivedCents > sale.NetCents {
+		return Sale{}, ErrReceiptExceedsBalance
+	}
+	sale.ReceivableCents = sale.NetCents - sale.ReceivedCents
+	return sale, nil
+}
+
+// openSoldSale compartilha o cálculo do vendido entre a listagem e os relatórios.
+func (s *Service) openSoldSale(userID string, p ProtectedSale) (Sale, error) {
 	sale := Sale{ID: p.ID, UserID: userID, SoldAt: calendarDate.Normalize(p.SoldAt), BuyerName: p.BuyerName, Notes: p.Notes}
 	for _, item := range p.Items {
 		// Tipo e data fazem parte do contexto da cifra; repetir os valores aqui
@@ -207,25 +233,8 @@ func (s *Service) openSale(userID string, record ProtectedSaleRecord) (Sale, err
 		sale.Discount = &SaleDiscount{ID: p.Discount.ID, Reason: p.Discount.Reason, AmountCents: discount}
 		sale.DiscountCents = discount
 	}
-	// Desconto reduz o valor vendido; recebimentos são eventos separados e
-	// entram no cálculo do saldo logo abaixo.
+	// O desconto define o líquido da venda no dia em que ela foi realizada.
 	sale.NetCents = sale.GrossCents - sale.DiscountCents
-	for _, p := range record.Receipts {
-		// Abre cada recebimento para somar somente valores conferidos pela cifra.
-		receipt, err := s.openReceipt(p)
-		if err != nil {
-			return Sale{}, err
-		}
-		sale.ReceivedCents, err = addCents(sale.ReceivedCents, receipt.AmountCents)
-		if err != nil {
-			return Sale{}, err
-		}
-	}
-	// Dados protegidos inconsistentes não podem gerar saldo negativo.
-	if sale.ReceivedCents > sale.NetCents {
-		return Sale{}, ErrReceiptExceedsBalance
-	}
-	sale.ReceivableCents = sale.NetCents - sale.ReceivedCents
 	return sale, nil
 }
 

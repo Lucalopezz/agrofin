@@ -45,6 +45,17 @@ func (r *Repository) CreateSale(ctx context.Context, sale ProtectedSale) error {
 }
 
 func (r *Repository) ListSales(ctx context.Context, userID string, start, end time.Time) ([]ProtectedSaleRecord, error) {
+	return r.listSales(ctx, userID, start, end, r.GetSale)
+}
+
+func (r *Repository) ListSoldSales(ctx context.Context, userID string, start, end time.Time) ([]ProtectedSaleRecord, error) {
+	return r.listSales(ctx, userID, start, end, r.getSoldSale)
+}
+
+func (r *Repository) listSales(
+	ctx context.Context, userID string, start, end time.Time,
+	loadSale func(context.Context, string, string) (ProtectedSaleRecord, error),
+) ([]ProtectedSaleRecord, error) {
 	rows, err := r.db.Query(ctx, `SELECT id::text,sold_at,COALESCE(buyer_name,''),COALESCE(notes,'') FROM sales WHERE user_id=$1 AND sold_at >= $2::date AND sold_at <= $3::date ORDER BY sold_at DESC,created_at DESC,id DESC`, userID, start, end)
 	if err != nil {
 		return nil, fmt.Errorf("listar vendas: %w", err)
@@ -70,7 +81,7 @@ func (r *Repository) ListSales(ctx context.Context, userID string, start, end ti
 	}
 	result := make([]ProtectedSaleRecord, 0, len(headers))
 	for _, h := range headers {
-		record, err := r.getSale(ctx, userID, h.id)
+		record, err := loadSale(ctx, userID, h.id)
 		if err != nil {
 			return nil, err
 		}
@@ -83,10 +94,15 @@ func (r *Repository) ListSales(ctx context.Context, userID string, start, end ti
 }
 
 func (r *Repository) GetSale(ctx context.Context, userID, saleID string) (ProtectedSaleRecord, error) {
-	return r.getSale(ctx, userID, saleID)
+	record, err := r.getSoldSale(ctx, userID, saleID)
+	if err != nil {
+		return ProtectedSaleRecord{}, err
+	}
+	record.Receipts, err = listReceiptsTx(ctx, r.db, userID, saleID)
+	return record, err
 }
 
-func (r *Repository) getSale(ctx context.Context, userID, saleID string) (ProtectedSaleRecord, error) {
+func (r *Repository) getSoldSale(ctx context.Context, userID, saleID string) (ProtectedSaleRecord, error) {
 	var record ProtectedSaleRecord
 	var sold time.Time
 	err := r.db.QueryRow(ctx, `SELECT sold_at,COALESCE(buyer_name,''),COALESCE(notes,'') FROM sales WHERE user_id=$1 AND id=$2`, userID, saleID).Scan(&sold, &record.Sale.BuyerName, &record.Sale.Notes)
@@ -125,34 +141,7 @@ func (r *Repository) getSale(ctx context.Context, userID, saleID string) (Protec
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return ProtectedSaleRecord{}, fmt.Errorf("consultar desconto protegido: %w", err)
 	}
-	receipts, err := r.listReceipts(ctx, userID, saleID)
-	if err != nil {
-		return ProtectedSaleRecord{}, err
-	}
-	record.Receipts = receipts
 	return record, nil
-}
-
-func (r *Repository) listReceipts(ctx context.Context, userID, saleID string) ([]ProtectedReceipt, error) {
-	rows, err := r.db.Query(ctx, `SELECT id::text,received_at,amount_ciphertext,amount_nonce,amount_key_version FROM sale_receipts WHERE user_id=$1 AND sale_id=$2 ORDER BY received_at,id`, userID, saleID)
-	if err != nil {
-		return nil, fmt.Errorf("listar recebimentos protegidos: %w", err)
-	}
-	defer rows.Close()
-	out := make([]ProtectedReceipt, 0)
-	for rows.Next() {
-		var p ProtectedReceipt
-		if err := rows.Scan(&p.ID, &p.ReceivedAt, &p.Amount.Ciphertext, &p.Amount.Nonce, &p.Amount.KeyVersion); err != nil {
-			return nil, fmt.Errorf("ler recebimento protegido: %w", err)
-		}
-		p.UserID = userID
-		p.SaleID = saleID
-		out = append(out, p)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("listar recebimentos protegidos: %w", err)
-	}
-	return out, nil
 }
 
 type receiptTx interface {
