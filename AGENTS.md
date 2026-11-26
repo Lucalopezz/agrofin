@@ -66,6 +66,7 @@ Não configurar deploy só porque uma skill existe. O primeiro passo de implemen
 - Explique decisões importantes de Go e seus trade-offs: este também é um projeto de estudo.
 - Preserve alterações já feitas pelo usuário. Atualize a documentação quando o comportamento implementado divergir do plano e distinga claramente proposta de funcionalidade entregue.
 - Ao criar commits, use Conventional Commits com mensagem em pt-BR, como `feat:`, `fix:` ou `refact:`.
+- Faça commits granulares, com uma mudança coesa e revisável por vez. Antes de commitar uma entrega ampla, revise o diff, separe os blocos por intenção e confira o conteúdo preparado para cada commit. Por exemplo, separe a consulta de dados, a integração das telas e as mudanças independentes de configuração. Mantenha com cada bloco os testes diretamente ligados a ele. Uma entrega com vários blocos deve ser publicada em vários commits, mesmo quando forem enviados juntos.
 
 ## formatação do código
 
