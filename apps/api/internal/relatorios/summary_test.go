@@ -1,4 +1,4 @@
-// Testa o arredondamento da média e a janela de datas do caixa.
+// Testa a janela de caixa, o arredondamento e os limites dos totais.
 package relatorios
 
 import (
@@ -41,4 +41,16 @@ func TestCashWindowOnSkippedMidnight(t *testing.T) {
 	start, end := (Period{StartDate: day, EndDate: day}).cashWindow(location)
 	assert.Equal(t, "2018-11-04T03:00:00Z", start.Format(time.RFC3339))
 	assert.Equal(t, 23*time.Hour, end.Sub(start))
+}
+
+func TestTotalsKeepAmountsExactlyRepresentableInJSON(t *testing.T) {
+	var sum totals
+	total := maxExactJSONInteger - 1
+	sum.add(&total, 1)
+	require.NoError(t, sum.err)
+	assert.Equal(t, maxExactJSONInteger, total)
+
+	sum.add(&total, 1)
+	require.ErrorIs(t, sum.err, errInvalidTotal)
+	assert.Equal(t, maxExactJSONInteger, total)
 }

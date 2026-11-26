@@ -94,10 +94,7 @@ func Summarize(
 		sum.add(&result.Sales.NetCents, sale.NetCents)
 		for _, item := range sale.Items {
 			key := string(item.SaleType)
-			count, known := result.Sales.BoxesByType[key]
-			if !known {
-				return Summary{}, errors.New("relatorios: classificação de venda inválida")
-			}
+			count := result.Sales.BoxesByType[key]
 			sum.add(&count, int64(item.Quantity))
 			result.Sales.BoxesByType[key] = count
 			sum.add(&result.Sales.TotalBoxes, int64(item.Quantity))
@@ -144,13 +141,14 @@ func averagePrice(net, boxes int64) *int64 {
 // O limite mantém os números JSON exatos também no cliente JavaScript.
 const maxExactJSONInteger int64 = 1<<53 - 1
 
-var errInvalidTotal = errors.New("relatorios: valor inválido ou acima do limite do resumo")
+var errInvalidTotal = errors.New("relatorios: valor acima do limite do resumo")
 
 // totals sinaliza quando uma soma não pode ser usada no resultado.
 type totals struct{ err error }
 
+// add recebe parcelas não negativas dos domínios e verifica o limite do total.
 func (t *totals) add(total *int64, amount int64) {
-	if amount < 0 || amount > maxExactJSONInteger-*total {
+	if amount > maxExactJSONInteger-*total {
 		t.err = errInvalidTotal
 		return
 	}
