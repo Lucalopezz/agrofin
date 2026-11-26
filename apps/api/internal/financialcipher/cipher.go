@@ -181,6 +181,7 @@ func (c *Cipher[P]) Encrypt(context Context[P], amountCents int64) (Amount[P], e
 // Decrypt seleciona a chave pela versão do envelope, reconstrói o AAD e só devolve
 // centavos depois que GCM valida a tag. Uma troca de contexto ou qualquer alteração
 // nos bytes protegidos resulta em ErrInvalidProtected, sem expor o motivo interno.
+// Em caso de sucesso, devolve centavos estritamente positivos em int64.
 // Os bytes em claro são apagados depois da conversão para o inteiro do domínio.
 func (c *Cipher[P]) Decrypt(context Context[P], amount Amount[P]) (int64, error) {
 	aead, err := c.aeadFor(amount)

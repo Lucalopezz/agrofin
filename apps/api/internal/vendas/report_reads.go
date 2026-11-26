@@ -83,9 +83,6 @@ func (s *Service) ListReceived(ctx context.Context, userID string, start, end ti
 		if err != nil {
 			return nil, err
 		}
-		if receipt.AmountCents <= 0 {
-			return nil, ErrInvalidProtectedSaleAmount
-		}
 		result = append(result, ReceiptRecord{Receipt: receipt, SoldAt: record.SoldAt})
 	}
 	return result, ctx.Err()

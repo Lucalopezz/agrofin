@@ -46,10 +46,7 @@ func (s *PayrollService) Create(ctx context.Context, userID string, input Create
 			if err != nil {
 				return err
 			}
-			dueAmount, err := dueAmountForEmployee(dueSummary, request.EmployeeID)
-			if err != nil {
-				return err
-			}
+			dueAmount := dueAmountForEmployee(dueSummary, request.EmployeeID)
 
 			previous, err := tx.ListPayments(ctx, request.EmployeeID, request.PeriodStart, request.PeriodEnd)
 			if err != nil {
@@ -133,17 +130,14 @@ func (s *PayrollService) summarizePayments(ctx context.Context, userID string, p
 	return byEmployee, nil
 }
 
-func dueAmountForEmployee(summary PeriodSummary, employeeID string) (int64, error) {
+func dueAmountForEmployee(summary PeriodSummary, employeeID string) int64 {
 	for _, employee := range summary.Employees {
 		if employee.EmployeeID != employeeID {
 			continue
 		}
-		if employee.DueAmountCents < 0 {
-			return 0, ErrInvalidPayrollAmount
-		}
-		return employee.DueAmountCents, nil
+		return employee.DueAmountCents
 	}
-	return 0, nil
+	return 0
 }
 
 func (s *PayrollService) sumProtectedPayments(ctx context.Context, payments []ProtectedPayment, userID string) (int64, error) {
@@ -199,9 +193,6 @@ func (s *PayrollService) openProtectedPayment(protected ProtectedPayment, expect
 	})
 	if err != nil {
 		return Payment{}, err
-	}
-	if amount <= 0 {
-		return Payment{}, ErrInvalidPaymentAmount
 	}
 	metadata.AmountCents = amount
 	return metadata, nil

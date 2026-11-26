@@ -65,7 +65,7 @@ func (s *PayrollService) Summarize(ctx context.Context, userID string, period Pe
 	for index := range dueSummary.Employees {
 		employee := &dueSummary.Employees[index]
 		paid := paidByEmployee[employee.EmployeeID]
-		if paid < 0 || paid > employee.DueAmountCents {
+		if paid > employee.DueAmountCents {
 			// Não limitamos o saldo a zero: pagar acima do devido indica histórico inconsistente.
 			return PeriodSummary{}, ErrInvalidPaymentBalance
 		}
@@ -125,10 +125,7 @@ func (s *PayrollService) CheckHarvestUpdate(ctx context.Context, current, update
 		if err != nil {
 			return err
 		}
-		due, err := dueAmountForEmployee(dueSummary, current.EmployeeID)
-		if err != nil {
-			return err
-		}
+		due := dueAmountForEmployee(dueSummary, current.EmployeeID)
 		if paid > due {
 			return ErrInvalidPaymentBalance
 		}
@@ -195,9 +192,6 @@ func (s *PayrollService) SummarizeDue(ctx context.Context, userID string, period
 
 	byEmployee := make(map[string]EmployeeSummary, len(harvests)+len(dailyWorks))
 	for _, harvest := range harvests {
-		if harvest.HarvestAmountCents < 0 {
-			return PeriodSummary{}, ErrInvalidPayrollAmount
-		}
 		byEmployee[harvest.EmployeeID] = EmployeeSummary{
 			EmployeeID: harvest.EmployeeID, EmployeeName: harvest.EmployeeName,
 			NormalBoxes: harvest.NormalBoxes, MillingBoxes: harvest.MillingBoxes,
@@ -208,9 +202,6 @@ func (s *PayrollService) SummarizeDue(ctx context.Context, userID string, period
 		}
 	}
 	for _, daily := range dailyWorks {
-		if daily.DailyWorkAmountCents < 0 {
-			return PeriodSummary{}, ErrInvalidPayrollAmount
-		}
 		summary, exists := byEmployee[daily.EmployeeID]
 		if !exists {
 			summary = EmployeeSummary{EmployeeID: daily.EmployeeID, EmployeeName: daily.EmployeeName}

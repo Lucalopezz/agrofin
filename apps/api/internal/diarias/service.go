@@ -171,11 +171,6 @@ func (s *Service) openWork(userID string, record ProtectedDailyWorkRecord) (Work
 	if err != nil {
 		return WorkRecord{}, err
 	}
-	// Valores não positivos violam a regra do domínio e não devem entrar
-	// silenciosamente no total mesmo se um envelope antigo tiver formato válido.
-	if amount <= 0 {
-		return WorkRecord{}, ErrInvalidDailyWorkAmount
-	}
 
 	return WorkRecord{DailyWork: DailyWork{
 		ID: work.ID, UserID: userID, EmployeeID: employeeID,
