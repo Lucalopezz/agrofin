@@ -62,4 +62,12 @@ Para conferir, cadastre um funcionário e execute **07.1**; depois desative-o co
 
 Com uma sessão ativa, envie **Manual - Gerenciar despesas → Cadastrar despesa**. O corpo contém `paid_at` em `AAAA-MM-DD`, `category`, `description` opcional e `amount_cents` positivo; `12345` representa R$ 123,45. Cada envio aceito cria uma despesa, sem chave de idempotência. Copie o ID para `expense_id` e consulte **07.8 - Listar despesas do período**, com limites inclusivos.
 
-Em **Manual - Gerenciar despesas**, a atualização por `PUT` substitui todos os campos do corpo e a exclusão por `DELETE` retorna `204`. Despesa de outra conta ou inexistente retorna `404`. Execute as operações manualmente e não execute a coleção inteira pelo runner: elas alteram dados persistidos. As despesas representam saídas já pagas; o painel consolidado de caixa ainda não está implementado.
+Em **Manual - Gerenciar despesas**, a atualização por `PUT` substitui todos os campos do corpo e a exclusão por `DELETE` retorna `204`. Despesa de outra conta ou inexistente retorna `404`. Execute as operações manualmente e não execute a coleção inteira pelo runner: elas alteram dados persistidos. As despesas representam saídas já pagas e entram no resumo de caixa.
+
+
+## Produção e caixa por período
+
+1. Faça login e ajuste `report_start_date` e `report_end_date` com datas em `AAAA-MM-DD`. Na pasta **Relatórios de produção e caixa**, envie **Consultar resumo de produção e caixa**. A consulta inclui os dois dias. Ela retorna `400` para datas inválidas, ausentes ou repetidas e `401` sem sessão.
+2. Na mesma pasta, abra as listas de vendas, recebimentos, pagamentos à equipe e diárias. Para comparar também as colheitas e despesas, ajuste as variáveis de **07.4** e **07.8** para as mesmas datas.
+3. Para conferir o caixa, registre em uma conta de teste uma venda com data anterior e um recebimento hoje. Consulte primeiro a data da venda e depois o dia do recebimento. O líquido vendido aparece no primeiro intervalo e o recebimento no segundo. Faça a mesma comparação entre o período trabalhado e a data de um pagamento parcial. Os instantes efetivos seguem o dia de `America/Sao_Paulo`.
+4. Some os recebimentos e subtraia os pagamentos à equipe e as despesas pagas. O resultado deve coincidir com `cash.balance_amount_cents`. Consulte um dia vazio para conferir totais zero e média `null`.

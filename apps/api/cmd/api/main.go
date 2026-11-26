@@ -133,6 +133,13 @@ func run() error {
 	payrollHandler := pagamentos.NewHandler(payrollService)
 	pagamentos.RegisterRoutes(apiMux, payrollHandler, sessionMiddleware.RequireSession)
 
+	if err := registerReports(apiMux, pool, reportCiphers{
+		harvest: rateCipher, dailyWork: dailyWorkCipher, payments: paymentCipher,
+		sales: saleCipher, expenses: expenseCipher,
+	}, payrollService, saleService, dailyWorkService, sessionMiddleware.RequireSession); err != nil {
+		return err
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle(apiPrefix+"/", http.StripPrefix(apiPrefix, apiMux))
 
