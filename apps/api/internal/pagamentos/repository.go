@@ -8,16 +8,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
 
 // Repository lê e grava pagamentos protegidos usando o pool compartilhado da API.
 type Repository struct {
-	pool *pgxpool.Pool
+	db postgres.Executor
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(db postgres.Executor) *Repository {
+	return &Repository{db: db}
 }
 
 type paymentTransaction interface {
@@ -36,10 +36,10 @@ func (r *Repository) withEmployeePaymentLock(
 	userID, employeeID string,
 	operation func(paymentTransaction) error,
 ) error {
-	if r == nil || r.pool == nil {
+	if r == nil || r.db == nil {
 		return ErrInvalidPaymentConfig
 	}
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar gravação do pagamento: %w", err)
 	}
@@ -78,10 +78,10 @@ func (r *Repository) withEmployeePaymentLock(
 // outro receiver e outra finalidade: aquele método filtra um único funcionário
 // e usa a transação que mantém o bloqueio durante a conferência do saldo.
 func (r *Repository) ListPayments(ctx context.Context, userID string, periodStart, periodEnd time.Time) ([]ProtectedPayment, error) {
-	if r == nil || r.pool == nil {
+	if r == nil || r.db == nil {
 		return nil, ErrInvalidPaymentConfig
 	}
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id::text, employee_id::text, period_start, period_end, paid_at,
 		       amount_ciphertext, amount_nonce, amount_key_version,
 		       COALESCE(notes, '')
@@ -112,10 +112,10 @@ func (r *Repository) ListPayments(ctx context.Context, userID string, periodStar
 
 // ListPaymentsCoveringDate localiza intervalos personalizados que incluem a data alterada.
 func (r *Repository) ListPaymentsCoveringDate(ctx context.Context, userID, employeeID string, date time.Time) ([]ProtectedPayment, error) {
-	if r == nil || r.pool == nil {
+	if r == nil || r.db == nil {
 		return nil, ErrInvalidPaymentConfig
 	}
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT id::text, employee_id::text, period_start, period_end, paid_at,
 		       amount_ciphertext, amount_nonce, amount_key_version,
 		       COALESCE(notes, '')

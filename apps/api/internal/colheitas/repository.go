@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
@@ -17,12 +17,12 @@ import (
 // Repository persiste e lê tarifas gerais usando o pool compartilhado da aplicação.
 // Na escrita, recebe os metadados validados e o valor já protegido pelo Service.
 type Repository struct {
-	pool *pgxpool.Pool
+	db postgres.Executor
 }
 
 // NewRepository não abre nem fecha conexões; quem criou o pool mantém seu ciclo de vida.
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(db postgres.Executor) *Repository {
+	return &Repository{db: db}
 }
 
 // HasRateOverlap consulta apenas o gerente, tipo e período validados pelo request.
@@ -41,7 +41,7 @@ func (r *Repository) HasRateOverlap(ctx context.Context, period RatePeriod) (boo
 	// A mesma representação da restrição do banco mantém início inclusivo e fim
 	// exclusivo. Um fim NULL abre o período; employee_id NULL restringe ao escopo geral.
 	var overlaps bool
-	err := r.pool.QueryRow(ctx, query, period.UserID, string(period.BoxType), period.ValidFrom, period.ValidUntil).Scan(&overlaps)
+	err := r.db.QueryRow(ctx, query, period.UserID, string(period.BoxType), period.ValidFrom, period.ValidUntil).Scan(&overlaps)
 	if err != nil {
 		return false, fmt.Errorf("consultar sobreposição de tarifa: %w", err)
 	}
@@ -50,7 +50,7 @@ func (r *Repository) HasRateOverlap(ctx context.Context, period RatePeriod) (boo
 
 // CreateRate grava a entidade protegida sem normalizar dados ou cifrar valores.
 func (r *Repository) CreateRate(ctx context.Context, rate ProtectedRate) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar criação de tarifa: %w", err)
 	}
@@ -109,7 +109,7 @@ func (r *Repository) ListRates(ctx context.Context, userID string) ([]ProtectedR
 		  AND employee_id IS NULL
 		ORDER BY valid_from DESC, box_type ASC, id ASC
 	`
-	rows, err := r.pool.Query(ctx, query, userID)
+	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("listar tarifas protegidas: %w", err)
 	}
@@ -143,7 +143,7 @@ func (r *Repository) ListRates(ctx context.Context, userID string) ([]ProtectedR
 // é repetida com bloqueio em CreateHarvest para continuar correta sob concorrência.
 func (r *Repository) CheckActiveEmployee(ctx context.Context, userID, employeeID string) error {
 	var active bool
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		SELECT active
 		FROM employees
 		WHERE user_id = $1 AND id = $2
@@ -176,7 +176,7 @@ func (r *Repository) RateForDate(ctx context.Context, userID string, boxType Box
 	var rate ProtectedRate
 	rate.UserID = userID
 	rate.BoxType = boxType
-	err := r.pool.QueryRow(ctx, query, userID, string(boxType), date).Scan(
+	err := r.db.QueryRow(ctx, query, userID, string(boxType), date).Scan(
 		&rate.ID, &rate.Amount.Ciphertext, &rate.Amount.Nonce,
 		&rate.Amount.KeyVersion, &rate.ValidFrom, &rate.ValidUntil,
 	)
@@ -192,7 +192,7 @@ func (r *Repository) RateForDate(ctx context.Context, userID string, boxType Box
 // CreateHarvest grava o agregado em uma única transação. O bloqueio compartilhado
 // mantém a leitura de active estável até que cabeçalho e itens estejam persistidos.
 func (r *Repository) CreateHarvest(ctx context.Context, harvest ProtectedHarvest) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar gravação da colheita: %w", err)
 	}
@@ -265,7 +265,7 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 		  AND h.harvest_date <= $3::date
 		ORDER BY h.harvest_date DESC, h.created_at DESC, h.id DESC, hi.box_type ASC
 	`
-	rows, err := r.pool.Query(ctx, query, userID, period.StartDate, period.EndDate)
+	rows, err := r.db.Query(ctx, query, userID, period.StartDate, period.EndDate)
 	if err != nil {
 		return nil, fmt.Errorf("listar lançamentos protegidos: %w", err)
 	}
@@ -311,7 +311,7 @@ func (r *Repository) ListHarvests(ctx context.Context, userID string, period Har
 
 // GetHarvest lê um lançamento completo somente quando pertence ao gerente autenticado.
 func (r *Repository) GetHarvest(ctx context.Context, userID, harvestID string) (ProtectedHarvestRecord, error) {
-	rows, err := r.pool.Query(ctx, `
+	rows, err := r.db.Query(ctx, `
 		SELECT h.id::text, h.employee_id::text, e.name, h.harvest_date,
 		       hi.box_type, hi.quantity, hi.applied_rate_ciphertext,
 		       hi.applied_rate_nonce, hi.applied_rate_key_version
@@ -352,7 +352,7 @@ func (r *Repository) GetHarvest(ctx context.Context, userID, harvestID string) (
 
 // UpdateHarvest troca os itens numa transação e mantém estável o funcionário até a validação da folha.
 func (r *Repository) UpdateHarvest(ctx context.Context, expected, harvest ProtectedHarvest, validate func() error) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar edição da colheita: %w", err)
 	}

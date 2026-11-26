@@ -8,23 +8,23 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 
 	calendarDate "github.com/lucalopezz/agrofin/apps/api/internal/platform/date"
 )
 
 // Repository grava lançamentos de diária usando o pool compartilhado da API.
 type Repository struct {
-	pool *pgxpool.Pool
+	db postgres.Executor
 }
 
-func NewRepository(pool *pgxpool.Pool) *Repository {
-	return &Repository{pool: pool}
+func NewRepository(db postgres.Executor) *Repository {
+	return &Repository{db: db}
 }
 
 func (r *Repository) CheckActiveEmployee(ctx context.Context, userID, employeeID string) error {
 	var active bool
-	err := r.pool.QueryRow(ctx, `
+	err := r.db.QueryRow(ctx, `
 		SELECT active
 		FROM employees
 		WHERE user_id = $1 AND id = $2
@@ -44,7 +44,7 @@ func (r *Repository) CheckActiveEmployee(ctx context.Context, userID, employeeID
 // CreateDailyWork revalida e bloqueia o funcionário na mesma transação da
 // inserção, evitando aceitar diária enquanto outra operação o desativa.
 func (r *Repository) CreateDailyWork(ctx context.Context, work ProtectedDailyWork) error {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("iniciar gravação da diária: %w", err)
 	}
@@ -102,7 +102,7 @@ func (r *Repository) ListDailyWorks(ctx context.Context, userID string, period D
 		  AND d.work_date <= $3::date
 		ORDER BY d.work_date DESC, d.created_at DESC, d.id DESC
 	`
-	rows, err := r.pool.Query(ctx, query, userID, period.StartDate, period.EndDate)
+	rows, err := r.db.Query(ctx, query, userID, period.StartDate, period.EndDate)
 	if err != nil {
 		return nil, fmt.Errorf("listar diárias protegidas: %w", err)
 	}

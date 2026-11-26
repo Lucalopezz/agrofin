@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -28,4 +30,13 @@ func Open(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	}
 
 	return pool, nil
+}
+
+// Executor permite executar as mesmas consultas no pool ou na transação de leitura
+// que mantém todas as fontes de um relatório na mesma visão do banco.
+type Executor interface {
+	Begin(context.Context) (pgx.Tx, error)
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+	QueryRow(context.Context, string, ...any) pgx.Row
 }

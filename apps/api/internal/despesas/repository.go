@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 )
 
-type Repository struct{ pool *pgxpool.Pool }
+type Repository struct{ db postgres.Executor }
 
-func NewRepository(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
+func NewRepository(db postgres.Executor) *Repository { return &Repository{db: db} }
 
 type rowScanner interface{ Scan(...any) error }
 
@@ -25,13 +25,13 @@ func scanExpense(row rowScanner, owner string) (protectedExpense, error) {
 
 func (r *Repository) Create(ctx context.Context, p protectedExpense) error {
 	e := p.Expense
-	_, err := r.pool.Exec(ctx, `INSERT INTO expenses(id,user_id,paid_at,category,description,amount_ciphertext,amount_nonce,amount_key_version) VALUES($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)`, e.ID, e.UserID, e.PaidAt, e.Category, e.Description, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion)
+	_, err := r.db.Exec(ctx, `INSERT INTO expenses(id,user_id,paid_at,category,description,amount_ciphertext,amount_nonce,amount_key_version) VALUES($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8)`, e.ID, e.UserID, e.PaidAt, e.Category, e.Description, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion)
 	return err
 }
 
 func (r *Repository) List(ctx context.Context, owner string, start, end time.Time) ([]protectedExpense, error) {
 	// Limites em UTC representam datas civis, sem depender do fuso configurado no PostgreSQL.
-	rows, err := r.pool.Query(ctx, `SELECT id::text,paid_at,category,COALESCE(description,''),amount_ciphertext,amount_nonce,amount_key_version FROM expenses WHERE user_id=$1 AND paid_at >= $2 AND paid_at < $3 ORDER BY paid_at DESC,created_at DESC,id DESC`, owner, start, end.AddDate(0, 0, 1))
+	rows, err := r.db.Query(ctx, `SELECT id::text,paid_at,category,COALESCE(description,''),amount_ciphertext,amount_nonce,amount_key_version FROM expenses WHERE user_id=$1 AND paid_at >= $2 AND paid_at < $3 ORDER BY paid_at DESC,created_at DESC,id DESC`, owner, start, end.AddDate(0, 0, 1))
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (r *Repository) List(ctx context.Context, owner string, start, end time.Tim
 
 func (r *Repository) Update(ctx context.Context, p protectedExpense) (protectedExpense, error) {
 	e := p.Expense
-	row := r.pool.QueryRow(ctx, `UPDATE expenses SET paid_at=$3,category=$4,description=NULLIF($5,''),amount_ciphertext=$6,amount_nonce=$7,amount_key_version=$8 WHERE user_id=$1 AND id=$2 RETURNING id::text,paid_at,category,COALESCE(description,''),amount_ciphertext,amount_nonce,amount_key_version`, e.UserID, e.ID, e.PaidAt, e.Category, e.Description, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion)
+	row := r.db.QueryRow(ctx, `UPDATE expenses SET paid_at=$3,category=$4,description=NULLIF($5,''),amount_ciphertext=$6,amount_nonce=$7,amount_key_version=$8 WHERE user_id=$1 AND id=$2 RETURNING id::text,paid_at,category,COALESCE(description,''),amount_ciphertext,amount_nonce,amount_key_version`, e.UserID, e.ID, e.PaidAt, e.Category, e.Description, p.Amount.Ciphertext, p.Amount.Nonce, p.Amount.KeyVersion)
 	saved, err := scanExpense(row, e.UserID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return protectedExpense{}, ErrNotFound
@@ -58,7 +58,7 @@ func (r *Repository) Update(ctx context.Context, p protectedExpense) (protectedE
 }
 
 func (r *Repository) Delete(ctx context.Context, owner, id string) error {
-	result, err := r.pool.Exec(ctx, `DELETE FROM expenses WHERE user_id=$1 AND id=$2`, owner, id)
+	result, err := r.db.Exec(ctx, `DELETE FROM expenses WHERE user_id=$1 AND id=$2`, owner, id)
 	if err != nil {
 		return err
 	}
