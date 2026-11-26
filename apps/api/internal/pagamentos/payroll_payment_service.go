@@ -17,6 +17,7 @@ type paymentCreatorRepository interface {
 		operation func(paymentTransaction) error,
 	) error
 	ListPayments(ctx context.Context, userID string, periodStart, periodEnd time.Time) ([]ProtectedPayment, error)
+	ListPaymentsByPaidAt(ctx context.Context, userID string, start, end time.Time) ([]ProtectedPaymentRecord, error)
 	ListPaymentsCoveringDate(ctx context.Context, userID, employeeID string, date time.Time) ([]ProtectedPayment, error)
 }
 
@@ -41,7 +42,7 @@ func (s *PayrollService) Create(ctx context.Context, userID string, input Create
 		func(tx paymentTransaction) error {
 			// O devido é recalculado depois do bloqueio do funcionário: agora colheitas
 			// podem ser editadas, então o total lido antes da transação poderia ficar obsoleto.
-			dueSummary, err := s.summarizeDue(ctx, request.UserID, request.inclusivePeriod())
+			dueSummary, err := s.SummarizeDue(ctx, request.UserID, request.inclusivePeriod())
 			if err != nil {
 				return err
 			}

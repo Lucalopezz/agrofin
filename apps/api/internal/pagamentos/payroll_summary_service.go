@@ -57,7 +57,7 @@ func (s *PayrollService) Summarize(ctx context.Context, userID string, period Pe
 	if err := ctx.Err(); err != nil {
 		return PeriodSummary{}, err
 	}
-	dueSummary, err := s.summarizeDue(ctx, userID, period)
+	dueSummary, err := s.SummarizeDue(ctx, userID, period)
 	if err != nil {
 		return PeriodSummary{}, err
 	}
@@ -121,7 +121,7 @@ func (s *PayrollService) CheckHarvestUpdate(ctx context.Context, current, update
 			return err
 		}
 		paid := paidByEmployee[current.EmployeeID]
-		dueSummary, err := s.summarizeDue(ctx, current.UserID, period)
+		dueSummary, err := s.SummarizeDue(ctx, current.UserID, period)
 		if err != nil {
 			return err
 		}
@@ -166,9 +166,12 @@ func harvestValue(harvest colheitas.Harvest) (int64, error) {
 	return total, nil
 }
 
-// summarizeDue calcula somente caixas e diárias para um período já normalizado.
+// SummarizeDue calcula somente caixas e diárias para um período já normalizado.
 // Create usa esse resultado antes de abrir a transação.
-func (s *PayrollService) summarizeDue(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
+func (s *PayrollService) SummarizeDue(ctx context.Context, userID string, period Period) (PeriodSummary, error) {
+	if s == nil || s.harvest == nil || s.daily == nil {
+		return PeriodSummary{}, ErrInvalidPayrollConfig
+	}
 	if err := ctx.Err(); err != nil {
 		return PeriodSummary{}, err
 	}

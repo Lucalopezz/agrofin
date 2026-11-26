@@ -36,6 +36,10 @@ func (emptyPaymentRepository) ListPayments(context.Context, string, time.Time, t
 	return []ProtectedPayment{}, nil
 }
 
+func (emptyPaymentRepository) ListPaymentsByPaidAt(context.Context, string, time.Time, time.Time) ([]ProtectedPaymentRecord, error) {
+	return nil, nil
+}
+
 func (emptyPaymentRepository) ListPaymentsCoveringDate(context.Context, string, string, time.Time) ([]ProtectedPayment, error) {
 	return []ProtectedPayment{}, nil
 }
