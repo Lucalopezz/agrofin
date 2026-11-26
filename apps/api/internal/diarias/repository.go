@@ -93,7 +93,7 @@ func (r *Repository) CreateDailyWork(ctx context.Context, work ProtectedDailyWor
 func (r *Repository) ListDailyWorks(ctx context.Context, userID string, period DailyWorkPeriod) ([]ProtectedDailyWorkRecord, error) {
 	const query = `
 		SELECT d.id::text, d.employee_id::text, e.name, d.work_date,
-		       d.amount_ciphertext, d.amount_nonce, d.amount_key_version
+		       d.amount_ciphertext, d.amount_nonce, d.amount_key_version, COALESCE(d.notes, '')
 		FROM daily_work d
 		JOIN employees e
 		  ON e.user_id = d.user_id AND e.id = d.employee_id
@@ -114,7 +114,7 @@ func (r *Repository) ListDailyWorks(ctx context.Context, userID string, period D
 		var work ProtectedDailyWork
 		err := rows.Scan(
 			&work.ID, &work.EmployeeID, &record.EmployeeName, &work.WorkDate,
-			&work.Amount.Ciphertext, &work.Amount.Nonce, &work.Amount.KeyVersion,
+			&work.Amount.Ciphertext, &work.Amount.Nonce, &work.Amount.KeyVersion, &work.Notes,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("ler diária protegida: %w", err)

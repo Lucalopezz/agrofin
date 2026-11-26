@@ -79,49 +79,14 @@ func (s *Service) Create(ctx context.Context, userID string, input CreateDailyWo
 // Summarize autentica os valores das diárias antes de agregá-los por funcionário.
 // O repositório restringe a leitura ao gerente e ao intervalo recebido.
 func (s *Service) Summarize(ctx context.Context, userID string, period DailyWorkPeriod) ([]DailyWorkSummary, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if s == nil || s.repo == nil || s.protector == nil {
-		return nil, ErrInvalidDailyWorkConfig
-	}
-
-	records, err := s.repo.ListDailyWorks(ctx, userID, period)
+	records, err := s.List(ctx, userID, period)
 	if err != nil {
 		return nil, err
 	}
 	byEmployee := make(map[string]DailyWorkSummary)
 	for _, record := range records {
-		// Uma consulta cancelada não pode parecer um resumo completo com apenas
-		// parte dos registros processados.
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		work := record.Work
-		// EmployeeID e WorkDate entram no AAD. Validá-los e normalizá-los antes
-		// da descriptografia garante que a leitura reconstrua o mesmo contexto usado na gravação.
-		employeeID, err := normalizeDailyWorkEmployeeID(work.EmployeeID)
-		if err != nil {
-			return nil, err
-		}
-		workDate := calendarDate.Normalize(work.WorkDate)
-		if workDate.IsZero() {
-			return nil, ErrInvalidDailyWorkDate
-		}
-		// A conta autenticada, não um valor vindo da linha, compõe o AAD usado
-		// para abrir o envelope; SQL já limitou a busca ao mesmo user_id.
-		amount, err := s.protector.DecryptDailyWorkAmount(
-			userID, work.ID, employeeID, workDate, work.Amount,
-		)
-		if err != nil {
-			return nil, err
-		}
-		// Valores não positivos violam a regra do domínio e não devem entrar
-		// silenciosamente no total mesmo se um envelope antigo tiver formato válido.
-		if amount <= 0 {
-			return nil, ErrInvalidDailyWorkAmount
-		}
-
+		employeeID := record.EmployeeID
+		amount := record.AmountCents
 		// O UUID agrupa os lançamentos da mesma pessoa mesmo quando existem
 		// homônimos; o nome vem do cadastro atual e serve apenas para exibição.
 		summary, exists := byEmployee[employeeID]
@@ -155,4 +120,65 @@ func (s *Service) Summarize(ctx context.Context, userID string, period DailyWork
 		return summaries[i].EmployeeID < summaries[j].EmployeeID
 	})
 	return summaries, nil
+}
+
+// WorkRecord associa a diária ao nome atual da pessoa que fez o trabalho.
+type WorkRecord struct {
+	DailyWork
+	EmployeeName string
+}
+
+// List abre as mesmas diárias usadas pelo resumo, para conferência do valor devido.
+func (s *Service) List(ctx context.Context, userID string, period DailyWorkPeriod) ([]WorkRecord, error) {
+	if s == nil || s.repo == nil || s.protector == nil {
+		return nil, ErrInvalidDailyWorkConfig
+	}
+	records, err := s.repo.ListDailyWorks(ctx, userID, period)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]WorkRecord, 0, len(records))
+	for _, record := range records {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		opened, err := s.openWork(userID, record)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, opened)
+	}
+	return result, ctx.Err()
+}
+
+func (s *Service) openWork(userID string, record ProtectedDailyWorkRecord) (WorkRecord, error) {
+	work := record.Work
+	// EmployeeID e WorkDate entram no AAD. Validá-los e normalizá-los antes
+	// da descriptografia garante que a leitura reconstrua o mesmo contexto usado na gravação.
+	employeeID, err := normalizeDailyWorkEmployeeID(work.EmployeeID)
+	if err != nil {
+		return WorkRecord{}, err
+	}
+	workDate := calendarDate.Normalize(work.WorkDate)
+	if workDate.IsZero() {
+		return WorkRecord{}, ErrInvalidDailyWorkDate
+	}
+	// A conta autenticada, não um valor vindo da linha, compõe o AAD usado
+	// para abrir o envelope; SQL já limitou a busca ao mesmo user_id.
+	amount, err := s.protector.DecryptDailyWorkAmount(
+		userID, work.ID, employeeID, workDate, work.Amount,
+	)
+	if err != nil {
+		return WorkRecord{}, err
+	}
+	// Valores não positivos violam a regra do domínio e não devem entrar
+	// silenciosamente no total mesmo se um envelope antigo tiver formato válido.
+	if amount <= 0 {
+		return WorkRecord{}, ErrInvalidDailyWorkAmount
+	}
+
+	return WorkRecord{DailyWork: DailyWork{
+		ID: work.ID, UserID: userID, EmployeeID: employeeID,
+		WorkDate: workDate, AmountCents: amount, Notes: work.Notes,
+	}, EmployeeName: record.EmployeeName}, nil
 }
