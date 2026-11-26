@@ -32,5 +32,8 @@ export function money(cents: number | bigint) {
   if (typeof cents === 'number' && !Number.isSafeInteger(cents))
     return 'Valor fora do limite de exibição'
   const value = BigInt(cents)
-  return `R$ ${(value / 100n).toLocaleString('pt-BR')},${String(value % 100n).padStart(2, '0')}`
+  // Mantém o sinal mesmo para saldos negativos com menos de um real.
+  const sign = value < 0n ? '-' : ''
+  const absolute = value < 0n ? -value : value
+  return `${sign}R$ ${(absolute / 100n).toLocaleString('pt-BR')},${String(absolute % 100n).padStart(2, '0')}`
 }

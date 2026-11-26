@@ -824,3 +824,34 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
   .landing-header nav { gap: 4px; }
   .navbar-user { display: none; }
 }
+
+.report-period-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.report-period-filter .form-field, .report-period-filter input { min-width: 0; width: 100%; }
+.report-period-error { grid-column: 1 / -1; }
+.report-sections, .report-values, .report-list { display: grid; gap: 8px; }
+.report-sections { gap: 16px; }
+.report-values > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5eae2;
+}
+.report-values dd { font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.report-disclosure { margin-top: 12px; }
+.report-disclosure > button { min-height: 44px; height: auto; white-space: normal; text-align: left; }
+.report-detail { margin-top: 12px; }
+.report-detail h3 { font-weight: 600; margin-bottom: 6px; }
+.report-list > li { display: grid; gap: 3px; padding: 8px 0; border-bottom: 1px solid #e5eae2; }
+.report-reference { overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .report-period-filter { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,6 +1,7 @@
 import { useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, type QueryFilters } from '@tanstack/react-query'
 import { useSession } from '@/features/auth/session-context'
+import { reportsKey } from '@/features/relatorios/hooks/use-period-summary'
 import { ApiError } from '@/shared/lib/api-client'
 import { harvestKey, type HarvestResource } from './use-harvest-query'
 
@@ -17,8 +18,10 @@ export function useHarvestWrite<TInput, TResult>(
     retry: false,
     onSuccess: async () => {
       const filters = { queryKey: harvestKey(user?.id, resource) }
-      await client.cancelQueries(filters)
-      await client.invalidateQueries(filters)
+      // Tarifas novas não mudam a tarifa fotografada nos lançamentos existentes.
+      const affected: QueryFilters[] = resource === 'entries' ? [filters, { queryKey: reportsKey(user?.id) }] : [filters]
+      await Promise.all(affected.map((filter) => client.cancelQueries(filter)))
+      await Promise.all(affected.map((filter) => client.invalidateQueries(filter)))
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 401) void refresh()

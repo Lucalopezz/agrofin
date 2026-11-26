@@ -231,7 +231,10 @@ describe('Funcionários no painel', () => {
       .mockResolvedValueOnce(response(204))
       .mockResolvedValueOnce(response(200, { authenticated: true }))
       .mockResolvedValueOnce(otherAccount)
-      .mockResolvedValueOnce(response(200, []))
+      // Após entrar, o Início consulta o resumo antes de abrir Funcionários.
+      .mockImplementation(async (url) => String(url).includes('/reports/period-summary?')
+        ? response(503)
+        : response(200, []))
     const { queryClient } = renderPanel()
 
     expect(await screen.findByText('Maria')).toBeVisible()

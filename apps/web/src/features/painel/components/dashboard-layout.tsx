@@ -59,7 +59,7 @@ export function DashboardLayout({
   logoutError,
   leaving,
 }: DashboardLayoutProps) {
-  const demo = page !== 'colheitas' && page !== 'funcionarios'
+  const demo = !['inicio', 'colheitas', 'funcionarios', 'relatorios'].includes(page)
   const groups = [...new Set(navigation.map((item) => item.group))]
   const active = navigation.find((item) => item.id === page)
 
