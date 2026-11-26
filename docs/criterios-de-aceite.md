@@ -195,7 +195,7 @@ Na coleção Postman v2.1, a consulta de período está em **07.7 - Listar venda
 - `POST /expenses` registra data de pagamento, categoria, descrição opcional e valor positivo em centavos. Cada envio cria uma despesa; não é exigida chave de idempotência.
 - `GET /expenses?start_date=AAAA-MM-DD&end_date=AAAA-MM-DD` lista despesas da conta no intervalo inclusivo; sem registros, retorna `[]`.
 - `PUT /expenses/{id}` substitui os dados editáveis. `DELETE /expenses/{id}` exclui o registro e retorna `204`; registro inexistente ou de outra conta retorna `404`.
-- Os valores são cifrados na aplicação. A atualização muda os dados considerados na consulta do período; a exclusão remove a despesa. Ainda não há histórico de edições nem painel consolidado.
+- Os valores são cifrados na aplicação. A atualização muda os dados considerados na consulta do período; a exclusão remove a despesa. O resumo usa os lançamentos atuais. O histórico de edições está pendente.
 
 ### HU-08, HU-09 e HU-10 — indicadores
 
@@ -204,6 +204,13 @@ Na coleção Postman v2.1, a consulta de período está em **07.7 - Listar venda
 - O painel distingue: **valor líquido vendido**, **valor recebido**, **valor devido aos funcionários** e **valor pago aos funcionários**.
 - O **saldo de caixa do período** usa apenas recebimentos e saídas efetivamente pagas no período. Esse número não é apresentado como lucro contábil.
 - O preço médio de venda por caixa informa se considera valor bruto ou líquido após descontos; no primeiro escopo, usar o líquido vendido dividido pelas caixas vendidas.
+
+### Consulta e conferência do resumo implementadas
+
+- `GET /reports/period-summary` exige sessão e recebe `start_date` e `end_date` inclusivos. Em um período vazio, as somas são zero e o preço médio é `null`.
+- Vendas seguem a data da venda. Colheitas e diárias seguem a data em que o trabalho foi realizado. Recebimentos e pagamentos à equipe usam seus instantes no fuso `America/Sao_Paulo`. Despesas seguem o dia informado no lançamento.
+- Relatórios permite abrir os lançamentos de origem e exportar os totais do mesmo intervalo em CSV. O Início mostra o resumo da semana.
+- A integração do pagamento de compras de insumos depende do fluxo de compra e estoque.
 
 ## Insumos e calendário
 

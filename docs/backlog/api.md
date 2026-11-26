@@ -14,46 +14,40 @@ O backlog acompanha o que está implementado na API Go e a ordem proposta para e
 - [x] **Despesas gerais pagas (HU-09, RF-11).** Cadastrar, listar por período, editar e excluir despesas com data de pagamento, categoria, valor e descrição opcional. O valor é cifrado. A edição e a exclusão já afetam os resultados da listagem. O histórico de alterações está pendente.
 - [x] **Base de proteção financeira (HU-16, RNF-04 a RNF-07).** A aplicação cifra tarifas, valores aplicados às colheitas, diárias, pagamentos, preços de venda, descontos, recebimentos e despesas antes da gravação. Os dados são filtrados por conta antes da leitura dos valores. O chaveiro e a versão ativa são fornecidos ao processo fora do banco.
 - [x] **Esquema inicial de insumos e auditoria.** Há migrações para insumos, compras, pagamentos de compras, pulverizações, movimentos de estoque e eventos de auditoria. A presença das tabelas cobre a preparação do esquema. Os fluxos de aplicação estão abaixo. [Migrações](../../apps/api/migrations)
+- [x] **Resumo de produção e caixa (HU-08 a HU-10, RF-12).** Consolida colheitas, vendas, descontos, preço médio líquido, devido à equipe, pagamentos, recebimentos e despesas pagas por período. As consultas de conferência preservam as datas de origem. [Contrato e conferência](../../apps/api/bruno/README.md#produção-e-caixa-por-período)
 
 ## Próximas entregas
 
-A integração Web pode começar pelo fechamento semanal, usando as rotas existentes. Nesta lista, a ordem prioriza entregar o painel sobre os lançamentos disponíveis e, em seguida, completar a rotina de insumos até o calendário. A compra paga entra nos indicadores quando sua origem financeira for implementada.
+O painel já consolida os lançamentos disponíveis. A compra paga entra nos indicadores quando sua origem financeira for implementada.
 
-### 1. Consolidar produção e caixa por período (HU-08 a HU-10, RF-12)
-
-- [ ] Definir o contrato do resumo com início e fim explícitos e isolamento por conta. Reaproveitar as regras de cálculo dos domínios existentes.
-- [ ] Consolidar caixas colhidas por tipo e funcionário, caixas vendidas por classificação, bruto, descontos, líquido vendido e preço médio líquido por caixa. Tratar período sem vendas e divisão por zero.
-- [ ] Expor remuneração devida e paga, recebimentos e despesas pagas separadamente. Calcular saldo de caixa com recebimentos e saídas efetivamente pagos no período. Cobrir vendas e pagamentos lançados em datas distintas do fato que lhes deu origem.
-- [ ] Conferir o resumo contra os lançamentos de origem e testar limites de datas, dados vazios, isolamento entre contas e o caso de pagamento parcial. Definir com a Web como abrir os detalhes que formam cada total.
-
-### 2. Cadastrar insumos e registrar compras com entrada em estoque (HU-09 e HU-11, RF-11, RF-13 e RF-14)
+### 1. Cadastrar insumos e registrar compras com entrada em estoque (HU-09 e HU-11, RF-11, RF-13 e RF-14)
 
 - [ ] Entregar cadastro, consulta e identificação de insumos por conta, com nome, categoria, unidade e observações.
 - [ ] Registrar compra com data, insumo, quantidade, unidade e custo cifrado. Gravar a entrada no estoque junto com a compra e expor o saldo para consulta.
-- [ ] Vincular a compra paga ao caixa uma única vez. Usar uma única origem financeira para o gasto e garantir que consultar ou consumir o estoque não gere outra despesa. Cobrir a inclusão da compra no painel do item 1.
+- [ ] Vincular a compra paga ao caixa uma única vez. Usar uma única origem financeira para o gasto e garantir que consultar ou consumir o estoque não gere outra despesa. Cobrir a inclusão da compra no resumo por período.
 - [ ] Proteger a compra e seus efeitos contra falha parcial e repetição da gravação. Validar com o cliente se existem compras a prazo e se há necessidade de conversões de unidade antes de definir esses contratos. [Modelo de dados](../modelo-de-dados.md)
 
-### 3. Registrar pulverização, baixar estoque e consultar histórico (HU-12 e HU-13, RF-15 e RF-16)
+### 2. Registrar pulverização, baixar estoque e consultar histórico (HU-12 e HU-13, RF-15 e RF-16)
 
 - [ ] Registrar data, observações, insumos e quantidades usadas. Consultar histórico por período e recuperar os detalhes de cada evento da conta.
 - [ ] Persistir evento, itens e baixas de estoque em conjunto. Testar integridade em caso de erro, repetição e operações concorrentes.
 - [ ] Suportar cadastro rápido no fluxo. Permitir saldo inicial informado ou estoque pendente de conferência quando o saldo anterior for desconhecido. Registrar o uso no histórico sem criar uma compra para justificá-lo.
-- [ ] Validar a relação entre as unidades de compra, saldo e uso conforme a decisão do item 2. Confirmar o comportamento de estoque conhecido insuficiente antes de fechar a regra.
+- [ ] Validar a relação entre as unidades de compra, saldo e uso conforme a decisão do cadastro de compras. Confirmar o comportamento de estoque conhecido insuficiente antes de fechar a regra.
 
-### 4. Disponibilizar os dados do calendário mensal (HU-14, RF-17)
+### 3. Disponibilizar os dados do calendário mensal (HU-14, RF-17)
 
 - [ ] Usar as pulverizações persistidas no histórico como fonte para o mês, com acesso ao detalhe de cada evento.
 - [ ] Definir com a Web onde obter os dados lunares, como aplicar o fuso da operação e se o horário de transição precisa ser exibido. Entregar o suporte na API se a fonte escolhida exigir processamento no servidor.
 - [ ] Conferir fase por dia e datas de transição, inclusive nos limites do mês e em horários que mudam de dia entre fusos.
 
-### 5. Fechar regras pendentes de venda e histórico financeiro
+### 4. Fechar regras pendentes de venda e histórico financeiro
 
 - [ ] Validar com o cliente a classificação enviada pelo barracão, vendas com múltiplos tipos e a ocorrência de pagamentos e recebimentos parciais. Os contratos atuais já aceitam esses casos.
 - [ ] Definir como corrigir venda após recebimento. Só então implementar o fluxo, com testes para líquido, saldo, recebimentos já registrados e impacto no caixa.
 - [ ] Definir o histórico de alterações financeiras a partir das exigências operacionais. A migração de auditoria existe e ainda precisa de integração aos fluxos escolhidos. Conferir se dados sensíveis do histórico usam o mesmo padrão de proteção.
 - [ ] Confirmar se o uso sem internet é necessário. Se for, definir com a Web as regras de sincronização, repetição de envios e conflitos antes de criar contratos novos.
 
-### 6. Validar publicação e recuperação (HU-16, RNF-05, RNF-06 e RNF-09)
+### 5. Validar publicação e recuperação (HU-16, RNF-05, RNF-06 e RNF-09)
 
 - [ ] Validar um protótipo React + Go sob a mesma origem na Vercel, conforme o [plano](../plano-de-implementacao.md). O protótipo pode ser antecipado para esclarecer a viabilidade do deploy. Conferir rotas, proxy, sessão, HTTPS, migrações e acesso ao PostgreSQL antes de definir a configuração final.
 - [ ] Definir o provedor de produção e como fornecer, versionar, rotacionar e recuperar chaves financeiras separadas do banco. Definir o controle operacional do volume de cifras por chave.
