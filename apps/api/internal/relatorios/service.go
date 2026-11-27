@@ -30,100 +30,144 @@ func Summarize(
 	ctx context.Context, userID string, period Period, location *time.Location,
 	payroll payrollReader, sales salesReader, expenses expenseReader,
 ) (Summary, error) {
-	result := Summary{
+	harvest, team, err := summarizeHarvestAndDue(ctx, userID, period, payroll)
+	if err != nil {
+		return Summary{}, err
+	}
+	sold, err := summarizeSales(ctx, userID, period, sales)
+	if err != nil {
+		return Summary{}, err
+	}
+	cash, paidCents, err := summarizeCash(ctx, userID, period, location, payroll, sales, expenses)
+	if err != nil {
+		return Summary{}, err
+	}
+	team.PaidCents = paidCents
+
+	return Summary{
 		StartDate: period.StartDate.Format(date.Layout),
 		EndDate:   period.EndDate.Format(date.Layout),
 		TimeZone:  location.String(),
-		Harvest:   HarvestSummary{ByEmployee: []EmployeeHarvest{}},
-		Payroll:   PayrollSummary{ByEmployee: []EmployeeDue{}},
-		Sales: SalesSummary{BoxesByType: map[string]int64{
-			string(vendas.SaleTypeExportacao): 0,
-			string(vendas.SaleTypeMercado):    0,
-			string(vendas.SaleTypeMoagem):     0,
-		}},
-		Cash: CashSummary{PaidExpensesByCategory: make(map[string]int64)},
-	}
+		Harvest:   harvest,
+		Payroll:   team,
+		Sales:     sold,
+		Cash:      cash,
+	}, ctx.Err()
+}
 
-	// Cada fonte usa a própria data de ocorrência. O intervalo trabalhado e
-	// a data de venda não limitam os eventos de caixa.
-	start, end := period.cashWindow(location)
+func summarizeHarvestAndDue(
+	ctx context.Context, userID string, period Period, payroll payrollReader,
+) (HarvestSummary, PayrollSummary, error) {
 	due, err := payroll.SummarizeDue(ctx, userID, pagamentos.Period(period))
 	if err != nil {
-		return Summary{}, err
-	}
-	sold, err := sales.ListSold(ctx, userID, vendas.SalePeriod(period))
-	if err != nil {
-		return Summary{}, err
-	}
-	paid, err := payroll.ListPaid(ctx, userID, start, end)
-	if err != nil {
-		return Summary{}, err
-	}
-	received, err := sales.ListReceived(ctx, userID, start, end)
-	if err != nil {
-		return Summary{}, err
-	}
-	spent, err := expenses.List(ctx, userID, period.StartDate, period.EndDate)
-	if err != nil {
-		return Summary{}, err
+		return HarvestSummary{}, PayrollSummary{}, err
 	}
 
+	// A folha agrupa colheitas e diárias por funcionário, então uma leitura
+	// alimenta tanto as quantidades colhidas quanto o valor devido.
+	harvest := HarvestSummary{ByEmployee: []EmployeeHarvest{}}
+	payrollSummary := PayrollSummary{ByEmployee: []EmployeeDue{}}
 	var sum totals
 	for _, employee := range due.Employees {
-		sum.add(&result.Harvest.NormalBoxes, employee.NormalBoxes)
-		sum.add(&result.Harvest.MillingBoxes, employee.MillingBoxes)
-		sum.add(&result.Payroll.DueCents, employee.DueAmountCents)
+		sum.add(&harvest.NormalBoxes, employee.NormalBoxes)
+		sum.add(&harvest.MillingBoxes, employee.MillingBoxes)
+		sum.add(&payrollSummary.DueCents, employee.DueAmountCents)
 		if employee.NormalBoxes > 0 || employee.MillingBoxes > 0 {
-			result.Harvest.ByEmployee = append(result.Harvest.ByEmployee, EmployeeHarvest{
+			harvest.ByEmployee = append(harvest.ByEmployee, EmployeeHarvest{
 				EmployeeID: employee.EmployeeID, EmployeeName: employee.EmployeeName,
 				NormalBoxes: employee.NormalBoxes, MillingBoxes: employee.MillingBoxes,
 			})
 		}
-		result.Payroll.ByEmployee = append(result.Payroll.ByEmployee, EmployeeDue{
+		payrollSummary.ByEmployee = append(payrollSummary.ByEmployee, EmployeeDue{
 			EmployeeID: employee.EmployeeID, EmployeeName: employee.EmployeeName,
 			HarvestCents: employee.HarvestAmountCents, DailyWorkCents: employee.DailyWorkAmountCents,
 			DueCents: employee.DueAmountCents,
 		})
 	}
-	sum.add(&result.Harvest.TotalBoxes, result.Harvest.NormalBoxes)
-	sum.add(&result.Harvest.TotalBoxes, result.Harvest.MillingBoxes)
+	sum.add(&harvest.TotalBoxes, harvest.NormalBoxes)
+	sum.add(&harvest.TotalBoxes, harvest.MillingBoxes)
+	return harvest, payrollSummary, sum.err
+}
 
+func summarizeSales(ctx context.Context, userID string, period Period, sales salesReader) (SalesSummary, error) {
+	sold, err := sales.ListSold(ctx, userID, vendas.SalePeriod(period))
+	if err != nil {
+		return SalesSummary{}, err
+	}
+
+	summary := SalesSummary{BoxesByType: map[string]int64{
+		string(vendas.SaleTypeExportacao): 0,
+		string(vendas.SaleTypeMercado):    0,
+		string(vendas.SaleTypeMoagem):     0,
+	}}
+	var sum totals
 	for _, sale := range sold {
-		sum.add(&result.Sales.GrossCents, sale.GrossCents)
-		sum.add(&result.Sales.DiscountCents, sale.DiscountCents)
-		sum.add(&result.Sales.NetCents, sale.NetCents)
+		sum.add(&summary.GrossCents, sale.GrossCents)
+		sum.add(&summary.DiscountCents, sale.DiscountCents)
+		sum.add(&summary.NetCents, sale.NetCents)
 		for _, item := range sale.Items {
 			key := string(item.SaleType)
-			count := result.Sales.BoxesByType[key]
+			count := summary.BoxesByType[key]
 			sum.add(&count, int64(item.Quantity))
-			result.Sales.BoxesByType[key] = count
-			sum.add(&result.Sales.TotalBoxes, int64(item.Quantity))
+			summary.BoxesByType[key] = count
+			sum.add(&summary.TotalBoxes, int64(item.Quantity))
 		}
 	}
+	if sum.err != nil {
+		return SalesSummary{}, sum.err
+	}
+	summary.AverageNetCents = averagePrice(summary.NetCents, summary.TotalBoxes)
+	return summary, nil
+}
+
+func summarizeCash(
+	ctx context.Context, userID string, period Period, location *time.Location,
+	payroll payrollReader, sales salesReader, expenses expenseReader,
+) (CashSummary, int64, error) {
+	// Pagamentos e recebimentos têm horário efetivo. Despesas seguem a data
+	// civil informada no lançamento e recebem o período original.
+	start, end := period.cashWindow(location)
+	paid, err := payroll.ListPaid(ctx, userID, start, end)
+	if err != nil {
+		return CashSummary{}, 0, err
+	}
+	received, err := sales.ListReceived(ctx, userID, start, end)
+	if err != nil {
+		return CashSummary{}, 0, err
+	}
+	spent, err := expenses.List(ctx, userID, period.StartDate, period.EndDate)
+	if err != nil {
+		return CashSummary{}, 0, err
+	}
+
+	summary := CashSummary{PaidExpensesByCategory: make(map[string]int64)}
+	var sum totals
+	var paidCents int64
 	for _, payment := range paid {
-		sum.add(&result.Payroll.PaidCents, payment.AmountCents)
+		sum.add(&paidCents, payment.AmountCents)
 	}
 	for _, receipt := range received {
-		sum.add(&result.Cash.ReceivedCents, receipt.AmountCents)
+		sum.add(&summary.ReceivedCents, receipt.AmountCents)
 	}
 	for _, expense := range spent {
-		amount := result.Cash.PaidExpensesByCategory[expense.Category]
+		amount := summary.PaidExpensesByCategory[expense.Category]
 		sum.add(&amount, expense.AmountCents)
-		result.Cash.PaidExpensesByCategory[expense.Category] = amount
-		sum.add(&result.Cash.PaidExpensesCents, expense.AmountCents)
+		summary.PaidExpensesByCategory[expense.Category] = amount
+		sum.add(&summary.PaidExpensesCents, expense.AmountCents)
 	}
 
 	if sum.err != nil {
-		return Summary{}, sum.err
+		return CashSummary{}, 0, sum.err
 	}
 	// Cada parcela já cabe no limite exato do JSON, então a subtração
 	// inteira intermediária cabe em int64 mesmo quando as duas saídas são altas.
-	result.Cash.BalanceCents = result.Cash.ReceivedCents - result.Payroll.PaidCents - result.Cash.PaidExpensesCents
-	if result.Cash.BalanceCents < -maxExactJSONInteger {
-		return Summary{}, errInvalidTotal
+	summary.BalanceCents = summary.ReceivedCents - paidCents - summary.PaidExpensesCents
+	if summary.BalanceCents < -maxExactJSONInteger {
+		return CashSummary{}, 0, errInvalidTotal
 	}
-	result.Sales.AverageNetCents = averagePrice(result.Sales.NetCents, result.Sales.TotalBoxes)
-	return result, ctx.Err()
+	// A resposta também exibe o total pago à equipe. Reusar a mesma soma
+	// mantém tanto esse indicador quanto o caixa ligados às mesmas saídas.
+	return summary, paidCents, nil
 }
 
 func averagePrice(net, boxes int64) *int64 {
