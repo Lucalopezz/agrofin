@@ -825,15 +825,15 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
   .navbar-user { display: none; }
 }
 
-.report-period-filter {
+.period-filter {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: end;
   gap: 12px;
   margin-bottom: 16px;
 }
-.report-period-filter .form-field, .report-period-filter input { min-width: 0; width: 100%; }
-.report-period-error { grid-column: 1 / -1; }
+.period-filter .form-field, .period-filter input { min-width: 0; width: 100%; }
+.period-filter-error { grid-column: 1 / -1; }
 .report-sections, .report-values, .report-list { display: grid; gap: 8px; }
 .report-sections { gap: 16px; }
 .report-values > div {
@@ -853,5 +853,5 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
 .report-reference { overflow-wrap: anywhere; }
 
 @media (max-width: 560px) {
-  .report-period-filter { grid-template-columns: minmax(0, 1fr); }
+  .period-filter { grid-template-columns: minmax(0, 1fr); }
 }

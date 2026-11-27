@@ -21,4 +21,4 @@ export type HarvestEntry = Omit<HarvestInput, 'items'> & {
   id: string
   items: (HarvestItemInput & { applied_rate_cents: number })[]
 }
-export type Period = { start_date: string; end_date: string }
+export type { Period } from '@/shared/lib/period'
