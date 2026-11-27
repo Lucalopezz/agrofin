@@ -1,49 +1,78 @@
-import { useState, type FormEvent } from 'react'
-import { Check } from 'lucide-react'
-import { Button } from '@/shared/components/ui/button'
-import { Feedback, FieldInput, FieldSelect, FormActions, FormField, PageHeading, SectionCard } from '@/features/painel/components/page-ui'
-
-type SaleLine = { type: string; count: string; price: string }
+import { useState } from 'react'
+import { weekOf } from '@/features/colheita/lib/entries'
+import { Feedback, PageHeading } from '@/features/painel/components/page-ui'
+import { PeriodFilter } from '@/features/painel/components/period-filter'
+import { money } from '@/shared/lib/money'
+import { displayDate, operationalDate } from '@/shared/lib/period'
+import { SaleForm } from '../components/sale-form'
+import { SaleHistory } from '../components/sale-history'
+import { useSaleWrite } from '../hooks/use-sale-write'
+import type { SaleInput } from '../types'
 
 export function VendasPage() {
-  const [date, setDate] = useState('2026-10-30')
-  const [lines, setLines] = useState<SaleLine[]>([{ type: 'Exportação', count: '', price: '' }, { type: 'Mercado', count: '', price: '' }, { type: 'Moagem', count: '', price: '' }])
-  const [discount, setDiscount] = useState('')
-  const [reason, setReason] = useState('')
-  const [received, setReceived] = useState('')
-  const [saved, setSaved] = useState(false)
-  const gross = lines.reduce((sum, line) => sum + (Number(line.count) || 0) * (Number(line.price) || 0), 0)
-  const net = Math.max(0, gross - (Number(discount) || 0))
-  const due = Math.max(0, net - (Number(received) || 0))
-  const boxCount = lines.reduce((sum, line) => sum + (Number(line.count) || 0), 0)
+  const [period, setPeriod] = useState(() => weekOf(operationalDate()))
+  const [selected, setSelected] = useState<string | null>(null)
+  const [newlySaved, setNewlySaved] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+  const write = useSaleWrite()
 
-  function changeLine(index: number, key: 'count' | 'price', value: string) {
-    setLines(current => current.map((line, lineIndex) => lineIndex === index ? { ...line, [key]: value } : line))
-    setSaved(false)
+  async function saveSale(input: SaleInput) {
+    setNotice('')
+    const result = await write.submit({ kind: 'sale', input })
+    if (result?.kind !== 'sale') return false
+    const sale = result.saved
+
+    // Abre o lançamento confirmado, inclusive quando o cliente informa
+    // uma data fora do filtro atual para registrar o acerto retroativo.
+    if (sale.sold_at < period.start_date || sale.sold_at > period.end_date) {
+      setPeriod(weekOf(sale.sold_at))
+    }
+    setSelected(sale.id)
+    setNewlySaved(sale.id)
+    setNotice(`Venda registrada. Líquido vendido de ${money(sale.net_amount_cents)}.`)
+    return true
   }
 
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (gross <= 0 || (Number(discount) > 0 && !reason.trim())) return
-    setSaved(true)
+  async function saveReceipt(saleId: string, cents: number) {
+    setNotice('')
+    const result = await write.submit({ kind: 'receipt', saleId, cents })
+    if (result?.kind !== 'receipt') return false
+    const date = displayDate(operationalDate(new Date(result.saved.received_at)))
+    setNotice(`Recebimento registrado em ${date}.`)
+    return true
   }
 
-  return <>
-    <PageHeading eyebrow="Financeiro" title="Registrar venda" description="Informe as caixas e confira o acerto." />
-    <div className="form-page-grid sales-page-grid">
-      <SectionCard title="Venda">
-        {saved ? <Feedback>Venda incluída nesta demonstração.</Feedback> : null}
-        <form className="demo-form" onSubmit={save}>
-          <div className="form-grid"><FormField label="data"><FieldInput type="date" value={date} onChange={event => setDate(event.target.value)} required /></FormField><FormField label="barracão"><FieldSelect defaultValue="Barracão Santa Luzia"><option>Barracão Santa Luzia</option><option>Outro barracão</option></FieldSelect></FormField></div>
-          <div className="sale-lines"><div className="form-divider"><span>Caixas e preço por tipo</span></div>{lines.map((line, index) => <div className="sale-line" key={line.type}><span className={`sale-type sale-type-${index}`}>{line.type}</span><label><span className="sr-only">Caixas de {line.type}</span><FieldInput type="number" min="0" step="1" inputMode="numeric" placeholder="0 cx" value={line.count} onChange={event => changeLine(index, 'count', event.target.value)} /></label><span className="sale-at">×</span><label className="sale-price-field"><span className="sr-only">Preço por caixa de {line.type}</span><span className="currency-prefix">R$</span><FieldInput type="number" min="0" step="0.01" inputMode="decimal" placeholder="0,00" value={line.price} onChange={event => changeLine(index, 'price', event.target.value)} /></label></div>)}</div>
-          <div className="form-grid"><FormField label="desconto"><div className="input-with-unit currency-input"><span>R$</span><FieldInput type="number" min="0" max={gross} step="0.01" inputMode="decimal" placeholder="0,00" value={discount} onChange={event => { setDiscount(event.target.value); setSaved(false) }} /></div></FormField><FormField label="recebido"><div className="input-with-unit currency-input"><span>R$</span><FieldInput type="number" min="0" max={net} step="0.01" inputMode="decimal" placeholder="0,00" value={received} onChange={event => { setReceived(event.target.value); setSaved(false) }} /></div></FormField></div>
-          {Number(discount) > 0 ? <FormField label="motivo do desconto"><FieldInput placeholder="Ex.: ajuste do barracão" value={reason} onChange={event => { setReason(event.target.value); setSaved(false) }} required /></FormField> : null}
-          <FormActions><Button type="submit" disabled={gross <= 0 || Number(discount) > gross || Number(received) > net || (Number(discount) > 0 && !reason.trim())}><Check size={16} /> Salvar</Button></FormActions>
-        </form>
-      </SectionCard>
-      <SectionCard title="Resumo">
-        <div className="sale-preview-rows"><div><span>Caixas</span><strong>{boxCount}</strong></div><div><span>Valor bruto</span><strong>{gross.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div><div><span>Desconto</span><strong>− {Number(discount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div><div className="sale-net-row"><span>Valor líquido</span><strong>{net.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div><div><span>Recebido</span><strong>{Number(received || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div><div className="sale-due-row"><span>A receber</span><strong>{due.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div></div>
-      </SectionCard>
-    </div>
-  </>
+  return (
+    <>
+      <PageHeading eyebrow="Financeiro" title="Vendas" description="Registre vendas ao barracão e acompanhe os recebimentos." />
+      {notice && <Feedback>{notice}</Feedback>}
+      <div className="form-page-grid sales-entry-grid">
+        <SaleForm busy={write.busy} error={write.errorFor('sale')} onSave={saveSale} />
+      </div>
+      <PeriodFilter
+        key={`${period.start_date}/${period.end_date}`}
+        period={period}
+        disabled={write.busy}
+        onApply={(next) => {
+          setPeriod(next)
+          setSelected(null)
+          setNewlySaved(null)
+          setNotice('')
+          write.reset()
+        }}
+      />
+      <SaleHistory
+        period={period}
+        write={write}
+        selected={selected}
+        newlySaved={newlySaved}
+        onSelect={(id) => {
+          setNewlySaved(null)
+          setSelected(id)
+          write.reset()
+        }}
+        onReceipt={saveReceipt}
+      />
+    </>
+  )
 }

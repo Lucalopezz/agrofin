@@ -232,7 +232,7 @@ button:disabled { cursor: not-allowed; }
 .success-feedback { padding: 10px 12px; margin-bottom: 15px; display: flex; align-items: center; gap: 9px; border: 1px solid #d5e8d1; border-radius: 8px; color: #43704a; background: #f2f8ef; font-size: var(--type-label); line-height: 1.45; }
 .success-feedback > span { display: grid; width: 20px; height: 20px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #fff; background: #6e9a68; }
 .form-page-grid { margin-bottom: 16px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(230px, .8fr); align-items: start; gap: 15px; }
-.form-page-grid.harvest-page-grid, .form-page-grid.expense-page-grid, .form-page-grid.employee-page-grid { grid-template-columns: minmax(0, 760px); }
+.form-page-grid.harvest-page-grid, .form-page-grid.expense-page-grid, .form-page-grid.sales-entry-grid, .form-page-grid.employee-page-grid { grid-template-columns: minmax(0, 760px); }
 .employee-list { list-style: none; padding: 0; margin: 10px 0 0; }
 .employee-list > li {
   display: flex;
@@ -869,3 +869,10 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
 .payroll-entry-form { display: grid; gap: 8px; margin-top: 4px; }
 .payroll-entry-form h4 { font-weight: 650; margin-top: 6px; }
 .payroll-totals dt { color: #526354; font-size: var(--type-caption); }
+
+.sale-lines > fieldset { min-width: 0; padding-top: 6px; }
+.sale-lines legend, .sale-history h3, .sale-detail h4 { font-weight: 650; overflow-wrap: anywhere; }
+.sale-history, .sale-detail { display: grid; gap: 10px; }
+.sale-history > li { display: grid; gap: 7px; padding: 12px 0; border-bottom: 1px solid #e5eae2; }
+.sale-history > li:focus-visible { outline: 2px solid #53785a; outline-offset: 3px; }
+.sale-detail > button { justify-self: start; }

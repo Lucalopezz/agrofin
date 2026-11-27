@@ -82,7 +82,7 @@ export function App() {
       />
     ),
     pagamentos: <PagamentosPage key={session.user?.id} />,
-    vendas: <VendasPage />,
+    vendas: <VendasPage key={session.user?.id} />,
     despesas: <DespesasPage key={session.user?.id} />,
     insumos: <InsumosPage />,
     pulverizacoes: <PulverizacoesPage onNavigate={navigate} />,
