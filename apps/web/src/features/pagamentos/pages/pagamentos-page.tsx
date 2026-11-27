@@ -1,51 +1,95 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { ArrowRight, CalendarDays, Check } from 'lucide-react'
+import { useState } from 'react'
+import { weekOf } from '@/features/colheita/lib/entries'
+import { Feedback, PageHeading } from '@/features/painel/components/page-ui'
+import { PeriodFilter } from '@/features/painel/components/period-filter'
 import { Button } from '@/shared/components/ui/button'
-import { Feedback, FieldInput, FormActions, FormField, PageHeading, SectionCard } from '@/features/painel/components/page-ui'
-import { formatDemoDate } from '@/features/painel/lib/demo-date'
-
-type EmployeeBalance = { name: string; normal: number; moagem: number; daily: number; due: number; paid: number }
-const initialBalances: EmployeeBalance[] = [
-  { name: 'Ana Paula', normal: 76, moagem: 12, daily: 0, due: 404, paid: 200 },
-  { name: 'João Carlos', normal: 64, moagem: 8, daily: 80, due: 416, paid: 0 },
-  { name: 'Raimundo Silva', normal: 58, moagem: 18, daily: 0, due: 326, paid: 250 },
-  { name: 'Dona Célia', normal: 48, moagem: 0, daily: 0, due: 240, paid: 240 },
-]
+import { displayDate, operationalDate } from '@/shared/lib/period'
+import { DailyWorkForm } from '../components/daily-work-form'
+import { PayrollTeam } from '../components/payroll-team'
+import { usePayroll } from '../hooks/use-payroll'
+import { usePayrollWrite } from '../hooks/use-payroll-write'
+import type { DailyWorkInput, PaymentInput } from '../types'
 
 export function PagamentosPage() {
-  const [balances, setBalances] = useState(initialBalances)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [amount, setAmount] = useState('')
-  const [paymentDate, setPaymentDate] = useState('2026-10-30')
-  const [savedName, setSavedName] = useState('')
-  const [savedDate, setSavedDate] = useState('')
-  const pending = balances.reduce((sum, item) => sum + item.due - item.paid, 0)
-  const openEmployee = balances.find(item => item.name === selected)
-  const remaining = openEmployee ? openEmployee.due - openEmployee.paid : 0
-  const preview = useMemo(() => Math.min(Number(amount) || 0, remaining), [amount, remaining])
+  const [period, setPeriod] = useState(() => weekOf(operationalDate()))
+  const [dailyOpen, setDailyOpen] = useState(false)
+  const [notice, setNotice] = useState('')
+  const query = usePayroll(period)
+  const write = usePayrollWrite()
 
-  function savePayment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!openEmployee || preview <= 0) return
-    setBalances(items => items.map(item => item.name === openEmployee.name ? { ...item, paid: item.paid + preview } : item))
-    setSavedName(openEmployee.name)
-    setSavedDate(formatDemoDate(paymentDate))
-    setSelected(null)
-    setAmount('')
+  function toggleDaily(open: boolean) {
+    write.reset()
+    setDailyOpen(open)
   }
 
-  return <>
-    <PageHeading eyebrow="Produção" title="Pagamentos" description="Confira o saldo da equipe." action={<div className="date-filter"><CalendarDays size={16} /> 26 out — 1 nov</div>} />
-    <div className="payroll-totals"><span>Devido <strong>R$ {balances.reduce((sum, item) => sum + item.due, 0).toLocaleString('pt-BR')}</strong></span><span>Pago <strong>R$ {balances.reduce((sum, item) => sum + item.paid, 0).toLocaleString('pt-BR')}</strong></span><span>Pendente <strong>R$ {pending.toLocaleString('pt-BR')}</strong></span></div>
+  async function saveDaily(input: DailyWorkInput) {
+    setNotice('')
+    const result = await write.submit({ kind: 'dailyWork', input })
+    if (result?.kind !== 'dailyWork') return
+    setDailyOpen(false)
+    const day = result.saved.work_date
+    const outside = day < period.start_date || day > period.end_date
+    setNotice(outside ? 'Diária registrada. A data do trabalho está fora do período exibido.' : 'Diária registrada.')
+  }
 
-    {savedName ? <Feedback>Pagamento de demonstração registrado para {savedName}, em {savedDate}. O saldo foi atualizado nesta tela.</Feedback> : null}
-    {selected && openEmployee ? <SectionCard title={`registrar pagamento · ${openEmployee.name}`} subtitle={`Saldo pendente: ${remaining.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`} className="payment-editor-card">
-      <form className="demo-form" onSubmit={savePayment}><div className="form-grid"><FormField label="valor"><div className="input-with-unit currency-input"><span>R$</span><FieldInput type="number" min="0.01" step="0.01" max={remaining} inputMode="decimal" placeholder={remaining.toFixed(2)} value={amount} onChange={event => setAmount(event.target.value)} required autoFocus /></div></FormField><FormField label="data"><FieldInput type="date" value={paymentDate} onChange={event => setPaymentDate(event.target.value)} required /></FormField></div><div className="payment-preview"><span>Saldo após o pagamento</span><strong>{(remaining - preview).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></div><FormActions><Button type="submit" disabled={preview <= 0 || Number(amount) > remaining}><Check size={16} /> Confirmar</Button><Button type="button" variant="outline" onClick={() => setSelected(null)}>Cancelar</Button></FormActions></form>
-    </SectionCard> : null}
+  async function savePayment(input: PaymentInput) {
+    setNotice('')
+    const result = await write.submit({ kind: 'payment', input })
+    if (result?.kind !== 'payment') return false
+    const paidOn = displayDate(operationalDate(new Date(result.saved.paid_at)))
+    setNotice(`Pagamento registrado em ${paidOn}.`)
+    return true
+  }
 
-    <SectionCard title="Equipe">
-      <div className="table-scroll"><table className="data-table payroll-table"><thead><tr><th>Funcionário</th><th>Caixas normais</th><th>Caixas moagem</th><th>Diárias</th><th>Total devido</th><th>Pago</th><th>Pendente</th><th /></tr></thead><tbody>{balances.map(item => { const balance = item.due - item.paid; return <tr key={item.name}><td><span className="table-person"><span>{item.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span>{item.name}</span></td><td>{item.normal} cx</td><td>{item.moagem} cx</td><td>{item.daily ? `R$ ${item.daily}` : '—'}</td><td>{item.due.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td>{item.paid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td className={balance ? 'pending-money' : 'settled-money'}>{balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td><td><button className="row-action" onClick={() => { setSelected(item.name); setAmount(''); setSavedName('') }} disabled={balance <= 0}>{balance ? 'Pagar' : 'Quitado'} <ArrowRight size={13} /></button></td></tr> })}</tbody></table></div>
-      <div className="table-mobile-list">{balances.map(item => { const balance = item.due - item.paid; return <article className="mobile-pay-card" key={item.name}><div className="mobile-pay-heading"><span className="table-person"><span>{item.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span>{item.name}</span><strong className={balance ? 'pending-money' : 'settled-money'}>{balance ? `${balance.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} pendente` : 'Quitado'}</strong></div><small>{item.normal} cx normais · {item.moagem} cx moagem{item.daily ? ` · diária R$ ${item.daily}` : ''}</small><div className="mobile-pay-totals"><span>Devido <strong>{item.due.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span><span>Pago <strong>{item.paid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span></div><button className="row-action" onClick={() => { setSelected(item.name); setAmount(''); setSavedName('') }} disabled={balance <= 0}>{balance ? 'Registrar pagamento' : 'Sem saldo pendente'} <ArrowRight size={13} /></button></article> })}</div>
-    </SectionCard>
-  </>
+  return (
+    <>
+      <PageHeading
+        eyebrow="Produção"
+        title="Pagamentos"
+        description="Confira o que a equipe trabalhou e registre os pagamentos do período."
+        action={!dailyOpen && (
+          <Button variant="outline" disabled={write.busy} onClick={() => toggleDaily(true)}>
+            Registrar diária
+          </Button>
+        )}
+      />
+      {notice && <Feedback>{notice}</Feedback>}
+      <PeriodFilter
+        period={period}
+        onApply={(next) => {
+          setNotice('')
+          write.reset()
+          setPeriod(next)
+        }}
+        disabled={write.busy}
+      />
+      {dailyOpen && (
+        <DailyWorkForm
+          period={period}
+          busy={write.busy}
+          error={write.errorFor('dailyWork')}
+          onSave={(input) => void saveDaily(input)}
+          onCancel={() => toggleDaily(false)}
+        />
+      )}
+      {query.isPending && <p role="status">Carregando pagamentos…</p>}
+      {query.isError && (
+        <div role="alert">
+          <p>Não foi possível carregar o resumo da equipe.</p>
+          <Button variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>
+        </div>
+      )}
+      {query.data && (
+        <PayrollTeam
+          key={`${period.start_date}/${period.end_date}`}
+          summary={query.data}
+          busy={write.busy}
+          canPay={!query.isError}
+          error={write.errorFor('payment')}
+          onSave={savePayment}
+          clearError={write.reset}
+        />
+      )}
+    </>
+  )
 }

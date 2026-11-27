@@ -81,7 +81,7 @@ export function App() {
         onOpenEmployees={() => navigate('funcionarios')}
       />
     ),
-    pagamentos: <PagamentosPage />,
+    pagamentos: <PagamentosPage key={session.user?.id} />,
     vendas: <VendasPage />,
     despesas: <DespesasPage key={session.user?.id} />,
     insumos: <InsumosPage />,

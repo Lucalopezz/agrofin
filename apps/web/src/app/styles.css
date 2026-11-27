@@ -861,3 +861,11 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
 .expense-history-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .expense-history-heading > strong, .expense-history > li > p { overflow-wrap: anywhere; }
 .expense-history .demo-form, .expense-confirm { margin-top: 8px; }
+
+.payroll-employee-list { display: grid; gap: 16px; }
+.payroll-employee-list > li { display: grid; gap: 10px; border-bottom: 1px solid #e5eae2; padding-bottom: 14px; }
+.payroll-employee-list h3 { font-weight: 650; overflow-wrap: anywhere; }
+.payroll-employee-list .form-actions { align-items: center; flex-wrap: wrap; }
+.payroll-entry-form { display: grid; gap: 8px; margin-top: 4px; }
+.payroll-entry-form h4 { font-weight: 650; margin-top: 6px; }
+.payroll-totals dt { color: #526354; font-size: var(--type-caption); }
