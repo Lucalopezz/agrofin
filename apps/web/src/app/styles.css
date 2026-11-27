@@ -855,3 +855,9 @@ textarea.form-control { height: auto; min-height: 72px; padding-top: 10px; line-
 @media (max-width: 560px) {
   .period-filter { grid-template-columns: minmax(0, 1fr); }
 }
+
+.expense-history { display: grid; gap: 12px; }
+.expense-history > li { display: grid; gap: 5px; padding: 12px 0; border-bottom: 1px solid #e5eae2; }
+.expense-history-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.expense-history-heading > strong, .expense-history > li > p { overflow-wrap: anywhere; }
+.expense-history .demo-form, .expense-confirm { margin-top: 8px; }

@@ -83,7 +83,7 @@ export function App() {
     ),
     pagamentos: <PagamentosPage />,
     vendas: <VendasPage />,
-    despesas: <DespesasPage />,
+    despesas: <DespesasPage key={session.user?.id} />,
     insumos: <InsumosPage />,
     pulverizacoes: <PulverizacoesPage onNavigate={navigate} />,
     calendario: <CalendarioPage />,
