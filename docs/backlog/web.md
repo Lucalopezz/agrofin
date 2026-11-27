@@ -10,12 +10,13 @@ O backlog acompanha o que já funciona no navegador e a sequência de integraç�
 - [x] **Tarifas (HU-01 e HU-02, RF-02).** Cadastro e consulta das tarifas de caixas normais e de moagem, com vigência. A tela usa as tarifas disponíveis para apresentar a prévia de colheita.
 - [x] **Lançamento e histórico de caixas (HU-02, RF-03).** Registrar caixas por funcionário e data, consultar o histórico pelo intervalo escolhido e corrigir quantidades. O histórico começa na semana atual e pode acompanhar a semana de um lançamento retroativo salvo. O cálculo persistido e as restrições de edição vêm da API.
 - [x] **Base mobile (HU-15).** Ajustes de tipografia e leitura em telas estreitas, navegação compartilhada e formulários separados por responsabilidade nos fluxos já integrados. Os testes cobrem autenticação, navegação, funcionários, tarifas e colheita.
-- [x] **Protótipos do restante do painel.** Há telas demonstrativas de pagamentos, vendas, despesas, insumos, pulverizações e calendário. Seus exemplos servem para revisar a interface. A integração dos respectivos formulários está nas etapas abaixo.
+- [x] **Protótipos do restante do painel.** Há telas demonstrativas de pagamentos, vendas, insumos, pulverizações e calendário. Seus exemplos servem para revisar a interface. A integração dos respectivos formulários está nas etapas abaixo.
 - [x] **Início e Relatórios (HU-08 a HU-10, RF-12).** A interface consulta o resumo de produção e caixa por período, com valores separados, consultas de conferência e CSV do intervalo aplicado. A exibição dos dados depende das rotas do relatório na API. Compras pagas de insumos entram com a futura integração financeira do estoque.
+- [x] **Despesas pagas (HU-09, RF-11).** Cadastro, consulta por período, edição e exclusão confirmada na Web. Após uma escrita, o histórico de despesas e o caixa são atualizados. Compras vinculadas ao estoque entram junto com o fluxo de compra.
 
 ## Próximas entregas
 
-A ordem proposta segue a rotina do cliente. Fechar produção e pagamento antes de passar ao acerto com o barracão. Em seguida, integrar despesas e consolidar os resultados antes de entrar em insumos e pulverização. Usar cada etapa como unidade de entrega e deixar os encaixes de API identificados.
+A ordem proposta segue a rotina do cliente. Fechar produção e pagamento antes de passar ao acerto com o barracão. Em seguida, integrar insumos e pulverização. Usar cada etapa como unidade de entrega e deixar os encaixes de API identificados.
 
 ### 1. Fechar a semana da equipe (HU-03 a HU-05, RF-04 a RF-07)
 
@@ -34,21 +35,14 @@ A ordem proposta segue a rotina do cliente. Fechar produção e pagamento antes 
 - [ ] Cobrir erro de desconto inválido, recebimento acima do saldo, perda de sessão e venda sem recebimento. Conferir que uma venda em um dia e um recebimento em outro continuam distinguíveis no fluxo.
 - **API:** Cadastro, listagem e recebimento disponíveis. A tela de correção após recebimento depende da regra ainda em aberto.
 
-### 3. Gerenciar despesas pagas (HU-09, RF-11)
-
-- [ ] Integrar o formulário de despesa com categoria, data de pagamento editável, valor e descrição. Incluir energia de irrigação, fertilizantes, defensivos e outras despesas conforme o contrato.
-- [ ] Consultar despesas no intervalo escolhido, abrir para editar e confirmar a exclusão. Atualizar lista e totais da tela após salvar ou excluir.
-- [ ] Cobrir valor inválido, período vazio, erro de gravação e registro indisponível. Bloquear envio repetido enquanto houver uma requisição em andamento.
-- **API:** Cadastro, consulta, edição e exclusão disponíveis. Compras vinculadas ao estoque entram depois, com a despesa correspondente gerada pelo fluxo de compra.
-
-### 4. Cadastrar insumos e dar entrada em estoque (HU-09 e HU-11, RF-11, RF-13 e RF-14)
+### 3. Cadastrar insumos e dar entrada em estoque (HU-09 e HU-11, RF-11, RF-13 e RF-14)
 
 - [ ] Integrar cadastro e consulta de insumos com nome, categoria, unidade e observações.
 - [ ] Registrar compra com data, quantidade, unidade e custo. Mostrar saldo atualizado e a despesa vinculada quando a compra for paga.
 - [ ] Conferir que registrar uma compra atualiza o estoque uma vez e que o gasto entra uma vez no caixa. Tratar erros sem perder os dados digitados.
 - **API:** Depende dos contratos de cadastro, compra e estoque. Conversão de unidades e compras a prazo precisam de confirmação.
 
-### 5. Registrar pulverização e consultar histórico (HU-12 e HU-13, RF-15 e RF-16)
+### 4. Registrar pulverização e consultar histórico (HU-12 e HU-13, RF-15 e RF-16)
 
 - [ ] Registrar data, observações e quantidades por insumo. Selecionar insumos existentes e mostrar a prévia dos itens antes de salvar.
 - [ ] Cadastrar um insumo no próprio formulário, preservando a data e os demais campos. Permitir informar saldo inicial ou marcar saldo pendente de conferência.
@@ -56,13 +50,13 @@ A ordem proposta segue a rotina do cliente. Fechar produção e pagamento antes 
 - [ ] Conferir no celular o registro com insumos existentes e o caminho que exige cadastro rápido, com teclado aberto e sem rolagem horizontal.
 - **API:** Depende de cadastro de insumos, registro de pulverização, histórico e baixa de estoque.
 
-### 6. Integrar calendário de aplicação e fases da Lua (HU-14, RF-17)
+### 5. Integrar calendário de aplicação e fases da Lua (HU-14, RF-17)
 
 - [ ] Consultar pulverizações no mês escolhido, mostrar os eventos no dia correto e abrir o detalhe ao tocar. Cobrir mês sem eventos e navegação entre meses.
 - [ ] Exibir fase da Lua por dia e destacar mudanças de fase. Aplicar o fuso da operação e cobrir transições próximas ao início ou fim do mês.
 - **Dependências:** Histórico de pulverizações e decisão sobre fonte lunar, fuso e precisão da transição. A API participa se a fonte exigir processamento no servidor.
 
-### 7. Completar gestão da conta e validar a primeira semana de uso (HU-15 e HU-17)
+### 6. Completar gestão da conta e validar a primeira semana de uso (HU-15 e HU-17)
 
 - [ ] Integrar a alteração de nome, troca de senha e desativação da conta quando abrir a tela de configurações. Confirmar ações que encerram a sessão e retornar ao acesso quando a sessão for revogada.
 - [ ] Validar no celular os atalhos para caixas, pagamentos e pulverizações. Conferir leitura com teclado aberto, prévias e confirmações, rótulos, valores padrão editáveis e repetição de um lançamento recente nos fluxos frequentes (RNF-01 a RNF-03). Conferir o carregamento e o envio dos formulários em conexão móvel (RNF-08).
