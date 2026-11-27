@@ -1,15 +1,13 @@
 # Frontend do agrofin
 
-Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A interface inclui cadastro, login e sessão integrados à API, além de uma landing page e um painel protegido que ainda apresenta dados demonstrativos.
+Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A landing page oferece cadastro e login. O painel usa o cookie de sessão para acessar a API.
 
-## demonstração visual
+## Fluxos do painel
 
-- A landing page abre em `http://localhost:5173/`. Crie uma conta e entre para acessar o painel protegido.
-- O painel tem páginas de visão geral, colheitas, pagamentos, vendas, despesas, insumos, pulverizações, calendário e relatórios.
-- Os formulários de colheita, pagamento, venda, despesa e pulverização simulam prévias, confirmações e atualizações em memória no navegador.
-- A autenticação usa a API e o cookie de sessão. Os dados e formulários do painel continuam fictícios: não leem nem gravam lançamentos na API ou no banco.
-
-As páginas e interações são material de apresentação; os fluxos de negócio continuam pendentes de integração e validação com o cliente.
+- Funcionários, tarifas, colheitas, pagamentos, despesas e relatórios estão integrados à API. As páginas de vendas, insumos, pulverizações e calendário são demonstrativas.
+- Em **Pagamentos**, a tela abre na semana atual. Aplique outro período quando precisar conferir as caixas, as diárias, o devido, o pago e o saldo por funcionário.
+- Use **Registrar diária** para lançar o trabalho de um funcionário ativo. Use **Ver lançamentos** para conferir as caixas e as diárias que compõem a folha.
+- Use **Pagar** para registrar o valor integral ou parcial no intervalo exibido. A API informa a data efetiva do pagamento e atualiza o saldo da folha.
 
 ## Desenvolvimento
 
@@ -26,10 +24,10 @@ Execute os comandos na raiz do repositório. Após alterar dependências, rode `
 
 ## Organização
 
-- `src/app/`: composição e estilos globais.
-- `src/features/`: páginas e código de cada domínio; atualmente contém `inicio`.
-- `src/shared/`: componentes e utilidades compartilhados, incluindo os componentes shadcn.
-- `public/images/`: marca e fotos; consulte o [catálogo de imagens](docs/imagens.md).
+- `src/app/` reúne a composição e os estilos globais.
+- `src/features/` organiza as páginas e o código por domínio.
+- `src/shared/` reúne componentes e utilidades compartilhados, incluindo os componentes shadcn.
+- `public/images/` reúne a marca e as fotos. [Catálogo de imagens](docs/imagens.md)
 
 Mantenha requisições, tipos e componentes específicos dentro da respectiva feature. Use `shared/` para o que for compartilhado entre domínios.
 
