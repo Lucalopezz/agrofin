@@ -4,7 +4,7 @@ import {
 } from '@/features/painel/components/page-ui'
 import { sentenceCase } from '@/features/painel/lib/sentence-case'
 import { Button } from '@/shared/components/ui/button'
-import { parseCents } from '@/shared/lib/money'
+import { centsInput, parseCents } from '@/shared/lib/money'
 import { isCivilDate, operationalDate } from '@/shared/lib/period'
 import type { Expense, ExpenseInput } from '../types'
 
@@ -24,19 +24,11 @@ type Props = {
   onCancel?: () => void
 }
 
-function initialAmount(expense?: Expense) {
-  // Um valor da API que perdeu precisão ao ser lido precisa ser redigitado
-  // para evitar que a edição grave uma aproximação.
-  if (!expense || !Number.isSafeInteger(expense.amount_cents)) return ''
-  const cents = BigInt(expense.amount_cents)
-  return `${cents / 100n},${String(cents % 100n).padStart(2, '0')}`
-}
-
 export function ExpenseForm({ expense, busy, error, onSave, onCancel }: Props) {
   const [date, setDate] = useState(() => expense?.paid_at ?? operationalDate())
   const [category, setCategory] = useState(() => expense?.category ?? categories[0]!)
   const [description, setDescription] = useState(() => expense?.description ?? '')
-  const [amount, setAmount] = useState(() => initialAmount(expense))
+  const [amount, setAmount] = useState(() => expense ? centsInput(expense.amount_cents) : '')
   const [attempted, setAttempted] = useState(false)
   const dateField = useRef<HTMLInputElement>(null)
   const dateErrorId = useId()

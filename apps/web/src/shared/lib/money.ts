@@ -15,3 +15,12 @@ export function money(cents: number | bigint) {
   const absolute = value < 0n ? -value : value
   return `${sign}R$ ${(absolute / 100n).toLocaleString('pt-BR')},${String(absolute % 100n).padStart(2, '0')}`
 }
+
+export function centsInput(cents: number) {
+  // Um campo editável deve preservar os centavos exatos do valor retornado.
+  if (!Number.isSafeInteger(cents)) return ''
+  const value = BigInt(cents)
+  const sign = value < 0n ? '-' : ''
+  const absolute = value < 0n ? -value : value
+  return `${sign}${absolute / 100n},${String(absolute % 100n).padStart(2, '0')}`
+}
