@@ -1,12 +1,8 @@
 import type { HarvestEntry, Period } from '@/features/colheita/types'
 
-export type SaleType = 'exportacao' | 'mercado' | 'moagem'
+import type { Sale, SaleType } from '@/features/vendas/types'
 
-export const saleLabels: Record<SaleType, string> = {
-  exportacao: 'Exportação',
-  mercado: 'Mercado',
-  moagem: 'Moagem',
-}
+export { saleLabels, type SaleType } from '@/features/vendas/types'
 
 type Employee = { employee_id: string; employee_name: string }
 
@@ -48,20 +44,7 @@ type Amount = { id: string; amount_cents: number }
 export type ReportDetails = {
   harvest: HarvestEntry[]
   dailyWork: (Amount & Employee & { work_date: string; notes?: string })[]
-  sold: {
-    id: string
-    sold_at: string
-    buyer_name?: string
-    items: {
-      sale_type: SaleType
-      quantity: number
-      unit_price_cents: number
-      line_amount_cents: number
-    }[]
-    discount?: { reason: string; amount_cents: number }
-    gross_amount_cents: number
-    net_amount_cents: number
-  }[]
+  sold: Pick<Sale, 'id' | 'sold_at' | 'buyer_name' | 'items' | 'discount' | 'gross_amount_cents' | 'net_amount_cents'>[]
   received: (Amount & { sale_id: string; sold_at: string; received_at: string })[]
   paid: (Amount & Employee & Period & { paid_at: string; notes?: string })[]
   expenses: (Amount & { paid_at: string; category: string; description?: string })[]
