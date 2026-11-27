@@ -4,10 +4,11 @@ Aplicação React com TypeScript, Vite, Tailwind CSS e componentes shadcn. A lan
 
 ## Fluxos do painel
 
-- Funcionários, tarifas, colheitas, pagamentos, despesas e relatórios estão integrados à API. As páginas de vendas, insumos, pulverizações e calendário são demonstrativas.
+- Funcionários, tarifas, colheitas, pagamentos, vendas, despesas e relatórios estão integrados à API. As páginas de insumos, pulverizações e calendário são demonstrativas.
 - Em **Pagamentos**, a tela abre na semana atual. Aplique outro período quando precisar conferir as caixas, as diárias, o devido, o pago e o saldo por funcionário.
 - Use **Registrar diária** para lançar o trabalho de um funcionário ativo. Use **Ver lançamentos** para conferir as caixas e as diárias que compõem a folha.
 - Use **Pagar** para registrar o valor integral ou parcial no intervalo exibido. A API informa a data efetiva do pagamento e atualiza o saldo da folha.
+- Em **Vendas**, registre as caixas e preços por classificação e informe o desconto com motivo quando houver. Após salvar, abra o recebimento na venda para registrar a entrada parcial ou integral. A lista filtra pela data da venda e mostra o saldo atualizado de cada acerto.
 
 ## Desenvolvimento
 
