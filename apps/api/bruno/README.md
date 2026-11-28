@@ -65,6 +65,11 @@ Com uma sessão ativa, envie **Manual - Gerenciar despesas → Cadastrar despesa
 Em **Manual - Gerenciar despesas**, a atualização por `PUT` substitui todos os campos do corpo e a exclusão por `DELETE` retorna `204`. Despesa de outra conta ou inexistente retorna `404`. Execute as operações manualmente e não execute a coleção inteira pelo runner: elas alteram dados persistidos. As despesas representam saídas já pagas e entram no resumo de caixa.
 
 
+## Insumos
+
+1. Faça login e envie **Manual - Cadastrar insumo → Cadastrar insumo com estoque pendente**. O corpo usa `name`, `category` (`fertilizante` ou `defensivo`), `default_unit` e `notes` opcional. A resposta `201` inclui ID e `stock_control_state: "pending"`. Cada envio aceito cria um cadastro. Execute a requisição individualmente e evite rodar a coleção inteira pelo runner.
+2. Envie **07.9 - Listar insumos** com a mesma sessão para conferir o cadastro. A consulta ordena por nome e ID. Com uma segunda conta recém-criada, a mesma consulta retorna `[]`.
+
 ## Produção e caixa por período
 
 1. Faça login e ajuste `report_start_date` e `report_end_date` com datas em `AAAA-MM-DD`. Na pasta **Relatórios de produção e caixa**, envie **Consultar resumo de produção e caixa**. A consulta inclui os dois dias. Ela retorna `400` para datas inválidas, ausentes ou repetidas e `401` sem sessão.

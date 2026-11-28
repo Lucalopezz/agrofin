@@ -34,7 +34,7 @@ As 22 tabelas abaixo são criadas pelas oito migrações. O diagrama mostra as c
 | `sale_discounts` | `id`, `user_id`, `sale_id`, motivo, valor cifrado | Descontos separados do preço original; o desconto total não pode exceder o valor bruto. |
 | `sale_receipts` | `id`, `user_id`, `sale_id`, `received_at`, valor cifrado | Recebimentos, inclusive parciais. |
 | `expenses` | `id`, `user_id`, `paid_at`, categoria, descrição, valor cifrado | Despesas gerais pagas, como energia de irrigação e outros custos. |
-| `input_products` | `id`, `user_id`, `name`, `category`, `default_unit`, `stock_control_state` | Cadastro de fertilizantes e defensivos. O controle fica `pending` enquanto o saldo inicial for desconhecido. |
+| `input_products` | `id`, `user_id`, `name`, `category`, `default_unit`, `notes` opcional, `stock_control_state` | Cadastro de fertilizantes e defensivos. O controle fica `pending` enquanto o saldo inicial for desconhecido. |
 | `input_purchases` | `id`, `user_id`, `purchased_at`, fornecedor opcional, observação | Cabeçalho de uma compra de insumos. A data da compra fica separada da data em que foi paga. |
 | `purchase_items` | `id`, `user_id`, `purchase_id`, `product_id`, quantidade, unidade, custo unitário cifrado | Detalha o que entrou no estoque e o custo por produto. |
 | `input_purchase_payments` | `id`, `user_id`, `purchase_id`, `paid_at`, valor cifrado | Registra saídas de caixa de compras, permitindo pagamento imediato, parcial ou a prazo. Para compra imediata, cria-se um pagamento junto com a compra. |

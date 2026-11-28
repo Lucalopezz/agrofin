@@ -16,6 +16,8 @@ O pacote `internal/colheitas` implementa tarifas, criação, consulta, resumo e 
 
 O pacote `internal/relatorios` oferece `GET /api/v1/reports/period-summary` com datas explícitas e inclusivas. O Início consulta a semana e Relatórios permite trocar o intervalo, conferir lançamentos e exportar o CSV. A API reutiliza caixas e diárias para calcular o devido, resume vendas pelo dia da venda e calcula caixa pelas datas efetivas de recebimentos, pagamentos à equipe e despesas pagas. Para eventos com horário, o dia operacional segue `America/Sao_Paulo`. A compra paga de insumos entra quando sua origem financeira estiver implementada.
 
+O pacote `internal/insumos` implementa `POST /api/v1/input-products` e `GET /api/v1/input-products` com sessão. O cadastro grava nome, categoria (fertilizante ou defensivo), unidade padrão e observação opcional. Cada novo insumo começa com estoque pendente de conferência (`pending`). A listagem é restrita à conta e ordenada por nome e ID. Compras, movimentações de estoque e pulverizações seguem pendentes na API.
+
 ## Regras centrais já descritas
 
 - Colheita de funcionários: caixas **normais** e de **moagem**, com pagamento por caixa; diária é uma exceção.

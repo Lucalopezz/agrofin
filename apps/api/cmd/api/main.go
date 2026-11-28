@@ -17,6 +17,7 @@ import (
 	"github.com/lucalopezz/agrofin/apps/api/internal/diarias"
 	"github.com/lucalopezz/agrofin/apps/api/internal/funcionarios"
 	"github.com/lucalopezz/agrofin/apps/api/internal/health"
+	"github.com/lucalopezz/agrofin/apps/api/internal/insumos"
 	"github.com/lucalopezz/agrofin/apps/api/internal/pagamentos"
 	"github.com/lucalopezz/agrofin/apps/api/internal/platform/postgres"
 	"github.com/lucalopezz/agrofin/apps/api/internal/vendas"
@@ -101,6 +102,9 @@ func run() error {
 	// sessão é entregue às rotas privadas de auth, funcionários e tarifas.
 	auth.RegisterRoutes(apiMux, authHandler, sessionMiddleware.RequireSession)
 	funcionarios.RegisterRoutes(apiMux, handler, sessionMiddleware.RequireSession)
+
+	inputService := insumos.NewService(insumos.NewRepository(pool))
+	insumos.RegisterRoutes(apiMux, insumos.NewHandler(inputService), sessionMiddleware.RequireSession)
 
 	rateRepository := colheitas.NewRepository(pool)
 	rateService := colheitas.NewService(rateRepository, rateCipher)

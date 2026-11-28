@@ -22,7 +22,7 @@
 
 ### Insumos e pulverização
 
-- **RF-13** Cadastrar insumos com nome, categoria (fertilizante ou defensivo), unidade e observações.
+- **RF-13** Cadastrar insumos com nome, categoria (fertilizante ou defensivo), unidade padrão e observações opcionais. A API oferece cadastro e listagem por conta em `POST /input-products` e `GET /input-products`. O cadastro começa com estoque pendente de conferência.
 - **RF-14** Registrar compras de insumos com quantidade, unidade, custo e data; atualizar o estoque.
 - **RF-15** Registrar pulverização com data, insumos e quantidades usadas, observações e, se necessário, cadastro rápido de novo insumo no mesmo fluxo.
 - **RF-16** Dar baixa no estoque conforme o uso registrado. No cadastro rápido, permitir informar um saldo inicial ou marcar o estoque como pendente de conferência; não inventar uma compra para justificar o uso.
